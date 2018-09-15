@@ -1,4 +1,0 @@
-cif2couplings is free software, released under the GNU General Public License. See http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt, or the file License in the distribution).
-
-We shall greatly appreciate if scientific work done using this project will contain an explicit acknowledgment to the author.
-

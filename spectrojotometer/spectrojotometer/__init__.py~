@@ -1,9 +1,0 @@
-from __future__ import unicode_literals
-from __future__ import absolute_import
-
-
-from spectrojotometer.magnetic_model import MagneticModel
-from spectrojotometer.model_io import magnetic_model_from_file
-
-
-__version__ = 1.0

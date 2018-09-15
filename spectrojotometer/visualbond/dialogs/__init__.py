@@ -1,2 +1,0 @@
-
-from .finddialog import FindDialog

@@ -557,10 +557,13 @@ class ApplicationGUI:
         lab = Label(row, width=12, text="Format", anchor="w")
         lab.pack(side=LEFT)
         optformat = OptionMenu(row, self.outputformat, "plain",
-                               "latex", "wolfram",
+                               "latex", "Wolfram",
                                command=self.print_full_equations)
         optformat.pack(side=LEFT, fill=X)
         row.pack(side=TOP, fill=X)
+        btnrecal = Button(controls3, text="Calculate",
+                     command=self.print_full_equations)
+        btnrecal.pack(side=BOTTOM,fill=Y)
         controls3.pack(side=TOP, fill=X)
         controls.pack(side=LEFT, fill=Y)
 

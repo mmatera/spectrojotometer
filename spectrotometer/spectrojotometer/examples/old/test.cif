@@ -1,0 +1,66 @@
+
+#======================================================================
+            
+# CRYSTAL DATA
+
+#----------------------------------------------------------------------
+
+data_magnetic_model_1
+            
+_chemical_name_common                  prueba                                                                         
+
+_cell_length_a 			16.100473
+_cell_length_b 			16.100473
+_cell_length_c 			32.200946
+_cell_angle_alpha 			90.0
+_cell_angle_beta 			90.0
+_cell_angle_gamma 			90.0
+
+loop_
+ _space_group_symop_operation_xyz			
+'x, y, z'
+
+# Atom positions 
+
+loop_
+   _atom_site_label
+_atom_site_occupancy
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_adp_type
+_atom_site_B_iso_or_equiv
+_atom_site_type_symbol
+Fe1	 1.	0.5	0.5	0.25	Biso 	1 	Fe 
+Fe2	 1.	0.5	0.5	0.75	Biso 	1 	Fe 
+Fe3	 1.	0.5	0.25	0.125	Biso 	1 	Fe 
+Fe4	 1.	0.5	0.25	0.625	Biso 	1 	Fe 
+Fe5	 1.	0.0	0.0	0.25	Biso 	1 	Fe 
+Fe6	 1.	0.0	0.0	0.75	Biso 	1 	Fe 
+Fe7	 1.	-0.0	0.75	0.125	Biso 	1 	Fe 
+Fe8	 1.	-0.0	0.75	0.625	Biso 	1 	Fe 
+Fe9	 1.	0.0	0.5	0.0	Biso 	1 	Fe 
+Fe10	 1.	0.0	0.5	0.5	Biso 	1 	Fe 
+Fe11	 1.	0.0	0.25	0.375	Biso 	1 	Fe 
+Fe12	 1.	0.0	0.25	0.875	Biso 	1 	Fe 
+Fe13	 1.	0.5	0.0	0.0	Biso 	1 	Fe 
+Fe14	 1.	0.5	0.0	0.5	Biso 	1 	Fe 
+Fe15	 1.	0.5	0.75	0.375	Biso 	1 	Fe 
+Fe16	 1.	0.5	0.75	0.875	Biso 	1 	Fe 
+Fe17	 1.	0.75	0.75	0.25	Biso 	1 	Fe 
+Fe18	 1.	0.75	0.75	0.75	Biso 	1 	Fe 
+Fe19	 1.	0.25	0.5	0.125	Biso 	1 	Fe 
+Fe20	 1.	0.25	0.5	0.625	Biso 	1 	Fe 
+Fe21	 1.	0.25	0.25	0.25	Biso 	1 	Fe 
+Fe22	 1.	0.25	0.25	0.75	Biso 	1 	Fe 
+Fe23	 1.	0.75	0.0	0.125	Biso 	1 	Fe 
+Fe24	 1.	0.75	0.0	0.625	Biso 	1 	Fe 
+Fe25	 1.	0.25	0.75	0.0	Biso 	1 	Fe 
+Fe26	 1.	0.25	0.75	0.5	Biso 	1 	Fe 
+Fe27	 1.	0.75	0.5	0.375	Biso 	1 	Fe 
+Fe28	 1.	0.75	0.5	0.875	Biso 	1 	Fe 
+Fe29	 1.	0.75	0.25	0.0	Biso 	1 	Fe 
+Fe30	 1.	0.75	0.25	0.5	Biso 	1 	Fe 
+Fe31	 1.	0.25	0.0	0.375	Biso 	1 	Fe 
+Fe32	 1.	0.25	0.0	0.875	Biso 	1 	Fe 
+   

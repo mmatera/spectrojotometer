@@ -1,0 +1,257 @@
+
+#======================================================================
+            
+# CRYSTAL DATA
+
+#----------------------------------------------------------------------
+
+data_magnetic_model_1
+            
+_chemical_name_common                  'caso01'
+
+            _cell_length_a 			10.0
+_cell_length_b 			10.0
+_cell_length_c 			100.0
+_cell_angle_alpha 			90.0
+_cell_angle_beta 			90.0
+_cell_angle_gamma 			120.0
+
+loop_
+ _space_group_symop_operation_xyz			
+'x, y, z'
+
+# Atom positions 
+
+loop_
+   _atom_site_label
+_atom_site_occupancy
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_adp_type
+_atom_site_B_iso_or_equiv
+_atom_site_type_symbol
+Mn1	 1.	0.0	-0.0	0.32	Biso 	1 	Mn 
+Mn2	 1.	0.5	-0.0	0.32	Biso 	1 	Mn 
+Mn3	 1.	0.0	0.5	0.32	Biso 	1 	Mn 
+Mn4	 1.	0.5	0.5	0.32	Biso 	1 	Mn 
+Mn5	 1.	0.33333	0.16667	0.32	Biso 	1 	Mn 
+Mn6	 1.	0.83333	0.16667	0.32	Biso 	1 	Mn 
+Mn7	 1.	0.33333	0.66667	0.32	Biso 	1 	Mn 
+Mn8	 1.	0.83333	0.66667	0.32	Biso 	1 	Mn 
+Mn9	 1.	-0.0	-0.0	0.68	Biso 	1 	Mn 
+Mn10	 1.	0.5	-0.0	0.68	Biso 	1 	Mn 
+Mn11	 1.	-0.0	0.5	0.68	Biso 	1 	Mn 
+Mn12	 1.	0.5	0.5	0.68	Biso 	1 	Mn 
+Mn13	 1.	0.33333	0.16667	0.68	Biso 	1 	Mn 
+Mn14	 1.	0.83333	0.16667	0.68	Biso 	1 	Mn 
+Mn15	 1.	0.33333	0.66667	0.68	Biso 	1 	Mn 
+Mn16	 1.	0.83333	0.66667	0.68	Biso 	1 	Mn 
+   
+# Bonds  
+loop_
+_geom_bond_atom_site_label_1
+_geom_bond_atom_site_label_2
+_geom_bond_distance
+_geom_bond_label
+Mn1	Mn8	2.9	J3x
+Mn1	Mn6	2.9	J3x
+Mn1	Mn5	2.9	J3x
+Mn2	Mn7	2.9	J3x
+Mn2	Mn5	2.9	J3x
+Mn2	Mn6	2.9	J3x
+Mn3	Mn6	2.9	J3x
+Mn3	Mn8	2.9	J3x
+Mn3	Mn7	2.9	J3x
+Mn4	Mn5	2.9	J3x
+Mn4	Mn7	2.9	J3x
+Mn4	Mn8	2.9	J3x
+Mn9	Mn16	2.9	J3x
+Mn9	Mn14	2.9	J3x
+Mn9	Mn13	2.9	J3x
+Mn10	Mn15	2.9	J3x
+Mn10	Mn13	2.9	J3x
+Mn10	Mn14	2.9	J3x
+Mn11	Mn14	2.9	J3x
+Mn11	Mn16	2.9	J3x
+Mn11	Mn15	2.9	J3x
+Mn12	Mn13	2.9	J3x
+Mn12	Mn15	2.9	J3x
+Mn12	Mn16	2.9	J3x
+Mn1	Mn4	5.0	J0
+Mn1	Mn2	5.0	J0
+Mn1	Mn3	5.0	J0
+Mn1	Mn2	5.0	J0
+Mn1	Mn3	5.0	J0
+Mn1	Mn4	5.0	J0
+Mn2	Mn3	5.0	J0
+Mn2	Mn4	5.0	J0
+Mn2	Mn4	5.0	J0
+Mn2	Mn3	5.0	J0
+Mn3	Mn4	5.0	J0
+Mn3	Mn4	5.0	J0
+Mn5	Mn8	5.0	J0
+Mn5	Mn6	5.0	J0
+Mn5	Mn7	5.0	J0
+Mn5	Mn6	5.0	J0
+Mn5	Mn7	5.0	J0
+Mn5	Mn8	5.0	J0
+Mn6	Mn7	5.0	J0
+Mn6	Mn8	5.0	J0
+Mn6	Mn8	5.0	J0
+Mn6	Mn7	5.0	J0
+Mn7	Mn8	5.0	J0
+Mn7	Mn8	5.0	J0
+Mn9	Mn12	5.0	J0
+Mn9	Mn10	5.0	J0
+Mn9	Mn11	5.0	J0
+Mn9	Mn10	5.0	J0
+Mn9	Mn11	5.0	J0
+Mn9	Mn12	5.0	J0
+Mn10	Mn11	5.0	J0
+Mn10	Mn12	5.0	J0
+Mn10	Mn12	5.0	J0
+Mn10	Mn11	5.0	J0
+Mn11	Mn12	5.0	J0
+Mn11	Mn12	5.0	J0
+Mn13	Mn16	5.0	J0
+Mn13	Mn14	5.0	J0
+Mn13	Mn15	5.0	J0
+Mn13	Mn14	5.0	J0
+Mn13	Mn15	5.0	J0
+Mn13	Mn16	5.0	J0
+Mn14	Mn15	5.0	J0
+Mn14	Mn16	5.0	J0
+Mn14	Mn16	5.0	J0
+Mn14	Mn15	5.0	J0
+Mn15	Mn16	5.0	J0
+Mn15	Mn16	5.0	J0
+Mn1	Mn7	5.75	J2p
+Mn1	Mn7	5.75	J2p
+Mn1	Mn7	5.75	J2p
+Mn2	Mn8	5.75	J2p
+Mn2	Mn8	5.75	J2p
+Mn2	Mn8	5.75	J2p
+Mn3	Mn5	5.75	J2p
+Mn3	Mn5	5.75	J2p
+Mn3	Mn5	5.75	J2p
+Mn4	Mn6	5.75	J2p
+Mn4	Mn6	5.75	J2p
+Mn4	Mn6	5.75	J2p
+Mn9	Mn15	5.75	J2p
+Mn9	Mn15	5.75	J2p
+Mn9	Mn15	5.75	J2p
+Mn10	Mn16	5.75	J2p
+Mn10	Mn16	5.75	J2p
+Mn10	Mn16	5.75	J2p
+Mn11	Mn13	5.75	J2p
+Mn11	Mn13	5.75	J2p
+Mn11	Mn13	5.75	J2p
+Mn12	Mn14	5.75	J2p
+Mn12	Mn14	5.75	J2p
+Mn12	Mn14	5.75	J2p
+Mn1	Mn9	36.0	J2x
+Mn2	Mn10	36.0	J2x
+Mn3	Mn11	36.0	J2x
+Mn4	Mn12	36.0	J2x
+Mn5	Mn13	36.0	J2x
+Mn6	Mn14	36.0	J2x
+Mn7	Mn15	36.0	J2x
+Mn8	Mn16	36.0	J2x
+Mn1	Mn16	36.1	J1x
+Mn1	Mn14	36.1	J1x
+Mn1	Mn13	36.1	J1x
+Mn2	Mn15	36.1	J1x
+Mn2	Mn13	36.1	J1x
+Mn2	Mn14	36.1	J1x
+Mn3	Mn14	36.1	J1x
+Mn3	Mn16	36.1	J1x
+Mn3	Mn15	36.1	J1x
+Mn4	Mn13	36.1	J1x
+Mn4	Mn15	36.1	J1x
+Mn4	Mn16	36.1	J1x
+Mn5	Mn9	36.1	J1x
+Mn5	Mn10	36.1	J1x
+Mn5	Mn12	36.1	J1x
+Mn6	Mn10	36.1	J1x
+Mn6	Mn9	36.1	J1x
+Mn6	Mn11	36.1	J1x
+Mn7	Mn11	36.1	J1x
+Mn7	Mn12	36.1	J1x
+Mn7	Mn10	36.1	J1x
+Mn8	Mn12	36.1	J1x
+Mn8	Mn11	36.1	J1x
+Mn8	Mn9	36.1	J1x
+Mn1	Mn12	36.35	J3p
+Mn1	Mn10	36.35	J3p
+Mn1	Mn11	36.35	J3p
+Mn1	Mn10	36.35	J3p
+Mn1	Mn11	36.35	J3p
+Mn1	Mn12	36.35	J3p
+Mn2	Mn11	36.35	J3p
+Mn2	Mn12	36.35	J3p
+Mn2	Mn9	36.35	J3p
+Mn2	Mn12	36.35	J3p
+Mn2	Mn9	36.35	J3p
+Mn2	Mn11	36.35	J3p
+Mn3	Mn10	36.35	J3p
+Mn3	Mn12	36.35	J3p
+Mn3	Mn9	36.35	J3p
+Mn3	Mn12	36.35	J3p
+Mn3	Mn9	36.35	J3p
+Mn3	Mn10	36.35	J3p
+Mn4	Mn9	36.35	J3p
+Mn4	Mn10	36.35	J3p
+Mn4	Mn11	36.35	J3p
+Mn4	Mn10	36.35	J3p
+Mn4	Mn11	36.35	J3p
+Mn4	Mn9	36.35	J3p
+Mn5	Mn16	36.35	J3p
+Mn5	Mn14	36.35	J3p
+Mn5	Mn15	36.35	J3p
+Mn5	Mn14	36.35	J3p
+Mn5	Mn15	36.35	J3p
+Mn5	Mn16	36.35	J3p
+Mn6	Mn15	36.35	J3p
+Mn6	Mn16	36.35	J3p
+Mn6	Mn13	36.35	J3p
+Mn6	Mn16	36.35	J3p
+Mn6	Mn13	36.35	J3p
+Mn6	Mn15	36.35	J3p
+Mn7	Mn14	36.35	J3p
+Mn7	Mn16	36.35	J3p
+Mn7	Mn13	36.35	J3p
+Mn7	Mn16	36.35	J3p
+Mn7	Mn13	36.35	J3p
+Mn7	Mn14	36.35	J3p
+Mn8	Mn13	36.35	J3p
+Mn8	Mn14	36.35	J3p
+Mn8	Mn15	36.35	J3p
+Mn8	Mn14	36.35	J3p
+Mn8	Mn15	36.35	J3p
+Mn8	Mn13	36.35	J3p
+Mn1	Mn15	36.45	J1p
+Mn1	Mn15	36.45	J1p
+Mn1	Mn15	36.45	J1p
+Mn2	Mn16	36.45	J1p
+Mn2	Mn16	36.45	J1p
+Mn2	Mn16	36.45	J1p
+Mn3	Mn13	36.45	J1p
+Mn3	Mn13	36.45	J1p
+Mn3	Mn13	36.45	J1p
+Mn4	Mn14	36.45	J1p
+Mn4	Mn14	36.45	J1p
+Mn4	Mn14	36.45	J1p
+Mn5	Mn11	36.45	J1p
+Mn5	Mn11	36.45	J1p
+Mn5	Mn11	36.45	J1p
+Mn6	Mn12	36.45	J1p
+Mn6	Mn12	36.45	J1p
+Mn6	Mn12	36.45	J1p
+Mn7	Mn9	36.45	J1p
+Mn7	Mn9	36.45	J1p
+Mn7	Mn9	36.45	J1p
+Mn8	Mn10	36.45	J1p
+Mn8	Mn10	36.45	J1p
+Mn8	Mn10	36.45	J1p
+   

@@ -1,0 +1,93 @@
+#!/usr/bin/python3
+
+
+import argparse
+from spectrojotometer.magnetic_model import MagneticModel, magnetic_model_from_file
+
+def confindex(c):
+    return sum([i*2**n for n,i in enumerate(c)])
+
+
+def read_input_file(filename,model):
+    configuration_list = []
+    energy_list = []
+    with open(filename,"r") as f:
+        for l in f:
+            ls = l.strip()
+            if ls == "" or ls[0]=="#":
+                continue
+            fields = ls.split(maxsplit=1)
+            energy = float(fields[0])
+            ls = fields[1]
+            newconf = []
+            for c in ls:
+                if c == "#":
+                    break
+                elif c == "0":
+                    newconf.append(0)
+                elif c == "1":
+                    newconf.append(1)
+            while len(newconf)<model.cell_size:
+                print("filling empty places")
+                newconf.append(0)
+            configuration_list.append(newconf)
+            energy_list.append(energy)
+    return (energy_list, configuration_list)
+
+
+def main():
+    parser = argparse.ArgumentParser(description='From a set of energies and magnetic configurations, estimates the coupling constants of a model.')
+    
+    parser.add_argument('modelfile', metavar='modelfile', type=str, \
+                       help='load atomic positions from a model file.')
+
+    parser.add_argument('input', metavar='[input file]', type=str, \
+                       help='file containing evaluated energies and magnetic configurations.')
+
+    parser.add_argument('--tolerance', metavar='[value]', type=float, default=.001,\
+                       help='Provides the estimated error for the energies.')
+
+    parser.add_argument('--showequations', action="store_true",
+                        help='Prints the resulting equations.')
+
+#    parser.add_argument('--out', metavar='outfile', type=str
+#                        default=None,
+#                        help='Name of the outputfile. If it is not provided, the output is printed to the standard output.')
+
+
+    args = vars(parser.parse_args())
+    
+    if args["modelfile"] is None:
+        print("A model file is required. You should provide it by means of the parameter --modelfile")
+        return -1
+    model = magnetic_model_from_file(args["modelfile"])
+    if model.bond_lists is None or len(model.bond_lists) == 0:
+        print("The model does not have defined bounds\n")
+        print("Use ... to define a non-trivial model\n")
+        return -1
+
+
+    energs,confs = read_input_file(args["input"],model)
+    js,jerr,chis = model.compute_couplings(confs, energs, err_energs=args["tolerance"],printeqs=args["showequations"])
+
+    offset_energy = js[-1]
+    js.resize(js.size-1)
+    jmax = max(abs(js))
+    print("\n\n Results:\n==========\n\n")
+    print("E_0 = ",offset_energy," +/- ", args["tolerance"] ,"\n")
+    print(model.bond_names)
+    for i,val in enumerate(js):
+        print(model.bond_names[i]," = (",val/jmax, " +/-", jerr[i]/jmax , ") * ", jmax )
+
+    print("\n\n Error in Modeled Energy (relative to the tolerance): \n"+\
+          "======================================================\n\n")
+    for c in chis:
+        print(c)
+    print("\n")
+    return(0)
+
+
+
+if __name__ == "__main__":
+    main()
+

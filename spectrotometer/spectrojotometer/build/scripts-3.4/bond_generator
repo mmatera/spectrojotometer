@@ -1,0 +1,61 @@
+#!/usr/bin/python3
+
+
+import argparse
+from spectrojotometer.magnetic_model import MagneticModel, magnetic_model_from_file
+
+
+def main():
+    parser = argparse.ArgumentParser(description=\
+"""
+From an standard cif file, produces a new cif file containing information about the bonds that defines a Heisenberg magnetic effective model.
+If the input file has already information about bonds, the output file contains both the bonds in the input as well as the new generated bonds.
+""")
+    
+    parser.add_argument('modelfile', metavar='modelfile', type=str, 
+                       help='load atomic positions from a model file. It could be specified by a cif or a Wien2k struct file')
+
+    parser.add_argument('--discretization', metavar='[value]', type=float, 
+                       help='the tolerance in considering two distances as the same.')
+
+    parser.add_argument('--rmin', metavar='[value]', type=float, default=0,
+                       help='the minimal distance between atoms of the bond')
+
+    parser.add_argument('--rmax', metavar='[value]', type=float, default=1,
+                       help='the maximal distance between atoms of the bond')
+    
+    parser.add_argument('out', metavar='outfile', type=str,
+                        default=None,
+                        help='Name of the outputfile. If it is not provided, the output is printed to the standard output.')
+
+
+    args = vars(parser.parse_args())
+    
+    if args["modelfile"] is None:
+        print("A model file is required. You should provide it by means of the parameter --modelfile")
+        return -1
+    if args["out"] is None:
+        print("An output file is required. You should provide it by means of the parameter --out")
+        return -1
+    if args["discretization"] is None:
+        args["discretization"] = .001
+        
+    if args["rmin"] is None:
+        args["rmin"] = 0.
+    if args["rmax"] is None:
+        args["rmax"] = 1.
+        
+
+    model = magnetic_model_from_file(args["modelfile"])
+    model.generate_bonds(ranges=[[args["rmin"],args["rmax"]]],discretization=args["discretization"])
+
+
+    print("bond names:", model.bond_names, "\nbond distances:",model.bond_distances)
+    model.save_cif(args["out"])
+    return(0)
+
+
+
+if __name__ == "__main__":
+    main()
+

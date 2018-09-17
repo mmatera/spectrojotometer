@@ -10,6 +10,7 @@ import tempfile
 import sys
 import numpy as np
 
+import spectrojotometer
 from spectrojotometer import __version__ as spectrojotometerversion
 from spectrojotometer.magnetic_model import MagneticModel
 from spectrojotometer.model_io import magnetic_model_from_file, \
@@ -1151,8 +1152,10 @@ class ApplicationGUI:
 
     def show_help(self, *args):
         print("calling documentation")
-        webbrowser.open(os.path.dirname(os.path.realpath(sys.argv[0])) +
-                        "/doc/tutorial.html")
+        #docpath = os.path.dirname(os.path.realpath(sys.argv[0])) +
+        #                "/doc/tutorial.html"
+        docpath = spectrojotometer.__path__[0] +  "/doc/tutorial.html"
+        webbrowser.open(docpath)
 
     def plot_delta_energies(self, *args):
         energy_tolerance = float(self.parameters["page3"]["Energy tolerance"].get())

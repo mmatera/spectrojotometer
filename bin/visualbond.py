@@ -1167,8 +1167,8 @@ class ApplicationGUI:
                 labels.append("#  " + fulllabels[i])
         indices = [i for i in range(len(labels))]
         # labels = args.get('labels', None)
-        plt.plot(indices, [energy_tolerance for i in indices], marker=".")
-        plt.plot(indices, [-energy_tolerance for i in indices], marker=".")
+        plt.plot(indices, [1. for i in indices])
+        plt.plot(indices, [-1. for i in indices])
         plt.scatter(indices, self.chisvals)
         plt.xticks(indices, labels, rotation='vertical')
         plt.margins(0.2)

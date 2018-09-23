@@ -323,7 +323,7 @@ class MagneticModel:
         # js = (A^t A )^{-1} A^t En, i.e. least squares solution
         resolvent =  np.linalg.inv(coeffs.transpose().dot(coeffs)).dot(coeffs.transpose())
         js = resolvent.dot(energs)
-        model_chi = abs(coeffs.dot(js)-energs)/err_energs
+        model_chi = (coeffs.dot(js)-energs)/err_energs
         rr = (len(model_chi) - sum(model_chi**2))
         if rr <0:
             deltaJ = [-1 for i in js]

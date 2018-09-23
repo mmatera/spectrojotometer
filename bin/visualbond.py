@@ -225,6 +225,7 @@ class ImportConfigWindow(Toplevel):
         self.app = app
         Toplevel.__init__(self, app.root)
         #  self.root = Toplevel(app.root)
+        self.dictatoms = []
         self.transient(app.root)
         self.model = app.model
         self.configurations = ([], [], [])
@@ -317,8 +318,8 @@ class ImportConfigWindow(Toplevel):
         model1 = self.models[self.selected_model.get()]
         model2 = self.app.model
         size1 = len(model1.coord_atomos)
-        scale_energy = float(len(model2.coord_atomos)) / float(size1)
-        if scale_energy < 1.:
+        self.scale_energy = float(len(model2.coord_atomos)) / float(size1)
+        if self.scale_energy < 1.:
             messagebox.showinfo("Different sizes",
                                 "#  alert: unit cell in model2 is smaller than in model1.")
 
@@ -330,7 +331,7 @@ class ImportConfigWindow(Toplevel):
                 if np.linalg.norm(p - q) < tol:
                     dictatoms[i] = j % size1
                     break
-            
+        self.dictatoms = [n for n in dictatoms]
         self.sitemap.delete(0,END)
         self.sitemap.insert(0,dictatoms.__str__()[1:-1])
 
@@ -359,26 +360,7 @@ class ImportConfigWindow(Toplevel):
             self.inputconfs.insert(END, "\n" + filecfg.read())
 
     def map_confs(self):
-        tol = float(self.tol.get())
-        if self.selected_model.get() == "[other model]":
-            self.onmodelselect()
-        model1 = self.models[self.selected_model.get()]
-        model2 = self.app.model
-        size1 = len(model1.coord_atomos)
-        scale_energy = float(len(model2.coord_atomos)) / float(size1)
-        if scale_energy < 1.:
-            messagebox.showinfo("Different sizes",
-                                "#  alert: unit cell in model2 is smaller than in model1.")
-
-        dictatoms = [-1 for p in model2.coord_atomos]
-        for i, p in enumerate(model2.coord_atomos):
-            for j, q in enumerate(model1.supercell):
-                if np.linalg.norm(p - q) < tol:
-                    dictatoms[i] = j % size1
-                    break
-            
-        self.sitemap.delete(0,END)
-        self.sitemap.insert(dictatoms.__str__()[1:-1])
+        self.dictatoms = [int(x) for x in self.sitemap.get().split(",")]
         self.outputconfs.config(state=NORMAL)
         lines = self.inputconfs.get(1.0, END).split("\n")
         for line in lines:
@@ -391,7 +373,7 @@ class ImportConfigWindow(Toplevel):
             if len(fields) == 1:
                 self.outputconfs.insert(END, "# " + line + "\n")
                 continue
-            fields = [str(float(fields[0]) * scale_energy),
+            fields = [str(float(fields[0]) * self.scale_energy),
                       fields[1].strip().split(sep="# ", maxsplit=1)]
             if len(fields[1]) == 1:
                 fields = [fields[0], fields[1][0], ""]
@@ -405,9 +387,9 @@ class ImportConfigWindow(Toplevel):
                     config.append(0)
                 if c == '1':
                     config.append(1)
-            if len(config) < len(dictatoms):
+            if len(config) < len(self.dictatoms):
                 config = config + (len(dictatoms) - len(config)) * [0]
-            config = [config[i] if i >= 0 else 0 for i in dictatoms]
+            config = [config[i] if i >= 0 else 0 for i in self.dictatoms]
             newline = str(fields[0]) + "\t" + str(config) + \
                 "  #  " + fields[2] + "\n"
             self.outputconfs.insert(END, newline)

@@ -293,11 +293,28 @@ class MagneticModel:
         Given a set of configurations, and the energies calculated from 
         the ab-initio tools, estimates the values of the coupling 
         constants from the proposed model.
-        
+
+
         confs: list of magnetic configurations
         energs: energies evaluated for each magnetic configuration
         err_energs: estimation of the maximum convergence error in energies
         printeqs: print the corresponding equations.
+
+        
+        Return values:
+        --------------
+        js, deltaJ, model_chi
+
+        js: the estimated values of the js, according to the least square
+            rule
+        
+        deltaJ: a list with the sizes of a box centered at js, that contains the 
+         compatibility region. This is chosen as the bounding box
+        of the ellipsoid |A.(j-js)|^2+ (chi^2-len(energies))=0.
+        
+        model_chi: the difference between the input energies, and 
+        those evaluated with the model with couplings js.
+
         """
 
         if printeqs:
@@ -329,7 +346,7 @@ class MagneticModel:
             deltaJ = [-1 for i in js]
         else:
             rr = np.sqrt(rr) * err_energs
-            deltaJ = box_ellipse(2.*np.sqrt(len(coeffs))*coeffs, rr)
+            deltaJ = box_ellipse(coeffs, rr)
         return (js, deltaJ, model_chi)
 
     # def show_config(self, config, sp):

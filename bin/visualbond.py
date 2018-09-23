@@ -239,6 +239,9 @@ class ImportConfigWindow(Toplevel):
         self.selected_model.trace('w', self.onmodelselect)
         self.optmodels = OptionMenu(row, self.selected_model, "[other model]")
         self.optmodels.pack(side=LEFT, fill=X)
+        self.sitemap  = Entry(row)
+        self.sitemap.pack(side=RIGHT)
+        Label(row,text="site map").pack(side=RIGHT)
         row.pack(side=TOP, fill=X)
 
         row = Frame(controls1)
@@ -309,6 +312,28 @@ class ImportConfigWindow(Toplevel):
             self.selected_model.set(filename)
             self.update_idletasks()
             #  self.optmodels.set(filename)
+        # xxxxxxxxx
+        tol = float(self.tol.get())
+        model1 = self.models[self.selected_model.get()]
+        model2 = self.app.model
+        size1 = len(model1.coord_atomos)
+        scale_energy = float(len(model2.coord_atomos)) / float(size1)
+        if scale_energy < 1.:
+            messagebox.showinfo("Different sizes",
+                                "#  alert: unit cell in model2 is smaller than in model1.")
+
+        print("model2.coords:\n",model2.coord_atomos)
+        print("model1.supercell:\n",model1.supercell)
+        dictatoms = [-1 for p in model2.coord_atomos]
+        for i, p in enumerate(model2.coord_atomos):
+            for j, q in enumerate(model1.supercell):
+                if np.linalg.norm(p - q) < tol:
+                    dictatoms[i] = j % size1
+                    break
+            
+        self.sitemap.delete(0,END)
+        self.sitemap.insert(0,dictatoms.__str__()[1:-1])
+
 
     def close_window(self):
         self.destroy()
@@ -351,6 +376,9 @@ class ImportConfigWindow(Toplevel):
                 if np.linalg.norm(p - q) < tol:
                     dictatoms[i] = j % size1
                     break
+            
+        self.sitemap.delete(0,END)
+        self.sitemap.insert(dictatoms.__str__()[1:-1])
         self.outputconfs.config(state=NORMAL)
         lines = self.inputconfs.get(1.0, END).split("\n")
         for line in lines:
@@ -416,7 +444,7 @@ class ApplicationGUI:
 #         self.build_page4()
         self.nb.pack(expand=1, fill="both")
         Frame(height=5, bd=1, relief=SUNKEN).pack(fill=X, padx=5, pady=5)
-        self.status = ScrolledText(self.root, height=3, width=170)
+        self.status = ScrolledText(self.root, height=15, width=170)
         # Frame(height=5, bd=1, relief=SUNKEN).pack(fill=X, padx=5, pady=5)
         self.status.config(background="black", foreground="white")
         self.status.pack(fill=X)
@@ -802,7 +830,7 @@ class ApplicationGUI:
                                                            ("all files", "*.*")))
         if filename == "":
             return
-        if self.nb.selecter() == self.page3:
+        if self.nb.select() == self.nb.tabs()[2]:
             self.reload_configs(src_widget=self.spinconfigsenerg)
         else:
             self.reload_configs()

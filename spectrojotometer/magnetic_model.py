@@ -558,7 +558,7 @@ _chemical_name_common                  """ + self.model_label + "\n"
                 c = np.linalg.norm(bravais_vectors[2])
                 gamma =round(180/3.1415926 * np.arccos(bravais_vectors[0].dot(bravais_vectors[1])/(a*b)))
                 alpha =round(180/3.1415926 * np.arccos(bravais_vectors[0].dot(bravais_vectors[2])/(a*c)))
-                beta = round(180/3.1415926 * np.arccos(bravais_vectors[0].dot(bravais_vectors[2])/(c*b)))
+                beta = round(180/3.1415926 * np.arccos(bravais_vectors[1].dot(bravais_vectors[2])/(c*b)))
                 fileout.write("_cell_length_a \t\t\t" + str(a)+"\n")
                 fileout.write("_cell_length_b \t\t\t" + str(b)+"\n")
                 fileout.write("_cell_length_c \t\t\t" + str(c)+"\n")

@@ -279,7 +279,7 @@ class MagneticModel:
         eqarray = self.coefficient_matrix(confs)
         eqarray = eqarray[:,0:-1]
         if boxsize:
-            return max(box_ellipse(eqarray,1 ))
+            return max(box_ellipse(eqarray,1))*np.sqrt(len(confs))
         singularvalues = np.linalg.svd(eqarray)[1]
         if min(singularvalues) == 0 or len(singularvalues) < len(eqarray[0]):
             return 1e80

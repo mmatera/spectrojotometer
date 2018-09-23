@@ -323,8 +323,12 @@ class ImportConfigWindow(Toplevel):
             messagebox.showinfo("Different sizes",
                                 "#  alert: unit cell in model2 is smaller than in model1.")
 
-        print("model2.coords:\n",model2.coord_atomos)
-        print("model1.supercell:\n",model1.supercell)
+        print("model2.coords:\n")
+        for p in model2.cood_atomos:
+                print("\t",p)
+        print("model1.supercell:\n")
+        for k, p in enumerate(model1.supercell):
+                print("\t", k % len(model1.coord_atomos) ,"->",p)
         dictatoms = [-1 for p in model2.coord_atomos]
         for i, p in enumerate(model2.coord_atomos):
             for j, q in enumerate(model1.supercell):

@@ -1090,8 +1090,9 @@ class ApplicationGUI:
         for j, chi in enumerate(chis):
             chitext = (chitext + textmarkers["Delta_symbol"][fmt] +
                        "E" + textmarkers["sub_symbol"][fmt] + str(j + 1) +
-                       textmarkers["equal_symbol"][fmt] + " " +
-                       str(chi*tolerance) + " " + textmarkers["open_comment"][fmt] +
+                       "/" + textmarkers["Delta_symbol"][fmt] +
+                       "E" +textmarkers["equal_symbol"][fmt] + " " +
+                       str(chi) + " " + textmarkers["open_comment"][fmt] +
                        labels[j] +
                        textmarkers["close_comment"][fmt] +
                        textmarkers["separator_symbol"][fmt] + "\n")

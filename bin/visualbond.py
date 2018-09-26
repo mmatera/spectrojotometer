@@ -402,8 +402,8 @@ class ImportConfigWindow(Toplevel):
 
 class ApplicationGUI:
     def __init__(self):
-        sys.stdout = self
-        sys.stderr = self
+        #sys.stdout = self
+        #sys.stderr = self
         self.application_title = "Visualbond 0.1"
         self.model = None
         self.configurations = ([], [], [])
@@ -636,6 +636,26 @@ class ApplicationGUI:
             ent.insert(0, defaultfields[i])
 #             ents[field] = ent
             self.parameters["page3"][field] = ent
+
+        row = LabelFrame(controls1,text="Error bound method",width=8, padx=5, pady=5)
+        framemethod = Frame(row)
+        bemode = BooleanVar()
+        self.parameters["page3"]["usemc"] = bemode
+        Radiobutton(framemethod, text="Quadratic bound", variable=bemode,\
+                    value=False,\
+                    command=lambda: self.nummcsteps.config(state="disabled")).pack(side=TOP)
+        Radiobutton(framemethod, text="Monte Carlo", variable=bemode,\
+                    value=True,\
+                    command=lambda: self.nummcsteps.config(state="normal") ).pack(side=TOP)
+        self.nummcsteps = Entry(framemethod, width=5)
+        self.nummcsteps.insert(0,"1000")
+        self.nummcsteps.config(state="disabled")
+        bemode.set(0)
+        self.nummcsteps.pack(side=TOP)
+        self.parameters["page3"]["mcsteps"] = self.nummcsteps
+        framemethod.pack(side=TOP,fill=X)
+        row.pack(side=TOP,fill=X)
+
         row = Frame(controls1)
         lab = Label(row, width=14, text="Format", anchor="w")
         lab.pack(side=LEFT)
@@ -644,6 +664,8 @@ class ApplicationGUI:
                                command=self.print_full_equations)
         optformat.pack(side=LEFT, fill=X)
         row.pack(side=TOP, fill=X)
+
+        
         btn = Button(controls1, text="Estimate Parameters",
                      command=self.evaluate_couplings)
         btn.pack()
@@ -1026,6 +1048,8 @@ class ApplicationGUI:
         self.reload_configs(src_widget=self.spinconfigsenerg)
 
         tolerance = float(self.parameters["page3"]["Energy tolerance"].get())
+        usemc = self.parameters["page3"]["usemc"].get()
+        mcsteps = int(self.parameters["page3"]["mcsteps"].get())
         confs = []
         energs = []
         fmt = self.outputformat.get()
@@ -1039,9 +1063,15 @@ class ApplicationGUI:
             self.print_status("Number of known energies is not enough to determine all the couplings\n")
             messagebox.showerror("Error", "Number of known energies is not enough to determine all the couplings.")
             return
-        js, jerr, chis = self.model.compute_couplings(confs,
-                                                      energs,
-                                                      err_energs=tolerance)
+        if  usemc:
+                js, jerr, chis = self.model.compute_couplings(confs,
+                                                              energs,
+                                                              err_energs=tolerance,montecarlo=True,mcsteps=mcsteps)
+        else:
+                js, jerr, chis = self.model.compute_couplings(confs,
+                                                              energs,
+                                                              err_energs=tolerance,montecarlo=False)
+                
         self.chisvals = chis
         offset_energy = js[-1]
         js.resize(js.size - 1)

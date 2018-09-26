@@ -6,6 +6,8 @@ from __future__ import print_function
 import sys
 
 import numpy as np
+import numpy.linalg as la
+import numpy.random as rnd
 from .tools import *
 #import matplotlib.pyplot as plt
 #from mpl_toolkits.mplot3d import Axes3
@@ -287,7 +289,7 @@ class MagneticModel:
         return cond_number
     
 
-    def compute_couplings(self, confs, energs, err_energs=.01,printeqs=False):
+    def compute_couplings(self, confs, energs, err_energs=.01,printeqs=False,montecarlo=True,mcsteps=None):
         """
         compute_couplings
         Given a set of configurations, and the energies calculated from 
@@ -337,6 +339,12 @@ class MagneticModel:
         if printeqs:
             eprint("\nInverse of the minimum singular value: ", cond_number,"\n\n")
 
+        # If Montecarlo, uses the montecarlo routine to estimate the box.
+        if montecarlo:
+            return self.montecarlo_box(coeffs, energs, err_energs,mcsteps)
+
+        # Otherwise, it gives an estimation in terms of the bigger ellipse.
+        
         # js = (A^t A )^{-1} A^t En, i.e. least squares solution
         resolvent =  np.linalg.inv(coeffs.transpose().dot(coeffs)).dot(coeffs.transpose())
         js = resolvent.dot(energs)
@@ -349,110 +357,48 @@ class MagneticModel:
             deltaJ = box_ellipse(coeffs, rr)
         return (js, deltaJ, model_chi)
 
-    # def show_config(self, config, sp):
-    #     """
-    #     Esta función dibuja las redes con las correspondientes configuraciones de 
-    #     espines.
+    def montecarlo_box(self, coeffs, energs, tol, numtry=1000):
+        numcalc = len(energs)
+        numparm = len(coeffs[0])
+        sv,u = la.svd(coeffs)[1:3]
+        j0s = np.linalg.inv(coeffs.transpose().dot(coeffs)).dot(coeffs.transpose().dot(energs))
+        e0s = coeffs.dot(j0s)
+        esqerr = la.norm(e0s-energs)
+        scale = (numcalc*tol**2-esqerr**2)/np.sqrt(4.*numparm)
+        if scale<0:
+            print("scale < 0. Model incompatible")
+            return j0s,np.array([ -1 for j in j0s]), (e0s-energs)/tol
 
-    #        config es una lista con los estados de los átomos
-    #        sp es un subplot donde hacer el gráfico
-    #        si showbonds = True, dibuja lineas entre los sitios interactuantes
-    #     """
-    #     coord_atomos = self.coord_atomos
-    #     fig = plt.figure()
-    #     colors = ['r' if config[i] >0 else 'b' for i in range(self.cell_size)]
-    #     ax = fig.add_subplot(sp, projection='3d')
-    #     idx=0
-    #     for i in range(len(coord_atomos)):
-    #         p = coord_atomos[i]
-    #         ax.text(p[0], p[1], p[2], s=i+1)
-    #     ax.scatter(coord_atomos[:,0],coord_atomos[:,1],coord_atomos[:,2],c=colors)
-    #     ax.set_ylim((-1,1))
-    #     ax.set_xlim((-1,1))       
-    #     return (fig,ax)
+        # Generate the random set on the elliptic upper bound
+        jtrys = rnd.normal(0,1.,(numtry,numparm)).dot(np.diag(scale/sv)).dot(u) 
+        # If the Minumum Square point is compatible, we add it to the random set
+        if max(abs(energs-e0s))<tol:
+            jtrys = np.array([j0s + j for j in  jtrys] + [j0s])
+        else:
+            jtrys = np.array([j0s + j for j in  jtrys])
+        # We keep just the compatible points
+        jtrys = jtrys[np.array([ max(abs(coeffs.dot(j)-energs))<tol  for j in jtrys])]
 
-    # def show_superlattice_bonds(self, nd=1.,bt=None,discretization=.02):
-    #     """
-    #     Muestra los sitios que interactúan entre sí a una cierta distancia.
-    #     """
-    #     coord_atomos = self.coord_atomos
-    #     supercell = self.supercell
-    #     fig = plt.figure()
-    #     ax = fig.add_subplot(111)
+        # It it resuls incompatible, show a warning. 
+        if len(jtrys) == 0:
+            print("model seems incompatible. Try with a larger number of points.")
+            return j0s,np.array([ -1 for j in j0s]), (e0s-energs)/tol
 
+        if len(jtrys) == 1:
+            print("errors  estimated by boxing the  ellipse")
+            rr = np.sqrt(numcalc*tol**2-esqerr**2)
+            djs = box_ellipse(coeffs, rr)
+            return j0s,djs, (e0s-energs)/tol
+        print(len(jtrys))
+        print("accepted rate=",len(jtrys)/(numtry+1.))
 
-    #     if bt is not None:
-    #         nd=bond_distances[bt]
-    #     colors=["r" for p in supercell]
-    #     ax.scatter(supercell[:,0],supercell[:,1],c=colors)
-    #     colors=["b" for p in coord_atomos]
-    #     ax.scatter(coord_atomos[:,0],coord_atomos[:,1],c=colors)
-    #     ax.set_ylim((-3,3))
-
-    #     for p,x in enumerate(coord_atomos):
-    #         for q,y in enumerate(supercell):
-    #             qred = q%cell_size            
-    #             if(p<qred):                
-    #                 d = x-y
-    #                 d = np.sqrt(d[0]**2+d[1]**2+ d[2]**2)
-    #                 #print([(p,q),[np.abs(d-z) for z in [d0,d1p,d1x,d2p,d2x,d3p,d3x]]])
-    #                 if np.abs(d-nd)<.01:
-    #                     ax.add_artist(Line2D([x[0],y[0]],[x[1],y[1]]))
-    #             elif(p>qred):
-    #                 d = x-y
-    #                 d = np.sqrt(d[0]**2+d[1]**2+ d[2]**2)
-    #                 if d > 4.5:
-    #                     continue
-    #                 if np.abs(d-nd)<discretization:
-    #                     ax.add_artist(Line2D([x[0],y[0]],[x[1],y[1]],linestyle=":"))
-    #             elif(p==qred):
-    #                 d = x-y
-    #                 d = np.sqrt(d[0]**2+d[1]**2+ d[2]**2)
-    #                 if np.abs(d-nd)<discretization:
-    #                     ax.add_artist(Line2D([x[0],y[0]],[x[1],y[1]],linestyle="-."))
-    #     return 
+        j0s = np.average(jtrys,0)
+        jtrys = [ abs(js-j0s) for js in jtrys]
+        djs = np.max(np.array(jtrys),0)
+        return j0s,djs, (e0s-energs)/tol
 
 
-    # def check_superlattice_bonds(self, nd=1.,bt=None,discretization=.02):
-    #     """
-    #     Muestra los sitios que interactúan entre sí a una cierta distancia.
-    #     """
-    #     coord_atomos = self.coord_atomos
-    #     supercell = self.supercell
-    #     if bt is not None:
-    #         nd = self.bond_distances[bt]
-    #     else:
-    #         for k,di in self.bond_distances:
-    #             if np.abs(d-nd)<discretization:
-    #                 bt=k
-    #                 break
-    #     if bt is None:
-    #         return 
-
-    #     countbond=0
-    #     for p,x in enumerate(coord_atomos):
-    #         for q,y in enumerate(supercell):
-    #             qred = q%cell_size            
-    #             if(p<qred):                
-    #                 d = x-y
-    #                 d = np.sqrt(d[0]**2+d[1]**2+ d[2]**2)
-    #                 if np.abs(d-nd)<discretization:
-    #                     countbond = countbond+1
-    #                     if (p,qred) not in self.bond_lists[bt]:
-    #                         eprint ((p,qred), "missing")
-    #             elif(p>qred):
-    #                 d = x-y
-    #                 d = np.sqrt(d[0]**2+d[1]**2+ d[2]**2)
-    #                 if 9.9 > d > .7:
-    #                     continue
-    #                 if np.abs(d-nd)<discretization:
-    #                     countbond = countbond + 1
-    #                     if (qred,p) not in self.bond_lists[bt]:
-    #                         eprint ((qred,p), "missing")
-    #     if 2*len(bond_lists[bt]) != countbond:
-    #         eprint (2*len(bond_lists[bt])," != ", countbond)
-    #     return 
-
+    
     def generate_configurations_onfly(self):
         size = self.cell_size
         for c in range(2**((size-1))):

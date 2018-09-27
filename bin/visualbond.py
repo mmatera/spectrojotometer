@@ -839,8 +839,8 @@ class ApplicationGUI:
         self.statusbar.config(text="config loaded")
         self.nb.select(1)
         self.reload_configs(src_widget=self.spinconfigs)
-        
 
+        
     def save_model(self):
         datafolder = os.getcwd()
         filename = filedialog.asksaveasfilename(initialdir=datafolder + "/",

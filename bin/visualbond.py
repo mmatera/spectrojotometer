@@ -641,18 +641,43 @@ class ApplicationGUI:
         framemethod = Frame(row)
         bemode = BooleanVar()
         self.parameters["page3"]["usemc"] = bemode
+
+        def enable_mcparams_inputs():
+            self.nummcsteps.config(state="normal")
+            self.mcsizefactor.config(state="normal")
+
+            
+        def disable_mcparams_inputs():
+            self.nummcsteps.config(state="disabled")
+            self.mcsizefactor.config(state="disabled")
+        
+
+                
         Radiobutton(framemethod, text="Quadratic bound", variable=bemode,\
                     value=False,\
-                    command=lambda: self.nummcsteps.config(state="disabled")).pack(side=TOP)
+                    command=disable_mcparams_inputs).pack(side=TOP)
         Radiobutton(framemethod, text="Monte Carlo", variable=bemode,\
                     value=True,\
-                    command=lambda: self.nummcsteps.config(state="normal") ).pack(side=TOP)
-        self.nummcsteps = Entry(framemethod, width=5)
+                    command=enable_mcparams_inputs ).pack(side=TOP)
+        self.mcparams = Frame(framemethod)
+        rowmc = Frame(self.mcparams)
+        Label(rowmc, text="Num Samples:").pack(side=LEFT)
+        self.nummcsteps = Entry(rowmc, width=5)
         self.nummcsteps.insert(0,"1000")
         self.nummcsteps.config(state="disabled")
+        self.nummcsteps.pack(side=LEFT)
+        rowmc.pack(side=TOP)
+        rowmc = Frame(self.mcparams)
+        Label(rowmc, text="Size Factor:").pack(side=LEFT)
+        self.mcsizefactor = Entry(rowmc, width=5)
+        self.mcsizefactor.insert(0,"1.")
+        self.mcsizefactor.config(state="disabled")
+        self.mcsizefactor.pack(side=LEFT)
+        rowmc.pack(side=TOP)
+        self.mcparams.pack(side=TOP)
         bemode.set(0)
-        self.nummcsteps.pack(side=TOP)
         self.parameters["page3"]["mcsteps"] = self.nummcsteps
+        self.parameters["page3"]["mcsizefactor"] = self.mcsizefactor
         framemethod.pack(side=TOP,fill=X)
         row.pack(side=TOP,fill=X)
 
@@ -813,6 +838,8 @@ class ApplicationGUI:
 
         self.statusbar.config(text="config loaded")
         self.nb.select(1)
+        self.reload_configs(src_widget=self.spinconfigs)
+        
 
     def save_model(self):
         datafolder = os.getcwd()
@@ -946,6 +973,7 @@ class ApplicationGUI:
         else:
             self.spinconfigs.delete(1.0, END)
             self.spinconfigs.insert(END, conftxt)
+            
 
     def reload_model(self, ev):
         self.print_status("reload model")
@@ -1050,6 +1078,7 @@ class ApplicationGUI:
         tolerance = float(self.parameters["page3"]["Energy tolerance"].get())
         usemc = self.parameters["page3"]["usemc"].get()
         mcsteps = int(self.parameters["page3"]["mcsteps"].get())
+        mcsizefactor = float(self.parameters["page3"]["mcsizefactor"].get())
         confs = []
         energs = []
         fmt = self.outputformat.get()
@@ -1064,11 +1093,12 @@ class ApplicationGUI:
             messagebox.showerror("Error", "Number of known energies is not enough to determine all the couplings.")
             return
         if  usemc:
-                js, jerr, chis = self.model.compute_couplings(confs,
-                                                              energs,
-                                                              err_energs=tolerance,montecarlo=True,mcsteps=mcsteps)
+                js, jerr, chis,ar = self.model.compute_couplings(confs,
+                                                                 energs,
+                                                                 err_energs=tolerance,montecarlo=True,
+                                                                 mcsteps=mcsteps,mcsizefactor=mcsizefactor)
         else:
-                js, jerr, chis = self.model.compute_couplings(confs,
+                js, jerr, chis,ar = self.model.compute_couplings(confs,
                                                               energs,
                                                               err_energs=tolerance,montecarlo=False)
                 
@@ -1109,6 +1139,10 @@ class ApplicationGUI:
                               str(jerr[i] / jmax) + ") " +
                               textmarkers["times_symbol"][fmt] +
                               str(jmax) + "\n")
+
+        if usemc:
+            resparmtxt = resparmtxt + "\n\n Monte Carlo acceptance rate:" + str(ar)+"\n"
+                        
         self.resparam.config(state=NORMAL)
         self.resparam.delete(1.0, END)
         self.resparam.insert(END, resparmtxt)

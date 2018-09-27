@@ -289,7 +289,7 @@ class MagneticModel:
         return cond_number
     
 
-    def compute_couplings(self, confs, energs, err_energs=.01,printeqs=False,montecarlo=True,mcsteps=None):
+    def compute_couplings(self, confs, energs, err_energs=.01,printeqs=False,montecarlo=True,mcsteps=None,mcsizefactor=1.):
         """
         compute_couplings
         Given a set of configurations, and the energies calculated from 
@@ -341,7 +341,7 @@ class MagneticModel:
 
         # If Montecarlo, uses the montecarlo routine to estimate the box.
         if montecarlo:
-            return self.montecarlo_box(coeffs, energs, err_energs,mcsteps)
+            return self.montecarlo_box(coeffs, energs, err_energs,mcsteps,mcsizefactor)
 
         # Otherwise, it gives an estimation in terms of the bigger ellipse.
         
@@ -355,19 +355,19 @@ class MagneticModel:
         else:
             rr = np.sqrt(rr) * err_energs
             deltaJ = box_ellipse(coeffs, rr)
-        return (js, deltaJ, model_chi)
+        return (js, deltaJ, model_chi,1.)
 
-    def montecarlo_box(self, coeffs, energs, tol, numtry=1000):
+    def montecarlo_box(self, coeffs, energs, tol, numtry=1000,sizefactor=1.):
         numcalc = len(energs)
         numparm = len(coeffs[0])
         sv,u = la.svd(coeffs)[1:3]
         j0s = np.linalg.inv(coeffs.transpose().dot(coeffs)).dot(coeffs.transpose().dot(energs))
         e0s = coeffs.dot(j0s)
         esqerr = la.norm(e0s-energs)
-        scale = (numcalc*tol**2-esqerr**2)/np.sqrt(4.*numparm)
+        scale = sizefactor * (numcalc * tol**2 - esqerr**2)/np.sqrt(4.*numparm)
         if scale<0:
             print("scale < 0. Model incompatible")
-            return j0s,np.array([ -1 for j in j0s]), (e0s-energs)/tol
+            return j0s,np.array([ -1 for j in j0s]), (e0s-energs)/tol,0.
 
         # Generate the random set on the elliptic upper bound
         jtrys = rnd.normal(0,1.,(numtry,numparm)).dot(np.diag(scale/sv)).dot(u) 
@@ -381,21 +381,21 @@ class MagneticModel:
 
         # It it resuls incompatible, show a warning. 
         if len(jtrys) == 0:
-            print("model seems incompatible. Try with a larger number of points.")
-            return j0s,np.array([ -1 for j in j0s]), (e0s-energs)/tol
+            print("model seems incompatible. Try with a larger number of points or a different sizefactor.")
+            return j0s,np.array([ -1 for j in j0s]), (e0s-energs)/tol,0.
 
         if len(jtrys) == 1:
             print("errors  estimated by boxing the  ellipse")
             rr = np.sqrt(numcalc*tol**2-esqerr**2)
             djs = box_ellipse(coeffs, rr)
-            return j0s,djs, (e0s-energs)/tol
+            return j0s,djs, (e0s-energs)/tol,1./(numtry+1.)
         print(len(jtrys))
-        print("accepted rate=",len(jtrys)/(numtry+1.))
+        print("Accepted rate=",len(jtrys)/(numtry+1.))
 
         j0s = np.average(jtrys,0)
         jtrys = [ abs(js-j0s) for js in jtrys]
         djs = np.max(np.array(jtrys),0)
-        return j0s,djs, (e0s-energs)/tol
+        return j0s,djs, (e0s-energs)/tol,len(jtrys)/(numtry+1.)
 
 
     

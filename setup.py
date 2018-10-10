@@ -24,7 +24,7 @@ setup(name='spectrojotometer',
       install_requires=['argparse','numpy', 'matplotlib'],
       packages=['spectrojotometer'],
       package_data={
-	'spectrojotometer': ["doc/*.html"],
+	'spectrojotometer': ["doc/*.html","logo.gif"],
       },
       scripts=['bin/print-equations','bin/map_configs','bin/optimize-configurations', 'bin/bond_generator','bin/evaluate_cc', 'bin/visualbond.py']
      )

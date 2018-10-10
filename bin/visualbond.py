@@ -48,6 +48,9 @@ textmarkers["sub_symbol"] = {"latex": "_", "plain": "", "wolfram": "", }
 textmarkers["plusminus_symbol"] = {"latex": "\pm", "plain": "+/-",
                                    "wolfram": "\[PlusMinus]", }
 
+logofilename = spectrojotometer.__file__[:-11] +  "logo.gif"
+print(logofilename)
+
 
 def validate_pinteger(action, index, value_if_allowed,
                       prior_value, text, validation_type,
@@ -402,13 +405,14 @@ class ImportConfigWindow(Toplevel):
 
 class ApplicationGUI:
     def __init__(self):
-        sys.stdout = self
-        sys.stderr = self
+        #sys.stdout = self
+        #sys.stderr = self
         self.application_title = "Visualbond 0.1"
         self.model = None
         self.configurations = ([], [], [])
         self.chisvals = None
         self.root = Tk()
+        self.logo = PhotoImage(file=logofilename)
         self.vcmdi = (self.root.register(validate_pinteger),
                       '%d', '%i', '%P', '%s', '%S', '%v', '%V', '%W')
         self.vcmdf = (self.root.register(validate_float),
@@ -430,10 +434,16 @@ class ApplicationGUI:
 #         self.build_page4()
         self.nb.pack(expand=1, fill="both")
         Frame(height=5, bd=1, relief=SUNKEN).pack(fill=X, padx=5, pady=5)
-        self.status = ScrolledText(self.root, height=15, width=170)
+        statusregion = Frame(self.root,height=15,width=170)
+        logocvs = Canvas(statusregion,width=125,height=125)
+        logocvs.pack(side=LEFT,fill=X)
+        logocvs.create_image((64,62),image=self.logo)
+        self.status = ScrolledText(statusregion, height=15, width=170)
         # Frame(height=5, bd=1, relief=SUNKEN).pack(fill=X, padx=5, pady=5)
         self.status.config(background="black", foreground="white")
         self.status.pack(fill=X)
+        statusregion.pack(side=BOTTOM,fill=X)
+        
         self.statusbar = Label(self.root, text="No model loaded.", bd=1,
                                relief=SUNKEN, anchor=W)
         self.statusbar.pack(side=BOTTOM, fill=X)

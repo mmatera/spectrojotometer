@@ -1,3 +1,5 @@
+![](logo.svg)
+
 
 Espectrojotometer.
 ==================

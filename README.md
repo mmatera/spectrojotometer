@@ -1,1 +1,2 @@
 # Spectrojotometer
+![](logo.svg)

@@ -1,3 +1,1 @@
 # Spectrojotometer
-![](logo.svg)
-

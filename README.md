@@ -1,14 +1,15 @@
 ![](logo.svg)
 
 
-Espectrojotometer.
-==================
+Spectrojotometer.
+=================
 
 This package is a set of tools to determine, by means of ab initio 
 simulations, the value of the coupling constants in a Heisenberg-like effective 
 magnetic model for a given magnetic system.
 
 
+A ready to use version for MS Windows is available ![here](http://www2.fisica.unlp.edu.ar/~matera/visualbond/)
 
 Instalation:
 ============

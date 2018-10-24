@@ -48,8 +48,27 @@ textmarkers["sub_symbol"] = {"latex": "_", "plain": "", "wolfram": "", }
 textmarkers["plusminus_symbol"] = {"latex": "\pm", "plain": "+/-",
                                    "wolfram": "\[PlusMinus]", }
 
+textmarkers["open_mod"] = {"latex": "\left |", "plain": "|",
+                                   "wolfram": "Abs[", }
+
+textmarkers["close_mod"] = {"latex": "\right |", "plain": "|",
+                                   "wolfram": "] ", }
+
+
+
 logofilename = spectrojotometer.__file__[:-11] +  "logo.gif"
-print(logofilename)
+
+
+
+def show_number(val,tol=None):
+    if tol is None:
+        return "%.3g" % val
+    else:
+        tol = 10. ** int(np.log(tol)/np.log(10.)-1)
+        if abs(val) < tol:
+            return "0"
+        val = int(val / tol) * tol
+        return "%.3g" % val
 
 
 def validate_pinteger(action, index, value_if_allowed,
@@ -144,7 +163,6 @@ class FindDialog(Toplevel):
         firstpos = pos
         while pos != "":
             end = "%s + %sc" % (pos, countVar.get())
-            print(pos, end)
             self.edt.tag_add("search", pos, end)
             pos = self.edt.search(targettxt, end,
                                   stopindex=END, count=countVar)
@@ -168,7 +186,6 @@ class FindDialog(Toplevel):
             self.currmatch = self.currmatch - 1
             return
 
-        print(self.edt.tag_ranges("search")[2 * self.currmatch])
         self.edt.mark_set("insert",
                           self.edt.tag_ranges("search")[2 * self.currmatch])
         self.edt.see(self.edt.tag_ranges("search")[2 * self.currmatch])
@@ -185,7 +202,6 @@ class FindDialog(Toplevel):
             messagebox.showinfo("Find next", "This is the first match")
             return
         self.currmatch = self.currmatch - 1
-        print(self.edt.tag_ranges("search")[2 * self.currmatch])
         self.edt.mark_set("insert",
                           self.edt.tag_ranges("search")[2 * self.currmatch])
         self.edt.see(self.edt.tag_ranges("search")[2 * self.currmatch])
@@ -326,10 +342,10 @@ class ImportConfigWindow(Toplevel):
             messagebox.showinfo("Different sizes",
                                 "#  alert: unit cell in model2 is smaller than in model1.")
 
-        print("model2.coords:\n")
+        
         for p in model2.cood_atomos:
                 print("\t",p)
-        print("model1.supercell:\n")
+        
         for k, p in enumerate(model1.supercell):
                 print("\t", k % len(model1.coord_atomos) ,"->",p)
         dictatoms = [-1 for p in model2.coord_atomos]
@@ -405,8 +421,8 @@ class ImportConfigWindow(Toplevel):
 
 class ApplicationGUI:
     def __init__(self):
-        #sys.stdout = self
-        #sys.stderr = self
+        sys.stdout = self
+        sys.stderr = self
         self.application_title = "Visualbond 0.1"
         self.model = None
         self.configurations = ([], [], [])
@@ -1101,57 +1117,94 @@ class ApplicationGUI:
         if len(confs) < len(self.model.bond_lists) + 1:
             self.print_status("Number of known energies is not enough to determine all the couplings\n")
             messagebox.showerror("Error", "Number of known energies is not enough to determine all the couplings.")
-            return
-        if  usemc:
+            resparmtxt = ""
+        else:
+            if  usemc:
                 js, jerr, chis,ar = self.model.compute_couplings(confs,
                                                                  energs,
                                                                  err_energs=tolerance,montecarlo=True,
                                                                  mcsteps=mcsteps,mcsizefactor=mcsizefactor)
-        else:
+            else:
                 js, jerr, chis,ar = self.model.compute_couplings(confs,
-                                                              energs,
-                                                              err_energs=tolerance,montecarlo=False)
+                                                                 energs,
+                                                                 err_energs=tolerance,montecarlo=False)
                 
-        self.chisvals = chis
-        offset_energy = js[-1]
-        js.resize(js.size - 1)
-        jmax = max(abs(js))
+            self.chisvals = chis
+            offset_energy = js[-1]
+            js.resize(js.size - 1)
+            jmax = max(abs(js))
 
-        resparmtxt = ("E" + textmarkers["sub_symbol"][fmt] + "0" +
+            resparmtxt = ("E" + textmarkers["sub_symbol"][fmt] + "0" +
                       textmarkers["equal_symbol"][fmt] + str(offset_energy) +
                       "\n\n")
-        if min(jerr) < 0:
-            self.print_status("Warning: error bounds suggest that  the model is not compatible with the data. Try increasing the tolerance by means of the parameter --tolerance [tol].")
-            incopatibletxt = (textmarkers["open_comment"][fmt] +
+            if min(jerr) < 0:
+                self.print_status("Warning: error bounds suggest that  the model is not compatible with the data. Try increasing the tolerance by means of the parameter --tolerance [tol].")
+                incopatibletxt = (textmarkers["open_comment"][fmt] +
                               " incompatible " +
                               textmarkers["close_comment"][fmt] +
                               textmarkers["separator_symbol"][fmt] + "\n")
-            for i, val in enumerate(js):
-                if jerr[i] < 0:
-                    resparmtxt = (resparmtxt + self.model.bond_names[i] + " " +
+                for i, val in enumerate(js):
+                    if jerr[i] < 0:
+                        resparmtxt = (resparmtxt + self.model.bond_names[i] + " " +
                                   textmarkers["equal_symbol"][fmt] + "(" +
-                                  str(val / jmax) + ") " +
+                                  show_number(val / jmax) + ") " +
                                   textmarkers["times_symbol"][fmt] + " " +
-                                  str(jmax) + incopatibletxt)
-                else:
-                    resparmtxt = (resparmtxt + self.model.bond_names[i] + " " +
+                                  show_number(jmax) + incopatibletxt)
+                    else:
+                        resparmtxt = (resparmtxt + self.model.bond_names[i] + " " +
                                   textmarkers["equal_symbol"][fmt] + "(" +
-                                  str(val / jmax) + textmarkers["plusminus_symbol"][fmt] +
-                                  str(jerr[i] / jmax) +
-                                  ") " + textmarkers["times_symbol"][fmt] + " " + str(jmax) +
+                                  show_number(val / jmax,tol=jerr[i] / jmax) + textmarkers["plusminus_symbol"][fmt] +
+                                   ("%.2g" % (jerr[i] / jmax)) +
+                                  ") " + textmarkers["times_symbol"][fmt] + " " + ("%.3e" % jmax) +
                                   textmarkers["separator_symbol"][fmt] + "\n")
-        else:
-            for i, val in enumerate(js):
-                resparmtxt = (resparmtxt + self.model.bond_names[i] + " " +
+            else:
+                for i, val in enumerate(js):
+                    resparmtxt = (resparmtxt + self.model.bond_names[i] + " " +
                               textmarkers["equal_symbol"][fmt] +
-                              "(" + str(val / jmax) + " " +
+                              "(" + show_number(val / jmax, tol=jerr[i] / jmax) + " " +
                               textmarkers["plusminus_symbol"][fmt] + " " +
-                              str(jerr[i] / jmax) + ") " +
+                              show_number(jerr[i] / jmax) + ") " +
                               textmarkers["times_symbol"][fmt] +
-                              str(jmax) + "\n")
+                              show_number(jmax) + "\n")
 
-        if usemc:
-            resparmtxt = resparmtxt + "\n\n Monte Carlo acceptance rate:" + str(ar)+"\n"
+            if usemc:
+                resparmtxt = resparmtxt + "\n\n Monte Carlo acceptance rate:" + str(ar)+"\n"
+
+
+        # Inequations
+        resparmtxt = resparmtxt  + "\n\n region constraints:\n"
+        ineqs = self.model.bound_inequations(confs,
+                                             energs,
+                                             err_energs=tolerance)
+        for ineq in ineqs:
+            txtineq = ""
+            coeff = ineq[0]
+            for i, c in enumerate(coeff):
+                if abs(c) < tolerance:
+                    continue
+                if abs(c-1) < tolerance:
+                    if txtineq != "":
+                        txtineq += " +"
+                    txtineq += self.model.bond_names[i]
+                    continue
+
+                if abs(c+1) < tolerance:
+                    txtineq += " -" + self.model.bond_names[i]
+                    continue
+
+                if txtineq != "" and c > 0 :
+                    txtineq += " +" + show_number(c, tolerance) + " "
+                else:
+                    txtineq +=  " " + show_number(c, tolerance) + " "
+                txtineq += textmarkers["times_symbol"][fmt] + " "
+                txtineq += self.model.bond_names[i]
+            txtineq = textmarkers["open_mod"][fmt] + txtineq
+            if ineq[1] < 0:
+                txtineq += " + " + show_number(-ineq[1])  + " "  + textmarkers["close_mod"][fmt] + " < "
+            else:
+                txtineq +=  " " + show_number(-ineq[1]) +  " "  + textmarkers["close_mod"][fmt] + " < "
+            txtineq +=  show_number(ineq[2]) 
+            resparmtxt += "\n\n" + txtineq
                         
         self.resparam.config(state=NORMAL)
         self.resparam.delete(1.0, END)
@@ -1166,7 +1219,7 @@ class ApplicationGUI:
                        "E" + textmarkers["sub_symbol"][fmt] + str(j + 1) +
                        "/" + textmarkers["Delta_symbol"][fmt] +
                        "E" +textmarkers["equal_symbol"][fmt] + " " +
-                       str(chi) + " " + textmarkers["open_comment"][fmt] +
+                       show_number(chi) + " " + textmarkers["open_comment"][fmt] +
                        labels[j] +
                        textmarkers["close_comment"][fmt] +
                        textmarkers["separator_symbol"][fmt] + "\n")
@@ -1181,7 +1234,7 @@ class ApplicationGUI:
 
     def curr_edit(self):
         page = self.nb.tab(self.nb.select())["text"]
-        print(page)
+        
         if page == "1. Define Model":
             return (self.modelcif)
         elif page == "2. Spin Configurations and Couplings":
@@ -1207,7 +1260,6 @@ class ApplicationGUI:
 
     def call_copy(self, *args):
         current_focus = self.root.focus_get()
-        print(current_focus.get(1.0, END))
         self.nb.event_generate('<Control-c>')
         pass
 
@@ -1240,7 +1292,6 @@ class ApplicationGUI:
         self.root.destroy()
 
     def show_help(self, *args):
-        print("calling documentation")
         #docpath = os.path.dirname(os.path.realpath(sys.argv[0])) +
         #                "/doc/tutorial.html"
         docpath = spectrojotometer.__path__[0] +  "/doc/tutorial.html"

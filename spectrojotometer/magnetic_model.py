@@ -334,7 +334,8 @@ class MagneticModel:
         # coupling constants should be evaluated from the reduced set of 
         # equations.
         rcoeffs = coeffs[:,0:-1]
-        singularvalues = np.linalg.svd(rcoeffs)[1]
+        singularvalues = np.linalg.svd(rcoeffs,compute_uv=False)
+        print(singularvalues)
         cond_number = 1./min(singularvalues)
         if printeqs:
             eprint("\nInverse of the minimum singular value: ", cond_number,"\n\n")
@@ -342,20 +343,19 @@ class MagneticModel:
         # If Montecarlo, uses the montecarlo routine to estimate the box.
         if montecarlo:
             return self.montecarlo_box(coeffs, energs, err_energs,mcsteps,mcsizefactor)
-
-        # Otherwise, it gives an estimation in terms of the bigger ellipse.
-        
-        # js = (A^t A )^{-1} A^t En, i.e. least squares solution
-        resolvent =  np.linalg.inv(coeffs.transpose().dot(coeffs)).dot(coeffs.transpose())
-        js = resolvent.dot(energs)
-        model_chi = (coeffs.dot(js)-energs)/err_energs
-        rr = (len(model_chi) - sum(model_chi**2))
-        if rr <0:
-            deltaJ = [-1 for i in js]
         else:
-            rr = np.sqrt(rr) * err_energs
-            deltaJ = box_ellipse(coeffs, rr)
-        return (js, deltaJ, model_chi,1.)
+            # Otherwise, it gives an estimation in terms of the bigger ellipse.        
+            # js = (A^t A )^{-1} A^t En, i.e. least squares solution
+            resolvent =  np.linalg.pinv(coeffs.transpose().dot(coeffs),rcond=1.e-6).dot(coeffs.transpose())
+            js = resolvent.dot(energs)
+            model_chi = (coeffs.dot(js)-energs)/err_energs
+            rr = (len(model_chi) - sum(model_chi**2))
+            if rr <0:
+                deltaJ = [-1 for i in js]
+            else:
+                rr = np.sqrt(rr) * err_energs
+                deltaJ = box_ellipse(coeffs, rr)
+            return (js, deltaJ, model_chi,1.)
 
     def montecarlo_box(self, coeffs, energs, tol, numtry=1000,sizefactor=1.):
         numcalc = len(energs)
@@ -408,7 +408,42 @@ class MagneticModel:
         size = self.cell_size
         for c in np.random.random_integers(0,2**((size-1)),t):
             yield [c >> i & 1 for i in range(size-1,-1,-1)]
-    
+
+
+    def bound_inequations(self, confs, energs, err_energs=.01):
+        print("confs: ",confs)
+        print("energs: ",energs)
+        print("err: ", err_energs)
+        coeffs = self.coefficient_matrix(confs,normalizar=True)
+        u, singularvalues, vh = np.linalg.svd(coeffs)
+        s0 = singularvalues[0]
+        resolvent = []
+        vhr = []
+        for i in range(len(singularvalues)):
+            si = singularvalues[i] 
+            if si/s0 < 1e-6:
+                break
+            resolvent.append(u[:,i]/si)            
+            vhr.append(vh[i])
+        vh = np.array(vhr)
+        vhr = None
+        j0s = np.array(vh).transpose().dot(np.array(resolvent).dot(energs))
+        err = np.sqrt(len(energs) * err_energs**2 - np.linalg.norm(energs-coeffs.dot(j0s))**2)
+        if np.isnan(err):
+            return []
+        
+        ineqs = []
+        for i, v in enumerate(vh):
+            if abs(v[-1] - 1)< 1.e-9:
+                continue
+            offset = v.dot(j0s)
+            delta = err/singularvalues[i]
+            v = v[:-1]
+            maxcoeff = max(abs(v))
+            ineq = (v/maxcoeff, offset/maxcoeff, delta/maxcoeff)
+            ineqs.append(ineq)
+        return ineqs
+        
     
     def find_optimal_configurations(self, start=None, num_new_confs=None, known=None, its=100, update_size=1):        
         if known is None:

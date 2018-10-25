@@ -476,9 +476,12 @@ class ApplicationGUI:
         filemenu = Menu(self.menu)
         self.menu.add_cascade(label="File", menu=filemenu)
         filemenu.add_command(label="Open model file...",
+                             command=self.open_model)
+        filemenu.add_command(label="Import model file...",
                              command=self.import_model)
         filemenu.add_command(label="Open config file...",
                              command=self.import_configs)
+        filemenu.add_separator()
         filemenu.add_command(label="Save model as ...",
                              command=self.save_model)
         filemenu.add_command(label="Save configurations as ...",
@@ -818,6 +821,23 @@ class ApplicationGUI:
     def print_status(self, msg):
         print(msg)
 
+
+    def open_model(self, *args):
+        filename = filedialog.askopenfilename(initialdir=self.datafolder + "/",
+                                              title="Select file",
+                                              filetypes=(("cif files", "*.cif"),
+                                                         ("Wien2k struct files", "*.struct"),
+                                                         ("all files", "*.*")))
+        if filename == "":
+            return
+        self.model = magnetic_model_from_file(filename=filename)
+        self.model.save_cif(self.tmpmodel.name)
+        with open(filename, "r") as tmpf:
+            modeltxt = tmpf.read()
+            self.modelcif.delete("1.0", END)
+            self.modelcif.insert(INSERT, modeltxt)
+
+        
     def import_model(self, *args):
         filename = filedialog.askopenfilename(initialdir=self.datafolder + "/",
                                               title="Select file",
@@ -848,23 +868,19 @@ class ApplicationGUI:
                                                          ("all files", "*.*")))
         if len(filename) == 0:
             return
-        self.configurations = read_spin_configurations_file(filename=filename,
-                                                            model=self.model)
-        confs = self.configurations[1]
-        energies = self.configurations[0]
-        labels = self.configurations[2]
+
         if clean:
             self.spinconfigs.delete(1.0, END)
-        with open(self.tmpconfig.name, "w") as of:
-            for idx, nc in enumerate(confs):
-                row = (str(energies[idx]) + "\t" + str(nc) +
-                       "\t\t # " + labels[idx] + "\n")
-                of.write(row)
-                self.spinconfigs.insert(INSERT, row)
 
+        with open(filename, "r") as tmpf:
+            configstxt = tmpf.read()
+            self.spinconfigs.delete("1.0", END)
+            self.spinconfigs.insert(INSERT, configstxt)
+
+        self.reload_configs(src_widget=self.spinconfigs)
         self.statusbar.config(text="config loaded")
         self.nb.select(1)
-        self.reload_configs(src_widget=self.spinconfigs)
+
 
         
     def save_model(self):

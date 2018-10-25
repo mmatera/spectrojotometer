@@ -1,5 +1,60 @@
 
 from .magnetic_model import *
+import numpy as np
+
+def parse_symmetry(strsymm):
+    strsymm = strsymm.strip()
+    strsymm.split(",")
+    rows = strsymm.strip().split(sep=",")
+    trows = []
+    offset = []
+    for row in rows:
+        row = row.strip()
+        terms = row.split(sep="-")
+        for i, term in enumerate(terms):
+            terms[i] = "-" + term
+        if terms[0] == "-":
+            terms = terms[1:]
+        else:
+            terms[0] = terms[0][1:]
+        terms = sum([term.split(sep="+") for term in terms],[])
+        terms = [ term.strip() for term in terms]
+        trow = [0,0,0,0]
+        for term in terms:
+            if term[-1] == 'x':
+                trow[0] = term[:-1]
+            elif term[-1] == 'y':
+                trow[1] = term[:-1]
+            elif term[-1] == 'z':
+                trow[2] = term[:-1]
+            else:
+                trow[3] = term
+        for i in range(4):
+            if trow[i] == 0:
+                continue
+            if trow[i] == "":
+                trow[i] = 1
+                continue
+            if trow[i] == "-":
+                trow[i] = -1
+                continue
+            factors = trow[i].split(sep="/")
+            if len(factors) == 1:
+                trow[i] = float(factors[0].strip())
+            else:
+                trow[i] = float(factors[0].strip())/float(factors[1].strip())
+        trows.append(trow)
+    w = np.array(trows)
+    offset = w[:,-1]
+    w = w[:,:-1]
+    return w,offset
+
+
+
+
+
+
+
 
    
 def magnetic_model_from_file(filename, magnetic_atoms=["Mn","Fe","Co","Ni","Dy","Tb","Eu","Cu"], bond_names=None):
@@ -21,6 +76,7 @@ def magnetic_model_from_cif(filename, magnetic_atoms=["Mn","Fe","Co","Ni","Dy","
     bond_labels = None
     bondlists = None
     bond_distances = []
+    symmetries = []
     with open(filename,"r") as src:    
         for line in src:
             listrip = line.strip()
@@ -41,7 +97,7 @@ def magnetic_model_from_cif(filename, magnetic_atoms=["Mn","Fe","Co","Ni","Dy","
                 listrip = l.strip()                 
                 if listrip == '':                    
                     break
-                if listrip!="" and line[0] == "#":                    
+                if listrip != "" and line[0] == "#":                    
                     continue
                 while listrip[0] == '_' or listrip[0] == '#':
                     if listrip != "" and line[0] == "#":                        
@@ -50,9 +106,26 @@ def magnetic_model_from_cif(filename, magnetic_atoms=["Mn","Fe","Co","Ni","Dy","
                     line=src.readline()
                     listrip = line.strip()                              
                 while listrip != '':
-                    entries.append(listrip.split())
+                    newentry =  listrip.strip()
+                    if newentry[0] in ("\"", "'"):
+                        newentry = [newentry[1:-1]]
+                    else:
+                        newentry = newentry.split()
+                    entries.append(newentry)
                     l = src.readline()
-                    listrip = l.strip()                  
+                    listrip = l.strip()
+                # if the block contains symmetries
+                if '_symmetry_equiv_pos_as_xyz' in labels or \
+                   '_space_group_symop_operation_xyz' in labels:
+                    for i,l in enumerate(labels):
+                        if l == "_symmetry_equiv_pos_as_xyz":
+                            symmdefcol = i
+                        if l == "_space_group_symop_operation_xyz":
+                            symmdefcol = i
+                    for i,entry in enumerate(entries):
+                        symmetries.append(parse_symmetry(entry[symmdefcol]))
+                    
+                            
                 # if the block contains the set of atoms                                       
                 if '_atom_site_fract_x' in labels:
                     print("atom positions found")
@@ -69,9 +142,6 @@ def magnetic_model_from_cif(filename, magnetic_atoms=["Mn","Fe","Co","Ni","Dy","
                             tcol = i
                         elif l == "_atom_site_label":
                             labelcol = i
-                    print("entries")
-                    print(entries)
-                    print(tcol, magnetic_atoms)
                     idxma = 0
                     for i,entry in enumerate(entries):
                         if entry[tcol] in magnetic_atoms:
@@ -85,6 +155,30 @@ def magnetic_model_from_cif(filename, magnetic_atoms=["Mn","Fe","Co","Ni","Dy","
                             atomlabels[entry[labelcol]] = idxma
                             idxma = idxma + 1
 
+                    if len(symmetries)>1:
+                        magnetic_positions2 = []
+                        magnetic_species2 = []
+                        for s, sym in enumerate(symmetries):
+                            for i, r in enumerate(magnetic_positions):
+                                newposition = sym[0].dot(r)+sym[1]
+                                already_in_list = False
+                                for pos in magnetic_positions2:
+                                    if np.linalg.norm( (newposition-pos + np.array([.5,.5,.5]) ) % 1 -np.array([.5,.5,.5]))< 1.e-3:
+                                        already_in_list = True
+                                        break
+                                if already_in_list:
+                                    continue
+                                magnetic_positions2.append(newposition)
+                                magnetic_species2.append(magnetic_species[i])
+                                atomlabel = [key for key,val in atomlabels.items() if val==i][0]
+                                if s>0:
+                                    atomlabel +=  "_" + str(s)
+                                    atomlabels[atomlabel] = idxma
+                                    idxma = idxma + 1
+                        magnetic_positions = magnetic_positions2
+                        magnetic_species = magnetic_species2
+                            
+
                 # If the block contains the set of bonds
                 if '_geom_bond_atom_site_label_1' in labels:
                     print("atomlabels",atomlabels)
@@ -92,6 +186,8 @@ def magnetic_model_from_cif(filename, magnetic_atoms=["Mn","Fe","Co","Ni","Dy","
                     bondlists = []
                     bond_distances = []
                     bond_labels = {}
+                    sym1col = -1
+                    sym2col = -1
                     for i,l in enumerate(labels):                    
                         if l == "_geom_bond_atom_site_label_1":
                             at1col = i
@@ -101,9 +197,25 @@ def magnetic_model_from_cif(filename, magnetic_atoms=["Mn","Fe","Co","Ni","Dy","
                             distcol = i
                         if l == "_geom_bond_label":
                             jlabelcol = i
+                        if l == "_geom_bond_site_symmetry_1":
+                            sym1col = i
+                        if l == "_geom_bond_site_symmetry_2":
+                            sym2col = i
+                        
                     if jlabelcol is None:
                         for en in entries:
-                            if not( en[at1col] in atomlabels and en[at2col] in atomlabels):
+                            label1 = en[at1col]
+                            label2 = en[at2col]
+                            if sym1col != -1:
+                                symop = (en[sym1col].split("_"))[0].strip()
+                                if symop != ".":
+                                    label1 = label1 + "_" + symop
+                            if sym2col != -1:
+                                symop = (en[sym2col].split("_"))[0].strip()
+                                if symop != ".":
+                                    label2 = label2 + "_" + symop
+                            print("    labels: ",label1," <-> ",label2 )
+                            if not( label1 in atomlabels and label2 in atomlabels):
                                 continue
                             newbond = (atomlabels[en[at1col]],
                                        atomlabels[en[at2col]])
@@ -160,9 +272,11 @@ def magnetic_model_from_cif(filename, magnetic_atoms=["Mn","Fe","Co","Ni","Dy","
             bravais_vectors.append(np.array([x,y,z]))
 
     print("Bravais vectors:")
-    print(bravais_vectors)
-    print("Magnetic Positions")
-    print(magnetic_positions)
+    print("    ", bravais_vectors)
+    print("  Magnetic Positions")
+    print("    ",magnetic_positions)
+
+    
     
     magnetic_positions = np.array(magnetic_positions).dot(\
                                                     np.array(bravais_vectors))

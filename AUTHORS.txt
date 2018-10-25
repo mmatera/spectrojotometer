@@ -1,17 +1,18 @@
 
 
-This package was developed and mantained by
+The Spectrojotometer library was originally created by:
 
-- Juan Mauricio Matera  @mmatera
+- Mauricio Matera @mmatera
 
-The development of this toolkit was supported by
-CONICET Argentina.
+The visualbond graphic interface was originally created by:
+
+- Carlos Lamas
+- Mauricio Matera @mmatera
 
 
-Thanks the authors of all projects used in cif2couplings
+Thanks to the authors of all projects that are used in Mathics:
 
-- Python
-- MatPlotlib
-- Numpy
-
-Juan Mauricio Matera 
+- numpy
+- scipy
+- matplotlib
+- tkinter

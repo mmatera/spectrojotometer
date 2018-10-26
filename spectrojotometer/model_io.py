@@ -2,6 +2,51 @@
 from .magnetic_model import *
 import numpy as np
 
+
+def pack_offset(r):
+    r = np.array(r,dtype=int)
+    if any(r>4) or any (r<-5):
+        print("offset too big!")
+        raise Exception("overflow")
+    if all( r == 0):
+        return "."
+    r = r + 5
+    res = "1_" + str(r[0]) + str(r[1]) + str(r[2])
+    return res  
+
+
+def unpack_offset(r):
+    if r == ".":
+        return np.array([0,0,0])
+    r = r.split("_")
+    if len(r) == 1:
+        return np.array([0,0,0])
+    r = r[1]
+    r = np.array([int(c) - 5 for c in r], dtype=int)
+    return r
+
+def unpack_symmetry_and_offset(r):
+    if r == ".":
+        return 0, np.array([0,0,0])
+    r = r.split("_")
+    if len(r) == 1:
+        return int(r[0]) - 1, np.array([0,0,0])
+    r = r[1]
+    return int(r[0]) - 1, np.array([int(c) - 5 for c in r],dtype=int)
+
+
+
+def find_atom_offset_by_symmetry(p, symop, magnetic_positions):
+    sp = symop[0].dot(p) + symop[1]
+    j = sorted([(k, np.linalg.norm((q-sp + .5) % 1 - .5 ))
+                for k, q in enumerate(magnetic_positions)],
+                       key=lambda u:u[1])[0][0]
+    offset = np.array(sp - magnetic_positions[j],dtype=int)
+    return j, offset
+            
+    
+
+
 def parse_symmetry(strsymm):
     strsymm = strsymm.strip()
     strsymm.split(",")
@@ -66,6 +111,228 @@ def magnetic_model_from_file(filename, magnetic_atoms=["Mn","Fe","Co","Ni","Dy",
     eprint("unknown file format")
     return -1
 
+
+
+
+
+
+
+def cif_read_loop_symmetries(labels, entries):
+    symmetries = []
+    for i,l in enumerate(labels):
+        if l == "_symmetry_equiv_pos_as_xyz":
+            symmdefcol = i
+        if l == "_space_group_symop_operation_xyz":
+            symmdefcol = i
+        for i, entry in enumerate(entries):
+            symmetries.append(parse_symmetry(entry[symmdefcol]))
+    return symmetries
+    
+def cif_read_loop_atoms(labels, entries, magnetic_atoms):
+    print("atom positions found")
+    magnetic_positions = []
+    magnetic_species = []
+    atomlabels = {}
+    for i,l in enumerate(labels):
+        if l == "_atom_site_fract_x":
+            xcol = i
+        elif l == "_atom_site_fract_y":
+            ycol = i
+        elif l == "_atom_site_fract_z":
+            zcol = i
+        elif l == "_atom_site_type_symbol":
+            tcol = i
+        elif l == "_atom_site_label":
+            labelcol = i
+    idxma = 0
+    for i, entry in enumerate(entries):
+        if entry[tcol] in magnetic_atoms:
+            for cc in (xcol,ycol,zcol):
+                entry[cc] = float(entry[cc].split("(", maxsplit=1)[0])
+                
+            magnetic_positions.append(np.array([entry[xcol],\
+                                                entry[ycol],\
+                                                entry[zcol]]))
+            magnetic_species.append(entry[tcol])
+            atomlabels[entry[labelcol]] = idxma
+            idxma = idxma + 1
+    return atomlabels, magnetic_species, magnetic_positions
+
+
+
+
+def cif_read_loop_bonds(labels, entries, atomlabels):
+    print("Reading bonds from cif")
+    print("atomlabels")
+    jlabelcol = None
+    bondlists = []
+    bond_distances = []
+    bond_labels = {}
+    sym1col = -1
+    sym2col = -1
+    for i, l in enumerate(labels):                    
+        if l == "_geom_bond_atom_site_label_1":
+            at1col = i
+        if l == "_geom_bond_atom_site_label_2":
+            at2col = i
+        if l == "_geom_bond_distance":
+            distcol = i
+        if l == "_geom_bond_label":
+            jlabelcol = i
+        if l == "_geom_bond_site_symmetry_1":
+            sym1col = i
+        if l == "_geom_bond_site_symmetry_2":
+            sym2col = i
+        
+    if jlabelcol is None:
+        for en in entries:
+            label1 = en[at1col]
+            label2 = en[at2col]
+            outbond1 = np.array([0,0,0])
+            outbond2 = np.array([0,0,0])
+            if sym1col != -1:
+                print("          ",en[sym1col])
+                sym,  outbond1 = unpack_symmetry_and_offset(en[sym1col])
+                if sym != 0:
+                    label1 = label1 + "_" + str(sym)
+            if sym2col != -1:
+                print("          ",en[sym2col])
+                sym,  outbond2 = unpack_symmetry_and_offset(en[sym2col])
+                if sym != 0:
+                    label2 = label2 + "_" + str(sym)
+            outbond = pack_offset(np.array(outbond2) - np.array(outbond1))
+            print("    trying to add the bond: ",label1," <-> ",label2, outbond)
+            if not( label1 in atomlabels and label2 in atomlabels):
+                continue
+            newbond = (atomlabels[label1], atomlabels[label2], outbond)
+            en[distcol] = en[distcol].split(sep="(", maxsplit=1)[0]
+            if en[distcol] not in bond_distances:
+                bond_distances.append(en[distcol])
+                bondlabel = "J" + str(len(bond_distances))
+                bond_labels[bondlabel] = len(bond_labels)
+                bondlists.append([])
+            bs = bond_distances.index(en[distcol])
+            bondlists[bs].append(newbond)
+    else:
+        for en in entries:
+            label1 = en[at1col]
+            label2 = en[at2col]
+            if sym1col != -1:
+                sym,  outbond1 = unpack_symmetry_and_offset(en[sym1col])
+                if sym != 1:
+                    label1 = label1 + "_" + str(sym)
+            if sym2col != -1:
+                sym,  outbond2 = unpack_symmetry_and_offset(en[sym2col])
+                if sym != 1:
+                    label2 = label2 + "_" + str(sym)
+            outbond = pack_offset(np.array(outbond2) - np.array(outbond1))
+            print("    labels: ",label1," <-> ",label2, outbond)
+            if not( label1 in atomlabels and label2 in atomlabels):
+                continue
+            else:
+                print("                -> OK")
+            newbond = (atomlabels[label1], atomlabels[label2], outbond)
+            bondlabel = en[jlabelcol]
+            if bond_labels.get(bondlabel) is None:
+                bond_labels[bondlabel] = len(bondlists)
+                bond_distances.append(en[distcol])
+                bondlists.append([])
+            bondlists[bond_labels[bondlabel]].append(newbond)
+    bond_labels = sorted([(bond_labels[la],la) for la in bond_labels],key=lambda x:x[0])
+    bond_labels = [x[1] for x in bond_labels]
+    return bond_labels, bond_distances, bondlists
+
+
+
+
+
+
+def generate_atoms_by_symmetries(symmetries, atomlabels, magnetic_species, magnetic_positions):
+    if len(symmetries)>1:
+        magnetic_positions2 = []
+        magnetic_species2 = []
+        idxma = len(atomlabels)
+        for s, sym in enumerate(symmetries):
+            for i, r in enumerate(magnetic_positions):
+                newposition = sym[0].dot(r)+sym[1]
+                already_in_list = False
+                for pos in magnetic_positions2:
+                    if np.linalg.norm( (newposition-pos + .5 ) % 1 -.5)< 1.e-3:
+                        already_in_list = True
+                        break
+                if already_in_list:
+                    continue
+                magnetic_positions2.append(newposition)
+                magnetic_species2.append(magnetic_species[i])
+                atomlabel = [key for key,val in atomlabels.items() if val==i][0]
+                if s>0:
+                    atomlabel +=  "_" + str(s+1)
+                    atomlabels[atomlabel] = idxma
+                    idxma = idxma + 1
+        magnetic_positions = magnetic_positions2
+        magnetic_species = magnetic_species2
+    return atomlabels, magnetic_species, magnetic_positions
+
+
+def read_bravais_vectors(bravais_params):
+    bravais_vectors = []
+    if bravais_params.get('a') is not None:
+        bravais_vectors.append(np.array([bravais_params.get('a'),0,0]))
+    
+    if bravais_params.get('b') is not None:
+        gamma = bravais_params.get('gamma')
+        if gamma is None:
+            gamma = 3.1415926*.5
+        bravais_vectors.append(np.array([bravais_params.get('b')*np.cos(gamma),
+                                    bravais_params.get('b')*np.sin(gamma),0]))
+            
+    if bravais_params.get('c') is not None:
+        alpha = bravais_params.get('alpha')
+        beta = bravais_params.get('beta')
+        if alpha is None:
+            alpha = 3.1415926*.5
+        if beta is None:
+            beta = 3.1415926*.5
+        x = np.cos(alpha)
+        y = np.cos(beta) - x * np.cos(gamma)
+        y = y/np.sin(gamma)
+        z = bravais_params.get('c') * np.sqrt(1-x*x-y*y)
+        x = bravais_params.get('c') * x
+        y = bravais_params.get('c') * y                           
+        bravais_vectors.append(np.array([x,y,z]))
+    return bravais_vectors
+
+
+
+def generate_bonds_by_symmetries(symmetries, bond_labels, bonddistances, bondlists, magnetic_positions):
+    for s in range(len(symmetries)-1):
+        symop = symmetries[s+1]
+        for bidx, blst in enumerate(bondlists):
+            print("     blst initial bonds: ", blst, bidx)
+            for bnd in blst:
+                i, j,  offset = bnd
+                offset = unpack_offset(offset)
+                i, offseti = find_atom_offset_by_symmetry(magnetic_positions[i], symop, magnetic_positions)
+                j, offsetj = find_atom_offset_by_symmetry(magnetic_positions[j]+ offset, symop, magnetic_positions)
+                if any(offseti !=0):
+                    # The source must be inside the cell
+                    i, offseti, j, offsetj = j, offsetj, i, offseti
+                if any(offseti !=0):
+                    # both atoms are outside the cell
+                    continue
+                offset = offsetj - offseti
+                if any(offset<-5) or any(offset>4):
+                    print("the bond is too long. offset= ", offset) 
+                    continue
+                offset = pack_offset(offset)
+                newbond = (i, j, offset)
+                if not (newbond in blst):
+                    print("adding ", newbond)
+                    blst.append(newbond)
+            print("     blst updated bonds:",blst)
+            
+    
+
 def magnetic_model_from_cif(filename, magnetic_atoms=["Mn","Fe","Co","Ni","Dy","Tb","Eu","Cu"],bond_names=None):    
     bravais_params = {}
     magnetic_positions = None
@@ -82,14 +349,12 @@ def magnetic_model_from_cif(filename, magnetic_atoms=["Mn","Fe","Co","Ni","Dy","
             listrip = line.strip()
             if listrip[:13] =='_cell_length_':                                
                 varvals = listrip[13:].split()
-                if "(" in varvals[1]:
-                    varvals[1] = varvals[1][:varvals[1].find("(")]
+                varvals[1] = varvals[1].split(sep="(", maxsplit=1)[0]
                 bravais_params[varvals[0]] = float(varvals[1])
             elif listrip[:12] =='_cell_angle_':                
                 varvals = line[12:].strip().split()
-                if "(" in varvals[1]:
-                    varvals[1] = varvals[1][:varvals[1].find("(")]
-                bravais_params[varvals[0]] = float(varvals[1])*3.1415926/180.
+                varvals[1] = varvals[1].split(sep="(", maxsplit=1)[0]
+                bravais_params[varvals[0]] = float(varvals[1]) * 3.1415926/180.
             elif listrip[:5]=='loop_':                
                 labels = []
                 entries = []
@@ -114,170 +379,27 @@ def magnetic_model_from_cif(filename, magnetic_atoms=["Mn","Fe","Co","Ni","Dy","
                     entries.append(newentry)
                     l = src.readline()
                     listrip = l.strip()
+                    
                 # if the block contains symmetries
                 if '_symmetry_equiv_pos_as_xyz' in labels or \
                    '_space_group_symop_operation_xyz' in labels:
-                    for i,l in enumerate(labels):
-                        if l == "_symmetry_equiv_pos_as_xyz":
-                            symmdefcol = i
-                        if l == "_space_group_symop_operation_xyz":
-                            symmdefcol = i
-                    for i,entry in enumerate(entries):
-                        symmetries.append(parse_symmetry(entry[symmdefcol]))
-                    
+                    symmetries = cif_read_loop_symmetries(labels, entries)
                             
                 # if the block contains the set of atoms                                       
                 if '_atom_site_fract_x' in labels:
-                    print("atom positions found")
-                    magnetic_positions = []
-                    atomlabels = {}
-                    for i,l in enumerate(labels):
-                        if l == "_atom_site_fract_x":
-                            xcol = i
-                        elif l == "_atom_site_fract_y":
-                            ycol = i
-                        elif l == "_atom_site_fract_z":
-                            zcol = i
-                        elif l == "_atom_site_type_symbol":
-                            tcol = i
-                        elif l == "_atom_site_label":
-                            labelcol = i
-                    idxma = 0
-                    for i,entry in enumerate(entries):
-                        if entry[tcol] in magnetic_atoms:
-                            for cc in (xcol,ycol,zcol):
-                                if "(" in entry[cc]:
-                                    entry[cc] = entry[cc][:entry[cc].find("(")]
-                            magnetic_positions.append(np.array([float(entry[xcol]),\
-                                                                float(entry[ycol]),\
-                                                                float(entry[zcol])]))
-                            magnetic_species.append(entry[tcol])
-                            atomlabels[entry[labelcol]] = idxma
-                            idxma = idxma + 1
-
-                    if len(symmetries)>1:
-                        magnetic_positions2 = []
-                        magnetic_species2 = []
-                        for s, sym in enumerate(symmetries):
-                            for i, r in enumerate(magnetic_positions):
-                                newposition = sym[0].dot(r)+sym[1]
-                                already_in_list = False
-                                for pos in magnetic_positions2:
-                                    if np.linalg.norm( (newposition-pos + np.array([.5,.5,.5]) ) % 1 -np.array([.5,.5,.5]))< 1.e-3:
-                                        already_in_list = True
-                                        break
-                                if already_in_list:
-                                    continue
-                                magnetic_positions2.append(newposition)
-                                magnetic_species2.append(magnetic_species[i])
-                                atomlabel = [key for key,val in atomlabels.items() if val==i][0]
-                                if s>0:
-                                    atomlabel +=  "_" + str(s)
-                                    atomlabels[atomlabel] = idxma
-                                    idxma = idxma + 1
-                        magnetic_positions = magnetic_positions2
-                        magnetic_species = magnetic_species2
+                    atomlabels, magnetic_species, magnetic_positions = cif_read_loop_atoms(labels, entries, magnetic_atoms)
+                    atomlabels, magnetic_species, magnetic_positions = \
+                                    generate_atoms_by_symmetries(symmetries, atomlabels, magnetic_species, magnetic_positions)
+                    print(atomlabels, magnetic_species, magnetic_positions)
                             
 
                 # If the block contains the set of bonds
                 if '_geom_bond_atom_site_label_1' in labels:
-                    print("atomlabels",atomlabels)
-                    jlabelcol = None
-                    bondlists = []
-                    bond_distances = []
-                    bond_labels = {}
-                    sym1col = -1
-                    sym2col = -1
-                    for i,l in enumerate(labels):                    
-                        if l == "_geom_bond_atom_site_label_1":
-                            at1col = i
-                        if l == "_geom_bond_atom_site_label_2":
-                            at2col = i
-                        if l == "_geom_bond_distance":
-                            distcol = i
-                        if l == "_geom_bond_label":
-                            jlabelcol = i
-                        if l == "_geom_bond_site_symmetry_1":
-                            sym1col = i
-                        if l == "_geom_bond_site_symmetry_2":
-                            sym2col = i
-                        
-                    if jlabelcol is None:
-                        for en in entries:
-                            label1 = en[at1col]
-                            label2 = en[at2col]
-                            if sym1col != -1:
-                                symop = (en[sym1col].split("_"))[0].strip()
-                                if symop != ".":
-                                    label1 = label1 + "_" + symop
-                            if sym2col != -1:
-                                symop = (en[sym2col].split("_"))[0].strip()
-                                if symop != ".":
-                                    label2 = label2 + "_" + symop
-                            print("    labels: ",label1," <-> ",label2 )
-                            if not( label1 in atomlabels and label2 in atomlabels):
-                                continue
-                            newbond = (atomlabels[en[at1col]],
-                                       atomlabels[en[at2col]])
-                            print("newbond:",newbond)
-                            if "(" in en[distcol]:
-                                en[distcol] = en[distcol][:en[distcol].find("(")]
-                            if en[distcol] not in bond_distances:
-                                bond_distances.append(en[distcol])
-                                bond_labels["J"+str(len(bond_distances))] = \
-                                        len(bond_labels)
-                                bondlists.append([])
-                            print(bond_distances,en[distcol])
-                            bs = bond_distances.index(en[distcol])
-                            print("bondlists",bondlists)
-                            bondlists[bs].append(newbond)
-                    else:
-                        for en in entries:
-                            newbond = (atomlabels[en[at1col]],
-                                       atomlabels[en[at2col]])
-                            if bond_labels.get(en[jlabelcol]) is None:
-                                bond_labels[en[jlabelcol]] = len(bondlists)
-                                bond_distances.append(en[distcol])
-                                bondlists.append([])
-                            bondlists[bond_labels[en[jlabelcol]]].append(newbond)
-                    bond_labels = sorted([(bond_labels[la],la) for la in bond_labels],key=lambda x:x[0])
-                    bond_labels = [x[1] for x in bond_labels]
-            # Build the Bravai's vectors
+                    bond_labels, bond_distances, bondlists = cif_read_loop_bonds(labels, entries, atomlabels)
+                    generate_bonds_by_symmetries(symmetries, bond_labels, bond_distances, bondlists, magnetic_positions)
+                    
 
-        bravais_vectors = []
-        
-        if bravais_params.get('a') is not None:
-            bravais_vectors.append(np.array([bravais_params.get('a'),0,0]))
-    
-        if bravais_params.get('b') is not None:
-            gamma = bravais_params.get('gamma')
-            if gamma is None:
-                gamma = 3.1415926*.5
-            bravais_vectors.append(np.array([bravais_params.get('b')*np.cos(gamma),
-                                        bravais_params.get('b')*np.sin(gamma),0]))
-                
-        if bravais_params.get('c') is not None:
-            alpha = bravais_params.get('alpha')
-            beta = bravais_params.get('beta')
-            if alpha is None:
-                alpha = 3.1415926*.5
-            if beta is None:
-                beta = 3.1415926*.5
-            x = np.cos(alpha)
-            y = np.cos(beta) - x * np.cos(gamma)
-            y = y/np.sin(gamma)
-            z = bravais_params.get('c') * np.sqrt(1-x*x-y*y)
-            x = bravais_params.get('c') * x
-            y = bravais_params.get('c') * y                           
-            bravais_vectors.append(np.array([x,y,z]))
-
-    print("Bravais vectors:")
-    print("    ", bravais_vectors)
-    print("  Magnetic Positions")
-    print("    ",magnetic_positions)
-
-    
-    
+    bravais_vectors = read_bravais_vectors(bravais_params)
     magnetic_positions = np.array(magnetic_positions).dot(\
                                                     np.array(bravais_vectors))
     print("magnetic species",magnetic_species)
@@ -285,7 +407,7 @@ def magnetic_model_from_cif(filename, magnetic_atoms=["Mn","Fe","Co","Ni","Dy","
     print("bondlabels",bond_labels)
     print("bondlists",bondlists)
     
-    model= MagneticModel(magnetic_positions, bravais_vectors, 
+    model = MagneticModel(magnetic_positions, bravais_vectors, 
                          bond_lists=bondlists,
                          bond_names=bond_labels, 
                          magnetic_species=magnetic_species )

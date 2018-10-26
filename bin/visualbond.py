@@ -474,7 +474,7 @@ class ApplicationGUI:
         self.menu = Menu(self.root)
         self.root.config(menu=self.menu)
         filemenu = Menu(self.menu)
-        self.menu.add_cascade(label="File", menu=filemenu)
+        self.menu.add_cascade(label="File", menu=filemenu,accelerator="<Control+A>")
         filemenu.add_command(label="Open model file...",
                              command=self.open_model)
         filemenu.add_command(label="Import model file...",
@@ -491,7 +491,7 @@ class ApplicationGUI:
                              accelerator="<Control+q>")
 
         editmenu = Menu(self.menu)
-        self.menu.add_cascade(label="Edit", menu=editmenu)
+        self.menu.add_cascade(label="Edit", menu=editmenu, accelerator="<Control+E>")
         editmenu.add_command(label="Undo", command=self.call_undo,
                              accelerator="<Control+Z>")
         editmenu.add_command(label="Redo", command=self.call_redo,
@@ -511,6 +511,9 @@ class ApplicationGUI:
                              accelerator="<Control+F>")
         editmenu.add_command(label="Replace", command=self.call_replace,
                              accelerator="<Control+R>")
+        editmenu.add_separator()
+        editmenu.add_command(label="Clean log", command=lambda ev: self.statusbar.delete("1.0",END) ,
+                             accelerator="<Control+B>")
 
         helpmenu = Menu(self.menu)
         self.menu.add_cascade(label="Help", menu=helpmenu)

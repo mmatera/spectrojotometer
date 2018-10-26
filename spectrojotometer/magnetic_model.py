@@ -594,13 +594,14 @@ _chemical_name_common                  """ + self.model_label + "\n"
                 fileout.write("_geom_bond_atom_site_label_1\n")
                 fileout.write("_geom_bond_atom_site_label_2\n")
                 fileout.write("_geom_bond_distance\n")
-                fileout.write("_geom_bond_label\n")                                                
+                fileout.write("_geom_bond_label\n")
+                fileout.write("_geom_bond_site_symmetry_2\n")                                                
                 for k,bl in enumerate(self.bond_names):
-                    for a,b in self.bond_lists[k]:
+                    for a,b,c in self.bond_lists[k]:
                         fileout.write(self.magnetic_species[a]+str(a+1) +"\t" +\
                                       self.magnetic_species[b]+str(b+1) +"\t" +\
                                       str(self.bond_distances[k]) +"\t" +\
-                                      str(bl) +"\n")
+                                      str(bl) + "\t" + c +"\n")
                 fileout.write("   \n")
         return True
             

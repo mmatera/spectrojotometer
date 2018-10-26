@@ -46,6 +46,19 @@ def find_atom_offset_by_symmetry(p, symop, magnetic_positions):
             
     
 
+def normalize_bond(i, j, offset):
+    if i > j :
+        i, j = j, i
+        offset = -offset
+    elif i == j:
+        if offset[2] < 0:
+            offset = -offset
+        elif offset[2] == 0:
+            if offset[1] < 0:
+                offset = - offset
+            elif offset[1] == 0 and offset[0]< 0:
+                offset = - offset
+    return i, j, pack_offset(offset)
 
 def parse_symmetry(strsymm):
     strsymm = strsymm.strip()
@@ -183,29 +196,28 @@ def cif_read_loop_bonds(labels, entries, atomlabels):
             sym1col = i
         if l == "_geom_bond_site_symmetry_2":
             sym2col = i
-        
-    if jlabelcol is None:
-        for en in entries:
-            label1 = en[at1col]
-            label2 = en[at2col]
-            outbond1 = np.array([0,0,0])
-            outbond2 = np.array([0,0,0])
-            if sym1col != -1:
-                print("          ",en[sym1col])
-                sym,  outbond1 = unpack_symmetry_and_offset(en[sym1col])
-                if sym != 0:
-                    label1 = label1 + "_" + str(sym)
-            if sym2col != -1:
-                print("          ",en[sym2col])
-                sym,  outbond2 = unpack_symmetry_and_offset(en[sym2col])
-                if sym != 0:
-                    label2 = label2 + "_" + str(sym)
-            outbond = pack_offset(np.array(outbond2) - np.array(outbond1))
-            print("    trying to add the bond: ",label1," <-> ",label2, outbond)
-            if not( label1 in atomlabels and label2 in atomlabels):
-                continue
-            newbond = (atomlabels[label1], atomlabels[label2], outbond)
-            en[distcol] = en[distcol].split(sep="(", maxsplit=1)[0]
+
+
+
+    for en in entries:
+        label1 = en[at1col]
+        label2 = en[at2col]
+        outbond1 = np.array([0,0,0])
+        outbond2 = np.array([0,0,0])
+        if sym1col != -1:
+            sym,  outbond1 = unpack_symmetry_and_offset(en[sym1col])
+            if sym != 0:
+                label1 = label1 + "_" + str(sym)
+        if sym2col != -1:
+            sym,  outbond2 = unpack_symmetry_and_offset(en[sym2col])
+            if sym != 0:
+                label2 = label2 + "_" + str(sym)
+        if not( label1 in atomlabels and label2 in atomlabels):
+            continue
+        outbond = np.array(outbond2) - np.array(outbond1)
+        newbond = normalize_bond(atomlabels[label1], atomlabels[label2], outbond)
+        en[distcol] = en[distcol].split(sep="(", maxsplit=1)[0]
+        if jlabelcol is None:
             if en[distcol] not in bond_distances:
                 bond_distances.append(en[distcol])
                 bondlabel = "J" + str(len(bond_distances))
@@ -213,25 +225,7 @@ def cif_read_loop_bonds(labels, entries, atomlabels):
                 bondlists.append([])
             bs = bond_distances.index(en[distcol])
             bondlists[bs].append(newbond)
-    else:
-        for en in entries:
-            label1 = en[at1col]
-            label2 = en[at2col]
-            if sym1col != -1:
-                sym,  outbond1 = unpack_symmetry_and_offset(en[sym1col])
-                if sym != 1:
-                    label1 = label1 + "_" + str(sym)
-            if sym2col != -1:
-                sym,  outbond2 = unpack_symmetry_and_offset(en[sym2col])
-                if sym != 1:
-                    label2 = label2 + "_" + str(sym)
-            outbond = pack_offset(np.array(outbond2) - np.array(outbond1))
-            print("    labels: ",label1," <-> ",label2, outbond)
-            if not( label1 in atomlabels and label2 in atomlabels):
-                continue
-            else:
-                print("                -> OK")
-            newbond = (atomlabels[label1], atomlabels[label2], outbond)
+        else:
             bondlabel = en[jlabelcol]
             if bond_labels.get(bondlabel) is None:
                 bond_labels[bondlabel] = len(bondlists)
@@ -308,7 +302,6 @@ def generate_bonds_by_symmetries(symmetries, bond_labels, bonddistances, bondlis
     for s in range(len(symmetries)-1):
         symop = symmetries[s+1]
         for bidx, blst in enumerate(bondlists):
-            print("     blst initial bonds: ", blst, bidx)
             for bnd in blst:
                 i, j,  offset = bnd
                 offset = unpack_offset(offset)
@@ -324,12 +317,11 @@ def generate_bonds_by_symmetries(symmetries, bond_labels, bonddistances, bondlis
                 if any(offset<-5) or any(offset>4):
                     print("the bond is too long. offset= ", offset) 
                     continue
-                offset = pack_offset(offset)
-                newbond = (i, j, offset)
+
+                newbond = normalize_bond(i, j, offset)             
                 if not (newbond in blst):
-                    print("adding ", newbond)
                     blst.append(newbond)
-            print("     blst updated bonds:",blst)
+            
             
     
 
@@ -390,7 +382,6 @@ def magnetic_model_from_cif(filename, magnetic_atoms=["Mn","Fe","Co","Ni","Dy","
                     atomlabels, magnetic_species, magnetic_positions = cif_read_loop_atoms(labels, entries, magnetic_atoms)
                     atomlabels, magnetic_species, magnetic_positions = \
                                     generate_atoms_by_symmetries(symmetries, atomlabels, magnetic_species, magnetic_positions)
-                    print(atomlabels, magnetic_species, magnetic_positions)
                             
 
                 # If the block contains the set of bonds

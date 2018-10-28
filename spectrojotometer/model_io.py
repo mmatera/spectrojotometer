@@ -31,8 +31,7 @@ def unpack_symmetry_and_offset(r):
     r = r.split("_")
     if len(r) == 1:
         return int(r[0]) - 1, np.array([0,0,0])
-    r = r[1]
-    return int(r[0]) - 1, np.array([int(c) - 5 for c in r],dtype=int)
+    return int(r[0]) - 1, np.array([int(c) - 5 for c in r[1]],dtype=int)
 
 
 
@@ -197,8 +196,6 @@ def cif_read_loop_bonds(labels, entries, atomlabels):
         if l == "_geom_bond_site_symmetry_2":
             sym2col = i
 
-
-
     for en in entries:
         label1 = en[at1col]
         label2 = en[at2col]
@@ -306,7 +303,7 @@ def generate_bonds_by_symmetries(symmetries, bond_labels, bonddistances, bondlis
                 i, j,  offset = bnd
                 offset = unpack_offset(offset)
                 i, offseti = find_atom_offset_by_symmetry(magnetic_positions[i], symop, magnetic_positions)
-                j, offsetj = find_atom_offset_by_symmetry(magnetic_positions[j]+ offset, symop, magnetic_positions)
+                j, offsetj = find_atom_offset_by_symmetry(magnetic_positions[j] + offset, symop, magnetic_positions)
                 if any(offseti !=0):
                     # The source must be inside the cell
                     i, offseti, j, offsetj = j, offsetj, i, offseti
@@ -325,7 +322,7 @@ def generate_bonds_by_symmetries(symmetries, bond_labels, bonddistances, bondlis
             
     
 
-def magnetic_model_from_cif(filename, magnetic_atoms=["Mn","Fe","Co","Ni","Dy","Tb","Eu","Cu"],bond_names=None):    
+def magnetic_model_from_cif(filename, magnetic_atoms=["Mn","Fe","Co","Ni","Dy","Tb","Eu","Cu"], bond_names=None):    
     bravais_params = {}
     magnetic_positions = None
     bravais_vectors = None
@@ -382,7 +379,6 @@ def magnetic_model_from_cif(filename, magnetic_atoms=["Mn","Fe","Co","Ni","Dy","
                     atomlabels, magnetic_species, magnetic_positions = cif_read_loop_atoms(labels, entries, magnetic_atoms)
                     atomlabels, magnetic_species, magnetic_positions = \
                                     generate_atoms_by_symmetries(symmetries, atomlabels, magnetic_species, magnetic_positions)
-                            
 
                 # If the block contains the set of bonds
                 if '_geom_bond_atom_site_label_1' in labels:
@@ -393,10 +389,10 @@ def magnetic_model_from_cif(filename, magnetic_atoms=["Mn","Fe","Co","Ni","Dy","
     bravais_vectors = read_bravais_vectors(bravais_params)
     magnetic_positions = np.array(magnetic_positions).dot(\
                                                     np.array(bravais_vectors))
-    print("magnetic species",magnetic_species)
-    print("positions",magnetic_positions)
-    print("bondlabels",bond_labels)
-    print("bondlists",bondlists)
+    print("    magnetic species", magnetic_species)
+    print("    positions", magnetic_positions)
+    print("    bondlabels",bond_labels)
+    print("    bondlists", bondlists)
     
     model = MagneticModel(magnetic_positions, bravais_vectors, 
                          bond_lists=bondlists,

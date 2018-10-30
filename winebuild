@@ -1,0 +1,22 @@
+#!/bin/sh
+
+WINE="/opt/wine-stable/bin/wine64"
+PYINSTALLER="C:\\\Miniconda3\\\Scripts\\\pyinstaller.exe"
+PYTHON="C:\\\Miniconda3\\\pythonw.exe"
+SCRIPT="visualbond"
+
+rm -R dist
+rm -R build
+
+$WINE $PYTHON setup.py install 
+#$WINE $PYINSTALLER --debug all --log-level DEBUG  -i "spectrojotometer.ico"  -D  bin/visualbond.py 
+$WINE $PYINSTALLER  -D   bin/$SCRIPT.py 
+cp api-*.dll dist/$SCRIPT
+
+echo "      "
+echo "      "
+echo "  Test running the application    "
+echo "      "
+echo "      "
+
+$WINE dist/$SCRIPT/$SCRIPT.exe

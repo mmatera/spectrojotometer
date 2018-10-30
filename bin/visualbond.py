@@ -6,6 +6,7 @@ from tkinter.scrolledtext import ScrolledText
 from tkinter import messagebox
 #  from tkmessagebox import *
 import os
+from pathlib import Path
 import tempfile
 import sys
 import numpy as np
@@ -56,8 +57,8 @@ textmarkers["close_mod"] = {"latex": "\right |", "plain": "|",
 
 
 
-logofilename = spectrojotometer.__file__[:-11] +  "logo.gif"
-
+logofilename = Path(spectrojotometer.__file__).parent /   "logo.gif"
+print(logofilename)
 
 
 def show_number(val,tol=None):

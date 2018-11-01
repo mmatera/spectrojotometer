@@ -815,8 +815,8 @@ class ApplicationGUI:
     def about(self):
         aboutmsg = "Visualbond  " + "Version 0.0 - 2017\n"
         aboutmsg += "Python " + sys.version + "\n\n"
-        aboutmsg += "spectrojotometer v. " +
-        str(spectrojotometerversion) + "\n"
+        aboutmsg += ("spectrojotometer v. " +
+                     str(spectrojotometerversion) + "\n")
         aboutmsg += "tkinter v. " + str(TkVersion) + "\n"
         aboutmsg += "numpy v. " + np.__version__ + "\n"
         aboutmsg += "matplotlib v. " + matplotlib.__version__ + "\n\n"
@@ -1017,8 +1017,9 @@ class ApplicationGUI:
         self.configurations = (energies, confs, labels)
         with open(self.tmpconfig.name, "w") as of:
             for idx, nc in enumerate(confs):
-                row = str(energies[idx]) + "\t" + str(nc) +
-                "\t\t # " + labels[idx] + "\n"
+                row = (str(energies[idx]) +
+                       "\t" + str(nc) +
+                       "\t\t # " + labels[idx] + "\n")
         self.print_full_equations()
         if spinconfigs == self.spinconfigs:
             self.spinconfigsenerg.delete(1.0, END)
@@ -1220,8 +1221,8 @@ class ApplicationGUI:
                                   show_number(jmax) + "\n")
 
             if usemc:
-                resparmtxt = resparmtxt + "\n\n Monte Carlo acceptance rate:" +
-                str(ar) + "\n"
+                resparmtxt = (resparmtxt + "\n\n Monte Carlo acceptance rate:" +
+                              str(ar) + "\n")
 
         # Inequations
         resparmtxt = resparmtxt + "\n\n region constraints:\n"
@@ -1252,11 +1253,12 @@ class ApplicationGUI:
                 txtineq += self.model.bond_names[i]
             txtineq = textmarkers["open_mod"][fmt] + txtineq
             if ineq[1] < 0:
-                txtineq += " + " + show_number(-ineq[1]) + " " +
-                textmarkers["close_mod"][fmt] + " < "
+                txtineq += (" + " + show_number(-ineq[1]) + " " +
+                            textmarkers["close_mod"][fmt] + " < ")
             else:
-                txtineq += " " + show_number(-ineq[1]) +
-                " " + textmarkers["close_mod"][fmt] + " < "
+                txtineq += (" " + show_number(-ineq[1]) +
+                            " " + textmarkers["close_mod"][fmt] +
+                            " < ")
             txtineq += show_number(ineq[2])
             resparmtxt += "\n\n" + txtineq
 

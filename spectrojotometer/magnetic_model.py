@@ -40,6 +40,21 @@ class MagneticModel:
         else:
             self.magnetic_species = []
             self.magnetic_species[:] = magnetic_species
+
+        if g_lande_factors is None:
+            self.g_lande_factors = [2. for i in self.magnetic_species]
+        else:
+            for i, g in enumerate(self.g_lande_factors):
+                if g == ".":
+                    self.g_lande_factors[i] = 2.
+
+        if spin_repr is None:
+            self.spin_repr = [.5 for i in self.magnetic_species]
+        else:
+            for i, g in enumerate(self.spin_repr):
+                if g == ".":
+                    self.spin_repr[i] = .5
+            
         if len(bravais_lat) == 1:
             self.supercell = np.array([[site[idx] +
                                         i * self.bravais_vectors[0][idx]
@@ -174,8 +189,8 @@ class MagneticModel:
                         continue
                     bt = set([atom_type[p], atom_type[qred]])
                     for i in range(len(bond_distances)):
-                        if np.abs(d - bond_distances[i]) <
-                        discretization and bt == bond_type[i]:
+                        if np.abs(d - bond_distances[i]) < \
+                           discretization and bt == bond_type[i]:
                             bond_lists[i].append((p, qred))
 
         self.bond_lists = old_bond_lists + bond_lists
@@ -243,8 +258,9 @@ class MagneticModel:
                         eq = eq + str(-cr) + " " + times_symbol
                     eq = eq + " " + jsname[k]
             if comments is not None:
-                res = res + eq + equal_symbol + ensname[i] +
-                "  " + open_comment + comments[i] + close_comment + "\n\n"
+                res = (res + eq + equal_symbol + ensname[i] +
+                       "  " + open_comment + comments[i] +
+                       close_comment + "\n\n")
             else:
                 res = res + eq + equal_symbol + ensname[i] + "\n\n"
         return res
@@ -466,8 +482,8 @@ class MagneticModel:
         if known is None:
             known = []
 
-        if num_new_confs is None or num_new_confs +
-        len(known) < len(self.bond_lists) + 1:
+        if num_new_confs is None or \
+           (num_new_confs +len(known)) < len(self.bond_lists) + 1:
             num_new_confs = max(len(self.bond_lists)-len(known) + 1, 1)
         if start is None:
             repres = self.generate_random_configurations(2 * num_new_confs)
@@ -604,8 +620,8 @@ _chemical_name_common                  """ + self.model_label + "\n"
                           "_atom_site_fract_z\n" +
                           "_atom_site_adp_type\n" +
                           "_atom_site_B_iso_or_equiv\n" +
-                          "_atom_site_spin_repr_\n" +
-                          "_atom_site_g_lande_factor\n" +
+                          "_atom_site_spin\n" +
+                          "_atom_site_g_factor\n" +
                           "_atom_site_type_symbol\n")
 
             bravaiscoords = self.coord_atomos.dot(np.linalg.inv(
@@ -619,8 +635,8 @@ _chemical_name_common                  """ + self.model_label + "\n"
                               str(round(1E5*pos[2])*1E-5) + "\t" +
                               "Biso \t" +
                               "1 \t" +
-                              self.spin_repr[i] + "t" +
-                              self.g_lande_factor[i] + "t" +
+                              str(self.spin_repr[i]) + "\t" +
+                              str(self.g_lande_factors[i]) + "\t" +
                               self.magnetic_species[i] + " \n")
             fileout.write("   \n")
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from tkinter import *
 from tkinter import ttk
-from tkinter import filedialog
+from tkinter import filedialog as fdlg
 from tkinter.scrolledtext import ScrolledText
 from tkinter import messagebox
 #  from tkmessagebox import *
@@ -38,30 +38,29 @@ quote = """#  BONDS GENERATOR 0.0:
 textmarkers = {}
 
 textmarkers["separator_symbol"] = {"latex": "", "plain": "", "wolfram": ", ", }
-textmarkers["Delta_symbol"] = {"latex": "\Delta ", "plain": "Delta",
-                               "wolfram": "\[Delta]", }
+textmarkers["Delta_symbol"] = {"latex": '\\Delta ', "plain": "Delta",
+                               "wolfram": '\\[Delta]', }
 textmarkers["times_symbol"] = {"latex": "", "plain": "*", "wolfram": "*", }
 textmarkers["equal_symbol"] = {"latex": "=", "plain": "=", "wolfram": "==", }
 textmarkers["open_comment"] = {"latex": "% ", "plain": "#  ",
                                "wolfram": "(*", }
 textmarkers["close_comment"] = {"latex": "", "plain": "", "wolfram": "*)", }
 textmarkers["sub_symbol"] = {"latex": "_", "plain": "", "wolfram": "", }
-textmarkers["plusminus_symbol"] = {"latex": "\pm", "plain": "+/-",
-                                   "wolfram": "\[PlusMinus]", }
+textmarkers["plusminus_symbol"] = {"latex": "\\pm", "plain": "+/-",
+                                   "wolfram": "\\[PlusMinus]", }
 
-textmarkers["open_mod"] = {"latex": "\left |", "plain": "|",
-                                   "wolfram": "Abs[", }
+textmarkers["open_mod"] = {"latex": "\\left |", "plain": "|",
+                           "wolfram": "Abs[", }
 
-textmarkers["close_mod"] = {"latex": "\right |", "plain": "|",
-                                   "wolfram": "] ", }
+textmarkers["close_mod"] = {"latex": "\\right |", "plain": "|",
+                            "wolfram": "] ", }
 
 
-
-logofilename = Path(spectrojotometer.__file__).parent /   "logo.gif"
+logofilename = Path(spectrojotometer.__file__).parent / "logo.gif"
 print(logofilename)
 
 
-def show_number(val,tol=None):
+def show_number(val, tol=None):
     if tol is None:
         return "%.3g" % val
     else:
@@ -260,9 +259,9 @@ class ImportConfigWindow(Toplevel):
         self.selected_model.trace('w', self.onmodelselect)
         self.optmodels = OptionMenu(row, self.selected_model, "[other model]")
         self.optmodels.pack(side=LEFT, fill=X)
-        self.sitemap  = Entry(row)
+        self.sitemap = Entry(row)
         self.sitemap.pack(side=RIGHT)
-        Label(row,text="site map").pack(side=RIGHT)
+        Label(row, text="site map").pack(side=RIGHT)
         row.pack(side=TOP, fill=X)
 
         row = Frame(controls1)
@@ -309,11 +308,12 @@ class ImportConfigWindow(Toplevel):
 
     def onmodelselect(self, *args):
         if self.selected_model.get() == "[other model]":
-            filename = filedialog.askopenfilename(initialdir=self.app.datafolder + "/",
-                                                  title="Select file to open",
-                                                  filetypes=(("cif files", "*.cif"),
-                                                             ("Wien2k struct files", "*.struct"),
-                                                             ("all files", "*.*")))
+            filename = fdlg.askopenfilename(
+                initialdir=self.app.datafolder + "/",
+                title="Select file to open",
+                filetypes=(("cif files", "*.cif"),
+                           ("Wien2k struct files", "*.struct"),
+                           ("all files", "*.*")))
             print(filename)
             if filename == "":
                 return
@@ -341,14 +341,14 @@ class ImportConfigWindow(Toplevel):
         self.scale_energy = float(len(model2.coord_atomos)) / float(size1)
         if self.scale_energy < 1.:
             messagebox.showinfo("Different sizes",
-                                "#  alert: unit cell in model2 is smaller than in model1.")
+                                "#  alert: unit cell in model2 " +
+                                "is smaller than in model1.")
 
-        
         for p in model2.cood_atomos:
-                print("\t",p)
-        
+            print("\t", p)
+
         for k, p in enumerate(model1.supercell):
-                print("\t", k % len(model1.coord_atomos) ,"->",p)
+            print("\t", k % len(model1.coord_atomos), "->", p)
         dictatoms = [-1 for p in model2.coord_atomos]
         for i, p in enumerate(model2.coord_atomos):
             for j, q in enumerate(model1.supercell):
@@ -356,9 +356,8 @@ class ImportConfigWindow(Toplevel):
                     dictatoms[i] = j % size1
                     break
         self.dictatoms = [n for n in dictatoms]
-        self.sitemap.delete(0,END)
-        self.sitemap.insert(0,dictatoms.__str__()[1:-1])
-
+        self.sitemap.delete(0, END)
+        self.sitemap.insert(0, dictatoms.__str__()[1:-1])
 
     def close_window(self):
         self.destroy()
@@ -373,10 +372,11 @@ class ImportConfigWindow(Toplevel):
     def configs_from_file(self):
         if self.selected_model.get() == "[other model]":
             self.onmodelselect()
-        filename = filedialog.askopenfilename(initialdir=self.app.datafolder + "/",
-                                              title="Select file",
-                                              filetypes=(("spin list", "*.spin"),
-                                                         ("all files", "*.*")))
+        filename = fdlg.askopenfilename(initialdir=self.app.datafolder +
+                                        "/",
+                                        title="Select file",
+                                        filetypes=(("spin list", "*.spin"),
+                                                   ("all files", "*.*")))
         if filename == "":
             return
         self.inputconfs.delete(1.0, END)
@@ -384,7 +384,7 @@ class ImportConfigWindow(Toplevel):
             self.inputconfs.insert(END, "\n" + filecfg.read())
 
     def map_confs(self):
-        self.dictatoms = [int(x) for x in self.sitemap.get().split(",")]
+        self.dictatoms = [int(x) for x in self.sitemap.get().split(", ")]
         self.outputconfs.config(state=NORMAL)
         lines = self.inputconfs.get(1.0, END).split("\n")
         for line in lines:
@@ -451,16 +451,16 @@ class ApplicationGUI:
 #         self.build_page4()
         self.nb.pack(expand=1, fill="both")
         Frame(height=5, bd=1, relief=SUNKEN).pack(fill=X, padx=5, pady=5)
-        statusregion = Frame(self.root,height=15,width=170)
-        logocvs = Canvas(statusregion,width=125,height=125)
-        logocvs.pack(side=LEFT,fill=X)
-        logocvs.create_image((64,62),image=self.logo)
+        statusregion = Frame(self.root, height=15, width=170)
+        logocvs = Canvas(statusregion, width=125, height=125)
+        logocvs.pack(side=LEFT, fill=X)
+        logocvs.create_image((64, 62), image=self.logo)
         self.status = ScrolledText(statusregion, height=15, width=170)
         # Frame(height=5, bd=1, relief=SUNKEN).pack(fill=X, padx=5, pady=5)
         self.status.config(background="black", foreground="white")
         self.status.pack(fill=X)
-        statusregion.pack(side=BOTTOM,fill=X)
-        
+        statusregion.pack(side=BOTTOM, fill=X)
+
         self.statusbar = Label(self.root, text="No model loaded.", bd=1,
                                relief=SUNKEN, anchor=W)
         self.statusbar.pack(side=BOTTOM, fill=X)
@@ -475,7 +475,8 @@ class ApplicationGUI:
         self.menu = Menu(self.root)
         self.root.config(menu=self.menu)
         filemenu = Menu(self.menu)
-        self.menu.add_cascade(label="File", menu=filemenu,accelerator="<Alt+f>")
+        self.menu.add_cascade(label="File", menu=filemenu,
+                              accelerator="<Alt+f>")
         filemenu.add_command(label="Open model file...",
                              command=self.open_model)
         filemenu.add_command(label="Import model file...",
@@ -488,11 +489,13 @@ class ApplicationGUI:
         filemenu.add_command(label="Save configurations as ...",
                              command=self.save_configs)
         filemenu.add_separator()
-        filemenu.add_command(label="Exit", command=self.close_app,
+        filemenu.add_command(label="Exit",
+                             command=self.close_app,
                              accelerator="<Control+q>")
 
         editmenu = Menu(self.menu)
-        self.menu.add_cascade(label="Edit", menu=editmenu, accelerator="<Control+e>")
+        self.menu.add_cascade(label="Edit", menu=editmenu,
+                              accelerator="<Control+e>")
         editmenu.add_command(label="Undo", command=self.call_undo,
                              accelerator="<Control+Z>")
         editmenu.add_command(label="Redo", command=self.call_redo,
@@ -513,7 +516,8 @@ class ApplicationGUI:
         editmenu.add_command(label="Replace", command=self.call_replace,
                              accelerator="<Control+r>")
         editmenu.add_separator()
-        editmenu.add_command(label="Clean log", command=lambda : self.status.delete("1.0",END) ,
+        editmenu.add_command(label="Clean log",
+                             command=lambda: self.status.delete("1.0", END),
                              accelerator="<Control+b>")
 
         helpmenu = Menu(self.menu)
@@ -610,8 +614,8 @@ class ApplicationGUI:
         optformat.pack(side=LEFT, fill=X)
         row.pack(side=TOP, fill=X)
         btnrecal = Button(controls3, text="Calculate",
-                     command=self.print_full_equations)
-        btnrecal.pack(side=BOTTOM,fill=Y)
+                          command=self.print_full_equations)
+        btnrecal.pack(side=BOTTOM, fill=Y)
         controls3.pack(side=TOP, fill=X)
         controls.pack(side=LEFT, fill=Y)
 
@@ -657,7 +661,7 @@ class ApplicationGUI:
         controls1 = LabelFrame(controls, text="Settings",
                                width=10, padx=5, pady=5)
         fields = ["Energy tolerance"]
-        defaultfields = ("0.1",)
+        defaultfields = ("0.1", )
         for i, field in enumerate(fields):
             row = Frame(controls1)
             lab = Label(row, width=14, text=field + ": ", anchor='w')
@@ -670,7 +674,8 @@ class ApplicationGUI:
 #             ents[field] = ent
             self.parameters["page3"][field] = ent
 
-        row = LabelFrame(controls1,text="Error bound method",width=8, padx=5, pady=5)
+        row = LabelFrame(controls1, text="Error bound method", width=8,
+                         padx=5, pady=5)
         framemethod = Frame(row)
         bemode = BooleanVar()
         self.parameters["page3"]["usemc"] = bemode
@@ -679,31 +684,28 @@ class ApplicationGUI:
             self.nummcsteps.config(state="normal")
             self.mcsizefactor.config(state="normal")
 
-            
         def disable_mcparams_inputs():
             self.nummcsteps.config(state="disabled")
             self.mcsizefactor.config(state="disabled")
-        
 
-                
-        Radiobutton(framemethod, text="Quadratic bound", variable=bemode,\
-                    value=False,\
+        Radiobutton(framemethod, text="Quadratic bound", variable=bemode,
+                    value=False,
                     command=disable_mcparams_inputs).pack(side=TOP)
-        Radiobutton(framemethod, text="Monte Carlo", variable=bemode,\
-                    value=True,\
-                    command=enable_mcparams_inputs ).pack(side=TOP)
+        Radiobutton(framemethod, text="Monte Carlo", variable=bemode,
+                    value=True,
+                    command=enable_mcparams_inputs).pack(side=TOP)
         self.mcparams = Frame(framemethod)
         rowmc = Frame(self.mcparams)
         Label(rowmc, text="Num Samples:").pack(side=LEFT)
         self.nummcsteps = Entry(rowmc, width=5)
-        self.nummcsteps.insert(0,"1000")
+        self.nummcsteps.insert(0, "1000")
         self.nummcsteps.config(state="disabled")
         self.nummcsteps.pack(side=LEFT)
         rowmc.pack(side=TOP)
         rowmc = Frame(self.mcparams)
         Label(rowmc, text="Size Factor:").pack(side=LEFT)
         self.mcsizefactor = Entry(rowmc, width=5)
-        self.mcsizefactor.insert(0,"1.")
+        self.mcsizefactor.insert(0, "1.")
         self.mcsizefactor.config(state="disabled")
         self.mcsizefactor.pack(side=LEFT)
         rowmc.pack(side=TOP)
@@ -711,8 +713,8 @@ class ApplicationGUI:
         bemode.set(0)
         self.parameters["page3"]["mcsteps"] = self.nummcsteps
         self.parameters["page3"]["mcsizefactor"] = self.mcsizefactor
-        framemethod.pack(side=TOP,fill=X)
-        row.pack(side=TOP,fill=X)
+        framemethod.pack(side=TOP, fill=X)
+        row.pack(side=TOP, fill=X)
 
         row = Frame(controls1)
         lab = Label(row, width=14, text="Format", anchor="w")
@@ -722,8 +724,6 @@ class ApplicationGUI:
                                command=self.print_full_equations)
         optformat.pack(side=LEFT, fill=X)
         row.pack(side=TOP, fill=X)
-
-        
         btn = Button(controls1, text="Estimate Parameters",
                      command=self.evaluate_couplings)
         btn.pack()
@@ -739,9 +739,9 @@ class ApplicationGUI:
         # self.spinconfigsenerg.pack(side=LEFT, fill=Y)
         panels.add(self.spinconfigsenerg)
         self.spinconfigsenerg.insert(END,
-                                     "#  Spin configurations definition file\n" +
-                                     "#  Energy\t [config]\t\t #" +
-                                     "  label / comment\n")
+                                     "# Spin configurations definition file" +
+                                     "\n# Energy\t [config]\t\t" +
+                                     " label / comment\n")
         # # # # # #   Results
         results = LabelFrame(panels, text="Results", padx=5, pady=5)
         panelsr = PanedWindow(results, orient=VERTICAL)
@@ -815,7 +815,8 @@ class ApplicationGUI:
     def about(self):
         aboutmsg = "Visualbond  " + "Version 0.0 - 2017\n"
         aboutmsg += "Python " + sys.version + "\n\n"
-        aboutmsg += "spectrojotometer v. " + str(spectrojotometerversion) + "\n"
+        aboutmsg += "spectrojotometer v. " +
+        str(spectrojotometerversion) + "\n"
         aboutmsg += "tkinter v. " + str(TkVersion) + "\n"
         aboutmsg += "numpy v. " + np.__version__ + "\n"
         aboutmsg += "matplotlib v. " + matplotlib.__version__ + "\n\n"
@@ -825,13 +826,14 @@ class ApplicationGUI:
     def print_status(self, msg):
         print(msg)
 
-
     def open_model(self, *args):
-        filename = filedialog.askopenfilename(initialdir=self.datafolder + "/",
-                                              title="Select file",
-                                              filetypes=(("cif files", "*.cif"),
-                                                         ("Wien2k struct files", "*.struct"),
-                                                         ("all files", "*.*")))
+        filename = fdlg.askopenfilename(initialdir=self.datafolder + "/",
+                                        title="Select file",
+                                        filetypes=(("cif files",
+                                                    "*.cif"),
+                                                   ("Wien2k struct files",
+                                                    "*.struct"),
+                                                   ("all files", "*.*")))
         if filename == "":
             return
         self.model = magnetic_model_from_file(filename=filename)
@@ -840,18 +842,18 @@ class ApplicationGUI:
             modeltxt = tmpf.read()
             self.modelcif.delete("1.0", END)
             self.modelcif.insert(INSERT, modeltxt)
-            
+
         self.nb.select(0)
         self.nb.tab(self.page2, state="normal")
         self.nb.tab(self.page3, state="normal")
 
-        
     def import_model(self, *args):
-        filename = filedialog.askopenfilename(initialdir=self.datafolder + "/",
-                                              title="Select file",
-                                              filetypes=(("cif files", "*.cif"),
-                                                         ("Wien2k struct files", "*.struct"),
-                                                         ("all files", "*.*")))
+        filename = fdlg.askopenfilename(initialdir=self.datafolder + "/",
+                                        title="Select file",
+                                        filetypes=(("cif files", "*.cif"),
+                                                   ("Wien2k struct files",
+                                                    "*.struct"),
+                                                   ("all files", "*.*")))
         if filename == "":
             return
         self.model = magnetic_model_from_file(filename=filename)
@@ -870,10 +872,10 @@ class ApplicationGUI:
         if self.model is None:
             messagebox.showerror("Error", "Model was not loaded.\n")
             return
-        filename = filedialog.askopenfilename(initialdir=self.datafolder + "/",
-                                              title="Select file",
-                                              filetypes=(("spin list", "*.spin"),
-                                                         ("all files", "*.*")))
+        filename = fdlg.askopenfilename(initialdir=self.datafolder + "/",
+                                        title="Select file",
+                                        filetypes=(("spin list", "*.spin"),
+                                                   ("all files", "*.*")))
         if len(filename) == 0:
             print("opening cancelled.")
             return
@@ -891,13 +893,12 @@ class ApplicationGUI:
         self.nb.select(1)
         print("... done")
 
-        
     def save_model(self):
         datafolder = os.getcwd()
-        filename = filedialog.asksaveasfilename(initialdir=datafolder + "/",
-                                                title="Select file",
-                                                filetypes=(("cif files", "*.cif"),
-                                                           ("all files", "*.*")))
+        filename = fdlg.asksaveasfilename(initialdir=datafolder + "/",
+                                          title="Select file",
+                                          filetypes=(("cif files", "*.cif"),
+                                                     ("all files", "*.*")))
         if filename == "":
             return
         print(filename.__repr__())
@@ -910,10 +911,10 @@ class ApplicationGUI:
 
     def save_configs(self):
         datafolder = os.getcwd()
-        filename = filedialog.asksaveasfilename(initialdir=datafolder + "/",
-                                                title="Select file",
-                                                filetypes=(("spin files", "*.spin"),
-                                                           ("all files", "*.*")))
+        filename = fdlg.asksaveasfilename(initialdir=datafolder + "/",
+                                          title="Select file",
+                                          filetypes=(("spin files", "*.spin"),
+                                                     ("all files", "*.*")))
         if filename == "":
             return
         if self.nb.select() == self.nb.tabs()[2]:
@@ -1016,7 +1017,8 @@ class ApplicationGUI:
         self.configurations = (energies, confs, labels)
         with open(self.tmpconfig.name, "w") as of:
             for idx, nc in enumerate(confs):
-                row = str(energies[idx]) + "\t" + str(nc) + "\t\t # " + labels[idx] + "\n"
+                row = str(energies[idx]) + "\t" + str(nc) +
+                "\t\t # " + labels[idx] + "\n"
         self.print_full_equations()
         if spinconfigs == self.spinconfigs:
             self.spinconfigsenerg.delete(1.0, END)
@@ -1024,7 +1026,6 @@ class ApplicationGUI:
         else:
             self.spinconfigs.delete(1.0, END)
             self.spinconfigs.insert(END, conftxt)
-            
 
     def reload_model(self, ev):
         self.print_status("reload model")
@@ -1037,9 +1038,11 @@ class ApplicationGUI:
             ff.write(current_model)
         try:
             model = magnetic_model_from_file(filename=newtmpfile.name)
-        except:
-            self.print_status("the model can not be loaded. Check the syntax.")
-            self.statusbar.config(text="the model can not be loaded. Check the syntax.")
+        except Exception:
+            self.print_status(
+                "the model can not be loaded. Check the syntax.")
+            self.statusbar.config(
+                text="the model can not be loaded. Check the syntax.")
             os.remove(newtmpfile.name)
             return
         #  if everything works,
@@ -1053,12 +1056,14 @@ class ApplicationGUI:
             self.print_status("Model is not defined. Please load a model")
             return
         self.print_status("growing cell...")
-        messagebox.showinfo("Not implemented...", "Grow unit cell is not implemented.")
+        messagebox.showinfo("Not implemented...",
+                            "Grow unit cell is not implemented.")
         parms = self.parameters["page1"]
         lx = int(parms["Lx"].get())
         ly = int(parms["Ly"].get())
         lz = int(parms["Lz"].get())
-#         self.model.generate_bonds(ranges=[[rmin, rmax]], discretization=discr)
+#         self.model.generate_bonds(ranges=[[rmin, rmax]],
+#                 discretization=discr)
 #         self.model.save_cif(self.tmpmodel.name)
 #         with open(self.tmpmodel.name, "r") as tmpf:
 #             modeltxt=tmpf.read()
@@ -1077,17 +1082,19 @@ class ApplicationGUI:
         its = int(parms["Iterations"].get())
         us = max(int(parms["Bunch size"].get()), n)
         known = []
-        cn, newconfs = self.model.find_optimal_configurations(num_new_confs=n,
-                                                              start=[],
-                                                              known=known,
-                                                              its=its, update_size=us)
+        cn, newconfs = self.model.find_optimal_configurations(
+            num_new_confs=n,
+            start=[],
+            known=known,
+            its=its, update_size=us)
         labels = [str(confindex(c)) for c in newconfs]
         # self.configs=([float("nan") for i in newconfs], newconfs, labels)
         eqformat = self.outputformat.get()
         self.spinconfigs.insert(END, "\n#  New configurations. ")
         self.spinconfigs.insert(END, " |" +
                                 textmarkers["Delta_symbol"][eqformat] +
-                                "J|/|" + textmarkers["Delta_symbol"][eqformat] +
+                                "J|/|" +
+                                textmarkers["Delta_symbol"][eqformat] +
                                 "E| < " + str(cn) + ": \n")
         for idx, nc in enumerate(newconfs):
             row = "nan \t" + str(nc) + "\t\t # " + labels[idx] + "\n"
@@ -1096,7 +1103,9 @@ class ApplicationGUI:
 
     def add_bonds(self):
         if self.model is None:
-            messagebox.showerror("Error", "Model was not loaded. Please load a model first.\n")
+            messagebox.showerror("Error",
+                                 "Model was not loaded. " +
+                                 "Please load a model first.\n")
             return
         self.print_status("adding bonds...")
         parms = self.parameters["page1"]
@@ -1112,7 +1121,8 @@ class ApplicationGUI:
 
     def configs_from_other_model(self):
         if self.model is None:
-            messagebox.showerror("Error", "Model was not loaded. Please load a model first.")
+            messagebox.showerror("Error", "Model was not loaded. " +
+                                 "Please load a model first.")
             return
         self.print_status("importing configurations...")
         self.reload_configs(src_widget=self.spinconfigs)
@@ -1140,64 +1150,81 @@ class ApplicationGUI:
                 energs.append(en)
                 confs.append(c)
         if len(confs) < len(self.model.bond_lists) + 1:
-            self.print_status("Number of known energies is not enough to determine all the couplings\n")
-            messagebox.showerror("Error", "Number of known energies is not enough to determine all the couplings.")
+            self.print_status("Number of known energies is not " +
+                              "enough to determine all the couplings\n")
+            messagebox.showerror("Error", "Number of known energies is " +
+                                 "not enough to determine all the couplings.")
             resparmtxt = ""
         else:
-            if  usemc:
-                js, jerr, chis,ar = self.model.compute_couplings(confs,
-                                                                 energs,
-                                                                 err_energs=tolerance,montecarlo=True,
-                                                                 mcsteps=mcsteps,mcsizefactor=mcsizefactor)
+            if usemc:
+                js, jerr, chis, ar = self.model.compute_couplings(
+                    confs,
+                    energs,
+                    err_energs=tolerance,
+                    montecarlo=True,
+                    mcsteps=mcsteps,
+                    mcsizefactor=mcsizefactor)
             else:
-                js, jerr, chis,ar = self.model.compute_couplings(confs,
-                                                                 energs,
-                                                                 err_energs=tolerance,montecarlo=False)
-                
+                js, jerr, chis, ar = self.model.compute_couplings(
+                    confs,
+                    energs,
+                    err_energs=tolerance, montecarlo=False)
+
             self.chisvals = chis
             offset_energy = js[-1]
             js.resize(js.size - 1)
             jmax = max(abs(js))
 
             resparmtxt = ("E" + textmarkers["sub_symbol"][fmt] + "0" +
-                      textmarkers["equal_symbol"][fmt] + str(offset_energy) +
-                      "\n\n")
+                          textmarkers["equal_symbol"][fmt] +
+                          str(offset_energy) + "\n\n")
             if min(jerr) < 0:
-                self.print_status("Warning: error bounds suggest that  the model is not compatible with the data. Try increasing the tolerance by means of the parameter --tolerance [tol].")
+                self.print_status("Warning: error bounds suggest that the " +
+                                  "model is not compatible with the data. " +
+                                  "Try increasing the tolerance by means " +
+                                  "of the parameter --tolerance [tol].")
                 incopatibletxt = (textmarkers["open_comment"][fmt] +
-                              " incompatible " +
-                              textmarkers["close_comment"][fmt] +
-                              textmarkers["separator_symbol"][fmt] + "\n")
+                                  " incompatible " +
+                                  textmarkers["close_comment"][fmt] +
+                                  textmarkers["separator_symbol"][fmt] + "\n")
                 for i, val in enumerate(js):
                     if jerr[i] < 0:
-                        resparmtxt = (resparmtxt + self.model.bond_names[i] + " " +
-                                  textmarkers["equal_symbol"][fmt] + "(" +
-                                  show_number(val / jmax) + ") " +
-                                  textmarkers["times_symbol"][fmt] + " " +
-                                  show_number(jmax) + incopatibletxt)
+                        resparmtxt = (resparmtxt + self.model.bond_names[i] +
+                                      " " +
+                                      textmarkers["equal_symbol"][fmt] + "(" +
+                                      show_number(val / jmax) + ") " +
+                                      textmarkers["times_symbol"][fmt] + " " +
+                                      show_number(jmax) + incopatibletxt)
                     else:
-                        resparmtxt = (resparmtxt + self.model.bond_names[i] + " " +
-                                  textmarkers["equal_symbol"][fmt] + "(" +
-                                  show_number(val / jmax,tol=jerr[i] / jmax) + textmarkers["plusminus_symbol"][fmt] +
-                                   ("%.2g" % (jerr[i] / jmax)) +
-                                  ") " + textmarkers["times_symbol"][fmt] + " " + ("%.3e" % jmax) +
-                                  textmarkers["separator_symbol"][fmt] + "\n")
+                        resparmtxt = (resparmtxt + self.model.bond_names[i] +
+                                      " " +
+                                      textmarkers["equal_symbol"][fmt] + "(" +
+                                      show_number(val / jmax,
+                                                  tol=jerr[i] / jmax) +
+                                      textmarkers["plusminus_symbol"][fmt] +
+                                      ("%.2g" % (jerr[i] / jmax)) +
+                                      ") " + textmarkers["times_symbol"][fmt] +
+                                      " " + ("%.3e" % jmax) +
+                                      textmarkers["separator_symbol"][fmt] +
+                                      "\n")
             else:
                 for i, val in enumerate(js):
                     resparmtxt = (resparmtxt + self.model.bond_names[i] + " " +
-                              textmarkers["equal_symbol"][fmt] +
-                              "(" + show_number(val / jmax, tol=jerr[i] / jmax) + " " +
-                              textmarkers["plusminus_symbol"][fmt] + " " +
-                              show_number(jerr[i] / jmax) + ") " +
-                              textmarkers["times_symbol"][fmt] +
-                              show_number(jmax) + "\n")
+                                  textmarkers["equal_symbol"][fmt] +
+                                  "(" +
+                                  show_number(val / jmax, tol=jerr[i] / jmax) +
+                                  " " +
+                                  textmarkers["plusminus_symbol"][fmt] + " " +
+                                  show_number(jerr[i] / jmax) + ") " +
+                                  textmarkers["times_symbol"][fmt] +
+                                  show_number(jmax) + "\n")
 
             if usemc:
-                resparmtxt = resparmtxt + "\n\n Monte Carlo acceptance rate:" + str(ar)+"\n"
-
+                resparmtxt = resparmtxt + "\n\n Monte Carlo acceptance rate:" +
+                str(ar) + "\n"
 
         # Inequations
-        resparmtxt = resparmtxt  + "\n\n region constraints:\n"
+        resparmtxt = resparmtxt + "\n\n region constraints:\n"
         ineqs = self.model.bound_inequations(confs,
                                              energs,
                                              err_energs=tolerance)
@@ -1217,20 +1244,22 @@ class ApplicationGUI:
                     txtineq += " -" + self.model.bond_names[i]
                     continue
 
-                if txtineq != "" and c > 0 :
+                if txtineq != "" and c > 0:
                     txtineq += " +" + show_number(c, tolerance) + " "
                 else:
-                    txtineq +=  " " + show_number(c, tolerance) + " "
+                    txtineq += " " + show_number(c, tolerance) + " "
                 txtineq += textmarkers["times_symbol"][fmt] + " "
                 txtineq += self.model.bond_names[i]
             txtineq = textmarkers["open_mod"][fmt] + txtineq
             if ineq[1] < 0:
-                txtineq += " + " + show_number(-ineq[1])  + " "  + textmarkers["close_mod"][fmt] + " < "
+                txtineq += " + " + show_number(-ineq[1]) + " " +
+                textmarkers["close_mod"][fmt] + " < "
             else:
-                txtineq +=  " " + show_number(-ineq[1]) +  " "  + textmarkers["close_mod"][fmt] + " < "
-            txtineq +=  show_number(ineq[2]) 
+                txtineq += " " + show_number(-ineq[1]) +
+                " " + textmarkers["close_mod"][fmt] + " < "
+            txtineq += show_number(ineq[2])
             resparmtxt += "\n\n" + txtineq
-                        
+
         self.resparam.config(state=NORMAL)
         self.resparam.delete(1.0, END)
         self.resparam.insert(END, resparmtxt)
@@ -1243,8 +1272,9 @@ class ApplicationGUI:
             chitext = (chitext + textmarkers["Delta_symbol"][fmt] +
                        "E" + textmarkers["sub_symbol"][fmt] + str(j + 1) +
                        "/" + textmarkers["Delta_symbol"][fmt] +
-                       "E" +textmarkers["equal_symbol"][fmt] + " " +
-                       show_number(chi) + " " + textmarkers["open_comment"][fmt] +
+                       "E" + textmarkers["equal_symbol"][fmt] + " " +
+                       show_number(chi) + " " +
+                       textmarkers["open_comment"][fmt] +
                        labels[j] +
                        textmarkers["close_comment"][fmt] +
                        textmarkers["separator_symbol"][fmt] + "\n")
@@ -1259,7 +1289,7 @@ class ApplicationGUI:
 
     def curr_edit(self):
         page = self.nb.tab(self.nb.select())["text"]
-        
+
         if page == "1. Define Model":
             return (self.modelcif)
         elif page == "2. Spin Configurations and Couplings":
@@ -1317,13 +1347,14 @@ class ApplicationGUI:
         self.root.destroy()
 
     def show_help(self, *args):
-        #docpath = os.path.dirname(os.path.realpath(sys.argv[0])) +
+        # docpath = os.path.dirname(os.path.realpath(sys.argv[0])) +
         #                "/doc/tutorial.html"
-        docpath = spectrojotometer.__path__[0] +  "/doc/tutorial.html"
+        docpath = spectrojotometer.__path__[0] + "/doc/tutorial.html"
         webbrowser.open(docpath)
 
     def plot_delta_energies(self, *args):
-        energy_tolerance = float(self.parameters["page3"]["Energy tolerance"].get())
+        energy_tolerance = float(
+            self.parameters["page3"]["Energy tolerance"].get())
         fulllabels = self.configurations[2]
         fullenergs = self.configurations[0]
         labels = []

@@ -840,6 +840,10 @@ class ApplicationGUI:
             modeltxt = tmpf.read()
             self.modelcif.delete("1.0", END)
             self.modelcif.insert(INSERT, modeltxt)
+            
+        self.nb.select(0)
+        self.nb.tab(self.page2, state="normal")
+        self.nb.tab(self.page3, state="normal")
 
         
     def import_model(self, *args):
@@ -871,6 +875,7 @@ class ApplicationGUI:
                                               filetypes=(("spin list", "*.spin"),
                                                          ("all files", "*.*")))
         if len(filename) == 0:
+            print("opening cancelled.")
             return
 
         if clean:
@@ -884,7 +889,7 @@ class ApplicationGUI:
         self.reload_configs(src_widget=self.spinconfigs)
         self.statusbar.config(text="config loaded")
         self.nb.select(1)
-
+        print("... done")
 
         
     def save_model(self):

@@ -114,7 +114,7 @@ def parse_symmetry(strsymm):
 
 
    
-def magnetic_model_from_file(filename, magnetic_atoms=["Mn","Fe","Co","Ni","Dy","Tb","Eu","Cu"], bond_names=None):
+def magnetic_model_from_file(filename, magnetic_atoms=["Mn","Fe","Co","Ni","Dy","Tb","Eu","Cu","V","Ti","Cr"], bond_names=None):
     if filename[-4:]==".cif" or filename[-4:]==".CIF":
         return magnetic_model_from_cif(filename, magnetic_atoms,bond_names)
     if filename[-7:]==".struct" or filename[-7:]==".STRUCT":

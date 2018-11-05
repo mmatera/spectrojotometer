@@ -61,6 +61,8 @@ print(logofilename)
 
 
 def show_number(val, tol=None):
+    if np.isnan(val):
+        return " nan "
     if tol is None:
         return "%.3g" % val
     else:
@@ -422,8 +424,8 @@ class ImportConfigWindow(Toplevel):
 
 class ApplicationGUI:
     def __init__(self):
-        sys.stdout = self
-        sys.stderr = self
+        # sys.stdout = self
+        # sys.stderr = self
         self.application_title = "Visualbond 0.1"
         self.model = None
         self.configurations = ([], [], [])

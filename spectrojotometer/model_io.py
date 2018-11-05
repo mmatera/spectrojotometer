@@ -170,11 +170,11 @@ def cif_read_loop_atoms(labels, entries, magnetic_atoms):
                                                 entry[zcol]]))
             magnetic_species.append(entry[tcol])
             if col_g != -1:
-                g_factors.append(magnetic_species.append(entry[label_g]))
+                g_factors.append(magnetic_species.append(entry[col_g]))
             else:
                 g_factors.append(".")
             if col_s != -1:
-                spin_repr.append(entry[label_s])
+                spin_repr.append(entry[col_s])
             else:
                 spin_repr.append(".")
             atomlabels[entry[labelcol]] = idxma

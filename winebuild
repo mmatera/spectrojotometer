@@ -1,6 +1,8 @@
 #!/bin/sh
 
-WINE="wine64"
+
+PATH=/opt/wine-stable/bin:$PATH
+WINE="wine"
 WINPYTHONDIR="C:\\\Miniconda3"
 PYINSTALLER="$WINPYTHONDIR/Scripts\\\pyinstaller.exe"
 PYTHON="$WINPYTHONDIR/pythonw.exe"
@@ -31,6 +33,7 @@ echo "      "
 
 cd dist
 cp  ../api-*.dll $SCRIPT
+cp -R ../examples $SCRIPT
 zip -r "$SCRIPT.zip"  $SCRIPT
 
 cd ..

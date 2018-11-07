@@ -663,7 +663,7 @@ class ApplicationGUI:
         controls1 = LabelFrame(controls, text="Settings",
                                width=10, padx=5, pady=5)
         fields = ["Energy tolerance"]
-        defaultfields = ("0.1", )
+        defaultfields = ("0.001", )
         for i, field in enumerate(fields):
             row = Frame(controls1)
             lab = Label(row, width=14, text=field + ": ", anchor='w')
@@ -712,11 +712,12 @@ class ApplicationGUI:
         self.mcsizefactor.pack(side=LEFT)
         rowmc.pack(side=TOP)
         self.mcparams.pack(side=TOP)
-        bemode.set(0)
+        bemode.set(True)
         self.parameters["page3"]["mcsteps"] = self.nummcsteps
         self.parameters["page3"]["mcsizefactor"] = self.mcsizefactor
         framemethod.pack(side=TOP, fill=X)
         row.pack(side=TOP, fill=X)
+        
 
         row = Frame(controls1)
         lab = Label(row, width=14, text="Format", anchor="w")

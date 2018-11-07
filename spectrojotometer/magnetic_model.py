@@ -430,7 +430,8 @@ class MagneticModel:
         j0s = np.average(jtrys, 0)
         jtrys = [abs(js-j0s) for js in jtrys]
         djs = np.max(np.array(jtrys), 0)
-        return j0s, djs, (e0s-energs)/tol, len(jtrys)/(numtry+1.)
+        e0s = coeffs.dot(j0s)
+        return j0s, djs, (e0s-energs) / tol, len(jtrys)/(numtry+1.)
 
     def generate_configurations_onfly(self):
         size = self.cell_size

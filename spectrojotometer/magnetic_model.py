@@ -29,6 +29,7 @@ class MagneticModel:
                  spin_repr=None):
         self.model_label = model_label
         self.cell_size = len(atomic_pos)
+        self.supercell_size = supercell_size
         self.coord_atomos = atomic_pos
         self.bravais_vectors = bravais_lat
         self.onfly = onfly
@@ -182,6 +183,26 @@ class MagneticModel:
         for p, x in enumerate(coord_atomos):
             for q, y in enumerate(self.supercell):
                 qred = q % cell_size
+                offset = qred - q
+                bravais_lat = self.bravais_vectors
+                if len(bravais_lat) == 1:
+                    offset = np.array([offset + 5, 5, 5])
+                elif len(bravais_lat) == 2:
+                    lsc = 2 * self.supercell_size + 1
+                    offset = np.array([offset % lsc + 5, int(offset / lsc) + 5, 5])
+                elif len(bravais_lat) == 3:
+                    lsc = 2 * self.supercell_size + 1
+                    offset = np.array([offset % lsc + 5, int(offset / lsc) % lsc + 5, 5+ int(offset / lsc**2)])
+                else:
+                    offset = np.array([5, 5, 5])
+
+                if offset[0] == offset[1] == offset[2] == 5:
+                    offset = "."
+                elif 0 <= offset[0]<= 9 and 0 <= offset[1]<= 9\
+                     and 0 <= offset[2]<= 9:
+                    offset = str(offset[0]) + str(offset[1]) + str(offset[2])
+                else:
+                    offset = "."                    
                 if(p < qred):
                     d = x-y
                     d = np.sqrt(d[0]**2 + d[1]**2 + d[2]**2)
@@ -191,7 +212,7 @@ class MagneticModel:
                     for i in range(len(bond_distances)):
                         if np.abs(d - bond_distances[i]) < \
                            discretization and bt == bond_type[i]:
-                            bond_lists[i].append((p, qred))
+                            bond_lists[i].append((p, qred, offset))
 
         self.bond_lists = old_bond_lists + bond_lists
         self.bond_distances = old_bond_distances + bond_distances
@@ -443,7 +464,7 @@ class MagneticModel:
         for c in np.random.random_integers(0, 2**((size-1)), t):
             yield [c >> i & 1 for i in range(size-1, -1, -1)]
 
-    def bound_inequations(self, confs, energs, err_energs=.01):
+    def bound_inequalities(self, confs, energs, err_energs=.01):
         print("confs: ", confs)
         print("energs: ", energs)
         print("err: ", err_energs)
@@ -454,7 +475,7 @@ class MagneticModel:
         vhr = []
         for i in range(len(singularvalues)):
             si = singularvalues[i]
-            if si/s0 < 1e-6:
+            if si/s0 < 1e-3:
                 break
             resolvent.append(u[:, i]/si)
             vhr.append(vh[i])
@@ -468,6 +489,7 @@ class MagneticModel:
 
         ineqs = []
         for i, v in enumerate(vh):
+            # singular vector associated to the energy must be skipped
             if abs(v[-1] - 1) < 1.e-9:
                 continue
             offset = v.dot(j0s)
@@ -524,8 +546,10 @@ class MagneticModel:
             v = v[len(known):]
             # Busco definir un soporte efectivo sobre los vectores singulares
             # (que dan los índices en la lista de configuraciones).
-            threshold = sorted([np.linalg.norm(z) for z in v])[-num_new_confs]
-
+            threshold = 1.e-6
+            if len(v) > num_new_confs:
+                threshold = sorted([np.linalg.norm(z) for z in v])[-num_new_confs]
+            
             # relevant guarda las configuraciones que lucen relevantes
             # (porque tienen mayor peso en los vectores singulares)
             relevant = []
@@ -650,6 +674,7 @@ _chemical_name_common                  """ + self.model_label + "\n"
                 fileout.write("_geom_bond_label\n")
                 fileout.write("_geom_bond_site_symmetry_2\n")
                 for k, bl in enumerate(self.bond_names):
+                    print(k, " bondlist: ", self.bond_lists[k])
                     for a, b, c in self.bond_lists[k]:
                         fileout.write(self.magnetic_species[a] + str(a+1) +
                                       "\t" +

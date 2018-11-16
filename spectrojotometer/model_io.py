@@ -170,7 +170,7 @@ def cif_read_loop_atoms(labels, entries, magnetic_atoms):
                                                 entry[zcol]]))
             magnetic_species.append(entry[tcol])
             if col_g != -1:
-                g_factors.append(magnetic_species.append(entry[col_g]))
+                g_factors.append(entry[col_g])
             else:
                 g_factors.append(".")
             if col_s != -1:

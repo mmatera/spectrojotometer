@@ -23,10 +23,13 @@ def box_ellipse(A,r):
         setperp=[k for k in range(i)] + [k for k in range(i+1,size)]
         v = A[i,setperp]
         A22=A[setperp][:,setperp]
-        Aperpinv=np.linalg.inv(A22)
-        gamma = Aperpinv.dot(v)
-        gamma = gamma.dot(v)
-        widths.append(r/np.sqrt(A[i,i]-gamma))
+        try:
+            Aperpinv=np.linalg.inv(A22)
+            gamma = Aperpinv.dot(v)
+            gamma = gamma.dot(v)
+            widths.append(r/np.sqrt(A[i,i]-gamma))
+        except np.linalg.linalg.LinAlgError:
+            widths.append(1.e300)
     return widths
 
 

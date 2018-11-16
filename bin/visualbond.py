@@ -1229,7 +1229,7 @@ class ApplicationGUI:
 
         # Inequations
         resparmtxt = resparmtxt + "\n\n region constraints:\n"
-        ineqs = self.model.bound_inequations(confs,
+        ineqs = self.model.bound_inequalities(confs,
                                              energs,
                                              err_energs=tolerance)
         for ineq in ineqs:

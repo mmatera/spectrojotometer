@@ -24,6 +24,8 @@ import webbrowser
 import matplotlib
 import matplotlib.pyplot as plt
 
+from pkg_resources import resource_string, resource_filename
+
 #  ----------------------------------------------------
 
 quote = """#  BONDS GENERATOR 0.0:
@@ -56,7 +58,7 @@ textmarkers["close_mod"] = {"latex": "\\right |", "plain": "|",
                             "wolfram": "] ", }
 
 
-logofilename = Path(spectrojotometer.__file__).parent / "logo.gif"
+logofilename = resource_filename(spectrojotometer.__name__, "logo.gif")
 print(logofilename)
 
 

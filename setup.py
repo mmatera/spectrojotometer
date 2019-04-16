@@ -26,6 +26,7 @@ setup(name='spectrojotometer',
       license="GNU",
       install_requires=['argparse','numpy', 'matplotlib'],
       packages=['spectrojotometer'],
+      include_package_data=True,
       package_data={
 	'spectrojotometer': ["doc/*.html","logo.gif"],
       },

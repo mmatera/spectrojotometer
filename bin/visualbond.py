@@ -67,6 +67,8 @@ def show_number(val, tol=None):
         return " nan "
     if tol is None:
         return "%.3g" % val
+    elif np.isnan(tol):
+        return "nan"
     else:
         tol = 10. ** int(np.log(tol)/np.log(10.)-1)
         if abs(val) < tol:
@@ -426,8 +428,8 @@ class ImportConfigWindow(Toplevel):
 
 class ApplicationGUI:
     def __init__(self):
-        # sys.stdout = self
-        # sys.stderr = self
+        sys.stdout = self
+        sys.stderr = self
         self.application_title = "Visualbond 0.1"
         self.model = None
         self.configurations = ([], [], [])
@@ -607,7 +609,14 @@ class ApplicationGUI:
         btn = Button(controls2, text="Optimize",
                      command=self.optimize_configs)
         btn.pack()
+        btn2 = Button(controls2, text="Optimal Independent Set",
+                     command=self.optimal_independent_set)
+
+        btn2.pack()
         controls2.pack(side=TOP, fill=X)
+
+
+        
         controls3 = LabelFrame(controls, text="Format", padx=5, pady=5)
         row = Frame(controls3)
         lab = Label(row, width=12, text="Format", anchor="w")
@@ -703,14 +712,14 @@ class ApplicationGUI:
         Label(rowmc, text="Num Samples:").pack(side=LEFT)
         self.nummcsteps = Entry(rowmc, width=5)
         self.nummcsteps.insert(0, "1000")
-        self.nummcsteps.config(state="disabled")
+        self.nummcsteps.config(state=NORMAL)
         self.nummcsteps.pack(side=LEFT)
         rowmc.pack(side=TOP)
         rowmc = Frame(self.mcparams)
         Label(rowmc, text="Size Factor:").pack(side=LEFT)
         self.mcsizefactor = Entry(rowmc, width=5)
         self.mcsizefactor.insert(0, "1.")
-        self.mcsizefactor.config(state="disabled")
+        self.mcsizefactor.config(state=NORMAL)
         self.mcsizefactor.pack(side=LEFT)
         rowmc.pack(side=TOP)
         self.mcparams.pack(side=TOP)
@@ -946,7 +955,7 @@ class ApplicationGUI:
                      textmarkers["Delta_symbol"][eqformat] +
                      "J|/|" + textmarkers["Delta_symbol"][eqformat] +
                      "E| < " +
-                     str(self.model.inv_min_sv_from_config(confs)))
+                     str(self.model.cost(confs)))
         self.equationpanel.config(state=NORMAL)
         self.equationpanel.delete(1.0, END)
         self.equationpanel.insert(END, equations)
@@ -971,7 +980,7 @@ class ApplicationGUI:
         equations = (equations +
                      "\n\n |" + textmarkers["Delta_symbol"][eqformat] +
                      "J|/|" + textmarkers["Delta_symbol"][eqformat] + "E| < " +
-                     str(self.model.inv_min_sv_from_config(confs)))
+                     str(self.model.cost(confs)))
         self.equationpanel2.config(state=NORMAL)
         self.equationpanel2.delete(1.0, END)
         self.equationpanel2.insert(END, equations)
@@ -1076,6 +1085,34 @@ class ApplicationGUI:
 #             self.modelcif.delete("1.0", END)
 #             self.modelcif.insert(INSERT, modeltxt)
 
+
+
+    def optimal_independent_set(self):
+        if self.model is None:
+            messagebox.showerror("Error", "Model was not loaded.\n")
+            return
+        if len(self.model.bond_lists) == 0:
+            self.print_status("Bonds must be defined before run optimization.")
+            return
+        parms = self.parameters["page2"]
+        n = int(parms['Number of configurations'].get())
+        its = int(parms["Iterations"].get())
+        us = max(int(parms["Bunch size"].get()), n)
+        known = []
+        newconfs, cn = self.model.optimize_independent_set(self.configurations[1])
+
+        
+        labels = [str(confindex(c)) for c in newconfs]
+        # self.configs=([float("nan") for i in newconfs], newconfs, labels)
+        eqformat = self.outputformat.get()
+        self.spinconfigs.insert(END, "\n#  Subset of optimal configurations. ")
+        self.spinconfigs.insert(END, "sqrt(l)/||A^-1|| " + str(cn) + ": \n")
+        for idx, nc in enumerate(newconfs):
+            row = "nan \t" + str(nc) + "\t\t # " + labels[idx] + "\n"
+            self.spinconfigs.insert(END, row)
+        self.reload_configs(src_widget=self.spinconfigs)
+
+
     def optimize_configs(self):
         if self.model is None:
             messagebox.showerror("Error", "Model was not loaded.\n")
@@ -1088,7 +1125,7 @@ class ApplicationGUI:
         its = int(parms["Iterations"].get())
         us = max(int(parms["Bunch size"].get()), n)
         known = []
-        cn, newconfs = self.model.find_optimal_configurations(
+        newconfs, cn = self.model.find_optimal_configurations(
             num_new_confs=n,
             start=[],
             known=known,
@@ -1161,73 +1198,73 @@ class ApplicationGUI:
             messagebox.showerror("Error", "Number of known energies is " +
                                  "not enough to determine all the couplings.")
             resparmtxt = ""
+
+        if usemc:
+            js, jerr, chis, ar = self.model.compute_couplings(
+                confs,
+                energs,
+                err_energs=tolerance,
+                montecarlo=True,
+                mcsteps=mcsteps,
+                mcsizefactor=mcsizefactor)
         else:
-            if usemc:
-                js, jerr, chis, ar = self.model.compute_couplings(
-                    confs,
-                    energs,
-                    err_energs=tolerance,
-                    montecarlo=True,
-                    mcsteps=mcsteps,
-                    mcsizefactor=mcsizefactor)
-            else:
-                js, jerr, chis, ar = self.model.compute_couplings(
-                    confs,
-                    energs,
-                    err_energs=tolerance, montecarlo=False)
+            js, jerr, chis, ar = self.model.compute_couplings(
+                confs,
+                energs,
+                err_energs=tolerance, montecarlo=False)
 
-            self.chisvals = chis
-            offset_energy = js[-1]
-            js.resize(js.size - 1)
-            jmax = max(abs(js))
+        self.chisvals = chis
+        offset_energy = js[-1]
+        js.resize(js.size - 1)
+        jmax = max(abs(js))
 
-            resparmtxt = ("E" + textmarkers["sub_symbol"][fmt] + "0" +
-                          textmarkers["equal_symbol"][fmt] +
-                          str(offset_energy) + "\n\n")
-            if min(jerr) < 0:
-                self.print_status("Warning: error bounds suggest that the " +
-                                  "model is not compatible with the data. " +
-                                  "Try increasing the tolerance by means " +
-                                  "of the parameter --tolerance [tol].")
-                incopatibletxt = (textmarkers["open_comment"][fmt] +
-                                  " incompatible " +
-                                  textmarkers["close_comment"][fmt] +
-                                  textmarkers["separator_symbol"][fmt] + "\n")
-                for i, val in enumerate(js):
-                    if jerr[i] < 0:
-                        resparmtxt = (resparmtxt + self.model.bond_names[i] +
-                                      " " +
-                                      textmarkers["equal_symbol"][fmt] + "(" +
-                                      show_number(val / jmax) + ") " +
-                                      textmarkers["times_symbol"][fmt] + " " +
-                                      show_number(jmax) + incopatibletxt)
-                    else:
-                        resparmtxt = (resparmtxt + self.model.bond_names[i] +
-                                      " " +
-                                      textmarkers["equal_symbol"][fmt] + "(" +
-                                      show_number(val / jmax,
-                                                  tol=jerr[i] / jmax) +
-                                      textmarkers["plusminus_symbol"][fmt] +
-                                      ("%.2g" % (jerr[i] / jmax)) +
-                                      ") " + textmarkers["times_symbol"][fmt] +
-                                      " " + ("%.3e" % jmax) +
-                                      textmarkers["separator_symbol"][fmt] +
-                                      "\n")
-            else:
-                for i, val in enumerate(js):
-                    resparmtxt = (resparmtxt + self.model.bond_names[i] + " " +
-                                  textmarkers["equal_symbol"][fmt] +
-                                  "(" +
-                                  show_number(val / jmax, tol=jerr[i] / jmax) +
+        resparmtxt = ("E" + textmarkers["sub_symbol"][fmt] + "0" +
+                      textmarkers["equal_symbol"][fmt] +
+                      str(offset_energy) + "\n\n")
+        if min(jerr) < 0:
+            self.print_status("Warning: error bounds suggest that the " +
+                              "model is not compatible with the data. " +
+                              "Try increasing the tolerance by means " +
+                              "of the parameter --tolerance [tol].")
+            incopatibletxt = (textmarkers["open_comment"][fmt] +
+                              " incompatible " +
+                              textmarkers["close_comment"][fmt] +
+                              textmarkers["separator_symbol"][fmt] + "\n")
+            for i, val in enumerate(js):
+                if jerr[i] < 0:
+                    resparmtxt = (resparmtxt + self.model.bond_names[i] +
                                   " " +
-                                  textmarkers["plusminus_symbol"][fmt] + " " +
-                                  show_number(jerr[i] / jmax) + ") " +
-                                  textmarkers["times_symbol"][fmt] +
-                                  show_number(jmax) + "\n")
+                                  textmarkers["equal_symbol"][fmt] + "(" +
+                                  show_number(val / jmax) + ") " +
+                                  textmarkers["times_symbol"][fmt] + " " +
+                                  show_number(jmax) + incopatibletxt)
+                else:
+                    resparmtxt = (resparmtxt + self.model.bond_names[i] +
+                                  " " +
+                                  textmarkers["equal_symbol"][fmt] + "(" +
+                                  show_number(val / jmax,
+                                              tol=jerr[i] / jmax) +
+                                  textmarkers["plusminus_symbol"][fmt] +
+                                  ("%.2g" % (jerr[i] / jmax)) +
+                                  ") " + textmarkers["times_symbol"][fmt] +
+                                  " " + ("%.3e" % jmax) +
+                                  textmarkers["separator_symbol"][fmt] +
+                                  "\n")
+        else:
+            for i, val in enumerate(js):
+                resparmtxt = (resparmtxt + self.model.bond_names[i] + " " +
+                              textmarkers["equal_symbol"][fmt] +
+                              "(" +
+                              show_number(val / jmax, tol=jerr[i] / jmax) +
+                              " " +
+                              textmarkers["plusminus_symbol"][fmt] + " " +
+                              show_number(jerr[i] / jmax) + ") " +
+                              textmarkers["times_symbol"][fmt] +
+                              show_number(jmax) + "\n")
 
-            if usemc:
-                resparmtxt = (resparmtxt + "\n\n Monte Carlo acceptance rate:" +
-                              str(ar) + "\n")
+        if usemc:
+            resparmtxt = (resparmtxt + "\n\n Monte Carlo acceptance rate:" +
+                          str(ar) + "\n")
 
         # Inequations
         resparmtxt = resparmtxt + "\n\n region constraints:\n"
@@ -1279,7 +1316,8 @@ class ApplicationGUI:
             chitext = (chitext + textmarkers["Delta_symbol"][fmt] +
                        "E" + textmarkers["sub_symbol"][fmt] + str(j + 1) +
                        "/" + textmarkers["Delta_symbol"][fmt] +
-                       "E" + textmarkers["equal_symbol"][fmt] + " " +
+                       "E" + textmarkers["equal_symbol"][fmt] + " ")
+            chitext = chitext + (
                        show_number(chi) + " " +
                        textmarkers["open_comment"][fmt] +
                        labels[j] +

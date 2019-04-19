@@ -55,7 +55,7 @@ class MagneticModel:
             for i, g in enumerate(self.spin_repr):
                 if g == ".":
                     self.spin_repr[i] = .5
-            
+
         if len(bravais_lat) == 1:
             self.supercell = np.array([[site[idx] +
                                         i * self.bravais_vectors[0][idx]
@@ -120,9 +120,10 @@ class MagneticModel:
             self.discretization = discretization
             self.generate_bonds(discretization, ranges)
 
+# Handling bonds
     def remover_bond(self, idx):
         """
-        Elimina el idx-esimo bond
+        Remove the idx-esim bond
         """
         self.bond_distances.pop(idx)
         self.bond_names.pop(idx)
@@ -130,7 +131,7 @@ class MagneticModel:
 
     def remover_bond_by_name(self, name):
         """
-        Elimina el bond de nombre <name>
+        Remove the bond with name <name>
         """
         try:
             idx = self.bond_names.index(name)
@@ -189,22 +190,25 @@ class MagneticModel:
                     offset = np.array([offset + 5, 5, 5])
                 elif len(bravais_lat) == 2:
                     lsc = 2 * self.supercell_size + 1
-                    offset = np.array([offset % lsc + 5, int(offset / lsc) + 5, 5])
+                    offset = np.array([offset % lsc + 5, int(offset / lsc)
+                                       + 5, 5])
                 elif len(bravais_lat) == 3:
                     lsc = 2 * self.supercell_size + 1
-                    offset = np.array([offset % lsc + 5, int(offset / lsc) % lsc + 5, 5+ int(offset / lsc**2)])
+                    offset = np.array([offset % lsc + 5,
+                                       int(offset / lsc) % lsc + 5,
+                                       5 + int(offset / lsc**2)])
                 else:
                     offset = np.array([5, 5, 5])
 
                 if offset[0] == offset[1] == offset[2] == 5:
                     offset = "."
-                elif 0 <= offset[0]<= 9 and 0 <= offset[1]<= 9\
-                     and 0 <= offset[2]<= 9:
+                elif ((0 <= offset[0] <= 9) and (0 <= offset[1] <= 9) and
+                      (0 <= offset[2] <= 9)):
                     offset = str(offset[0]) + str(offset[1]) + str(offset[2])
                 else:
-                    offset = "."                    
+                    offset = "."
                 if(p < qred):
-                    d = x-y
+                    d = x - y
                     d = np.sqrt(d[0]**2 + d[1]**2 + d[2]**2)
                     if not is_in_range(d):
                         continue
@@ -292,11 +296,11 @@ class MagneticModel:
         print(self.formatted_eqnations(self, cm,
                                        ensname, comments, format))
 
-    def coefficient_matrix(self, configs, normalizar=True):
+    def coefficient_matrix(self, configs, normalizar=False):
         """
-        Devuelve la matriz que define el sistema de ecuaciones
-        que vincula a las constantes de acoplamiento con las
-        energías correspondientes a las configuraciones dadas.
+        Return the matrix defining the equation system
+        connecting coupling constants with simulated energies
+        for a given set of configurations configs.
         """
         rawcm = [np.array([-sum([(-1)**sc[b[0]] * (-1)**sc[b[1]]
                                  for b in bondfamily])
@@ -312,28 +316,205 @@ class MagneticModel:
                       [np.array([1. for sc in configs])]).transpose()
         return cm
 
-    def inv_min_sv_from_config(self, confs, boxsize=True):
+    def generate_configurations_onfly(self):
+        size = self.cell_size
+        for c in range(2**((size-1))):
+            yield [c >> i & 1 for i in range(size-1, -1, -1)]
+
+    def generate_random_configurations(self, t=10):
+        size = self.cell_size
+        for c in np.random.random_integers(0, 2**((size-1)), t):
+            yield [c >> i & 1 for i in range(size-1, -1, -1)]
+
+    def check_independence(self, conf, setconfs):
+        if conf == []:
+            return False
+        if setconfs == []:
+            return True
+        a = self.coefficient_matrix(setconfs, False)
+        r0 = self.coefficient_matrix([conf], False)[0]
+        for r in a:
+            if np.linalg.norm(r-r0) < .1:
+                return False
+        return True
+
+    def add_independent_confs(self, confs, newconfs):
+        for c in newconfs:
+            if self.check_independence(c, confs):
+                confs.apppend(c)
+        return confs
+
+    def get_independent_confs(self, confs):
+        res = []
+        if confs == []:
+            return res
+        for c in confs:
+            if self.check_independence(c, res):
+                res.append(c)
+        print("  independent confs:", res)
+        return res
+
+    def cost(self, confs):
         """
-        Dada una lista de configuraciones de espin, construye las ecuaciones
-        y calcula la inversa del mínimo valor singular.
-        Las ecuaciones son de la forma
-        \\Sum_{(ij)} J_{ij} S_i[c] S_j[c] = E_c)
-        Aprovechamos que en la construcción de las ecuaciones garantizamos
-        que las ecuaciones para
-        la E0 y los js queden desacopladas (al restar en cada coeficiente
-        el promedio sobre las configuraciones)
+        This function evaluates a bound on the error associated
+        to a set of configurations.
         """
-        if len(confs) == 0:
-            return 1e80
-        eqarray = self.coefficient_matrix(confs)
-        eqarray = eqarray[:, 0:-1]
-        if boxsize:
-            return max(box_ellipse(eqarray, 1)) * np.sqrt(len(confs))
-        singularvalues = np.linalg.svd(eqarray)[1]
-        if min(singularvalues) == 0 or len(singularvalues) < len(eqarray[0]):
-            return 1e80
-        cond_number = 1. / min(singularvalues)
-        return cond_number
+        a = self.coefficient_matrix(confs, False)
+        lp = len(a)
+        sv = np.linalg.svd(a, full_matrices=False,
+                           compute_uv=False)[-1]
+        return np.sqrt(lp) / sv
+
+    def optimize_independent_set(self, confs, length=None):
+        """
+        Given a set of configurations confs, returns
+
+        (res, cost)
+
+        where res is the subset of configurations that optimizes the
+        cost function    sqrt(len(res))/|| coefficient_matrix(res)^+ ||
+
+        If the optional parameter l is provided, then it tries to optimize
+        the cost function for a fixed size length.
+
+        """
+        partialinfo = False
+        if confs == []:
+            return [], np.Infinity
+
+        curr = self.get_independent_confs(confs)
+        a = self.coefficient_matrix(curr, False)
+        print("a=", a)
+        u, sv, v = np.linalg.svd(a, full_matrices=False)
+        v = None
+        k = len(sv)
+        while sv[k-1] < 1.e-6:
+            k = k - 1
+
+        if k == 0:
+            eprint("optimize_independent_set: the set of configurations" +
+                   " does not provide any information.")
+            return ([], np.Infinity)
+
+        if k < len(sv):
+            eprint("optimize_independent_set: the set of configurations just" +
+                   " provides partial information. " +
+                   "Optimizing the set for this information.")
+            partialinfo = True
+            sv = sv[k - 1]
+            u = u[:, :k]
+        else:
+            sv = sv[-1]
+
+        weights = [(np.linalg.norm(r), i) for i, r in enumerate(u)]
+        weights = sorted(weights, key=lambda x: -x[0])
+
+        if length is not None:
+            lp = min(length, len(a))
+        else:
+            lp = k
+
+        # Look for the minimal subset that has the same information than
+        # the original of length >= lp.
+        ared = []
+        for i in range(lp):
+            ared.append(a[weights[i][1]])
+        while lp < len(curr):
+            sv = np.linalg.svd(np.array(ared),
+                               full_matrices=False,
+                               compute_uv=False)[k-1]
+            eprint("------------------------------------------------", sv)
+            if sv > 1.e-6:
+                break
+            else:
+                ared.append(a[weights[lp][1]])
+                lp = lp + 1
+        # If we are dealing with a set of configurations
+        # with just partial info,
+        # this is the best we can return.
+        if partialinfo:
+            return (curr[:lp], np.Infinity)
+        elif length is not None:
+            eprint("------------ optimize_independent_set for fix length." +
+                   " cost=", np.sqrt(lp) / sv)
+            return (curr[:lp], np.sqrt(lp) / sv)
+        else:
+            # If  l was not provided, and the set is informationally complete,
+            # try to enlarge it to reduce the cost function
+            cost = np.sqrt(lp) / sv
+            while lp < len(curr):
+                nr = a[weights[lp][1]]
+                sv = np.linalg.svd(np.array(ared + [nr]),
+                                   full_matrices=False,
+                                   compute_uv=False)[k-1]
+                newcost = np.sqrt(lp+1)/sv
+                if newcost >= cost:
+                    break
+                else:
+                    cost = newcost
+                    ared.append(nr)
+                    lp = lp + 1
+            return (curr[:lp], cost)
+
+    def find_optimal_configurations(self, start=None, num_new_confs=None,
+                                    known=None, its=100, update_size=1):
+        if known is None:
+            known = []
+        else:
+            known = self.get_independent_confs(known)
+        eprint("--------------find_optimal_set ----------------")
+        eprint("known=", known)
+        if num_new_confs is None:
+            lmax = max(len(self.bond_lists) + 1, 1)
+        else:
+            lmax = max(num_new_confs + len(known), len(self.bond_lists) + 1, 1)
+
+        if start is None:
+            repres = self.generate_random_configurations(
+                max(update_size, lmax))
+            last_better = self.get_independent_confs(known +
+                                                     [q for q in repres])
+        else:
+            last_better = self.get_independent_confs(known + start)
+
+        for i in range(its):
+            if len(last_better) >= lmax:
+                break
+            repres = self.generate_random_configurations(update_size)
+            last_better = self.get_independent_confs(last_better +
+                                                     [q for q in repres])
+
+        last_better, cost = self.optimize_independent_set(last_better,
+                                                          num_new_confs)
+
+        if len(last_better) < lmax:
+            eprint("find_optimal_configurations: can not find more " +
+                   "independent configurations. Working with this set.\n")
+        else:
+            for it in range(its):
+                repres = self.generate_random_configurations(update_size)
+                newconfs = self.get_independent_confs(known +
+                                                      last_better +
+                                                      [q for q in repres])
+                if num_new_confs is None:
+                    newconfs, newcost = self.optimize_independent_set(newconfs)
+                else:
+                    newconfs, newcost = self.optimize_independent_set(newconfs,
+                                                                      lmax)
+                if newcost < cost:
+                    last_better = newconfs
+                    cost = newcost
+
+        if num_new_confs is not None and len(last_better) < num_new_confs:
+            eprint("find_optimal_configurations: can not find more " +
+                   "independent configurations. Working with this set.\n")
+
+        # Remove the known configurations from the list
+        curr = []
+        for c in last_better:
+            if self.check_independence(c, known):
+                curr.append(c)
+        return curr, cost
 
     def compute_couplings(self, confs, energs, err_energs=.01,
                           printeqs=False, montecarlo=True,
@@ -384,7 +565,7 @@ class MagneticModel:
         rcoeffs = coeffs[:, 0:-1]
         singularvalues = np.linalg.svd(rcoeffs, compute_uv=False)
         print(singularvalues)
-        cond_number = 1. / min(singularvalues)
+        cond_number = np.sqrt(len(rcoeffs)) / max(min(singularvalues), 1.e-9)
         if printeqs:
             eprint("\nInverse of the minimum singular value: ",
                    cond_number, "\n\n")
@@ -408,62 +589,6 @@ class MagneticModel:
                 deltaJ = box_ellipse(coeffs, rr)
             return (js, deltaJ, model_chi, 1.)
 
-    def montecarlo_box(self, coeffs, energs, tol, numtry=1000, sizefactor=1.):
-        numcalc = len(energs)
-        numparm = len(coeffs[0])
-        sv, u = la.svd(coeffs)[1:3]
-        j0s = np.linalg.inv(coeffs.transpose().dot(coeffs)).dot(
-            coeffs.transpose().dot(energs))
-        e0s = coeffs.dot(j0s)
-        esqerr = la.norm(e0s-energs)
-        scale = sizefactor * (numcalc * tol**2 - esqerr**2)/np.sqrt(4.*numparm)
-        if scale < 0:
-            print("scale < 0. Model incompatible")
-            return j0s, np.array([-1 for j in j0s]), (e0s-energs)/tol, 0.
-
-        # Generate the random set on the elliptic upper bound
-        jtrys = rnd.normal(0, 1., (numtry, numparm)).dot(
-            np.diag(scale/sv)).dot(u)
-        # If the Minumum Square point is compatible,
-        # we add it to the random set
-        if max(abs(energs - e0s)) < tol:
-            jtrys = np.array([j0s + j for j in jtrys] + [j0s])
-        else:
-            jtrys = np.array([j0s + j for j in jtrys])
-        # We keep just the compatible points
-        jtrys = jtrys[np.array([max(abs(coeffs.dot(j)-energs)) < tol
-                                for j in jtrys])]
-
-        # It it resuls incompatible, show a warning.
-        if len(jtrys) == 0:
-            print("model seems incompatible. Try with a larger " +
-                  "number of points or a different sizefactor.")
-            return j0s, np.array([-1 for j in j0s]), (e0s-energs)/tol, 0.
-
-        if len(jtrys) == 1:
-            print("errors  estimated by boxing the  ellipse")
-            rr = np.sqrt(numcalc*tol**2-esqerr**2)
-            djs = box_ellipse(coeffs, rr)
-            return j0s, djs, (e0s-energs)/tol, 1./(numtry+1.)
-        print(len(jtrys))
-        print("Accepted rate=", len(jtrys)/(numtry+1.))
-
-        j0s = np.average(jtrys, 0)
-        jtrys = [abs(js-j0s) for js in jtrys]
-        djs = np.max(np.array(jtrys), 0)
-        e0s = coeffs.dot(j0s)
-        return j0s, djs, (e0s-energs) / tol, len(jtrys)/(numtry+1.)
-
-    def generate_configurations_onfly(self):
-        size = self.cell_size
-        for c in range(2**((size-1))):
-            yield [c >> i & 1 for i in range(size-1, -1, -1)]
-
-    def generate_random_configurations(self, t=10):
-        size = self.cell_size
-        for c in np.random.random_integers(0, 2**((size-1)), t):
-            yield [c >> i & 1 for i in range(size-1, -1, -1)]
-
     def bound_inequalities(self, confs, energs, err_energs=.01):
         print("confs: ", confs)
         print("energs: ", energs)
@@ -482,11 +607,12 @@ class MagneticModel:
         vh = np.array(vhr)
         vhr = None
         j0s = np.array(vh).transpose().dot(np.array(resolvent).dot(energs))
-        err = np.sqrt(len(energs) * err_energs**2 -
-                      np.linalg.norm(energs-coeffs.dot(j0s))**2)
-        if np.isnan(err):
+        err = len(energs) * err_energs**2 - \
+            np.linalg.norm(energs-coeffs.dot(j0s))**2
+        if err < 0:
             return []
 
+        err = np.sqrt(err)
         ineqs = []
         for i, v in enumerate(vh):
             # singular vector associated to the energy must be skipped
@@ -500,86 +626,92 @@ class MagneticModel:
             ineqs.append(ineq)
         return ineqs
 
-    def find_optimal_configurations(self, start=None, num_new_confs=None,
-                                    known=None, its=100, update_size=1):
-        if known is None:
-            known = []
+    def montecarlo_box(self, coeffs, energs, tol, numtry=1000, sizefactor=1.):
+        numcalc = len(energs)
+        numparm = len(coeffs[0])
+        issingular = False
+        # Check that the number of equations is equal or large than the
+        # number of parameters to be determined. Otherwise, add trivial
+        # equations.
+        if(numparm > numcalc):
+            coeffs = np.array([c for c in coeffs] +
+                              [np.zeros(numparm)
+                               for i in range(numparm - numcalc)])
+            energs = np.array([c for c in energs] +
+                              [0.
+                               for i in range(numparm - numcalc)])
 
-        if num_new_confs is None or \
-           (num_new_confs +len(known)) < len(self.bond_lists) + 1:
-            num_new_confs = max(len(self.bond_lists)-len(known) + 1, 1)
-        if start is None:
-            repres = self.generate_random_configurations(2 * num_new_confs)
-            last_better = normalize_configurations([q for q in repres])
+        # Look for the singular value decomposition
+        u, sv, v = la.svd(coeffs, full_matrices=True, compute_uv=True)
+        # Check if the system is determined and discard vanishing
+        # singular values/vectors.
+        k = len(sv)
+        svr = np.array([s for s in sv])
+        if svr[-1] < 1.e-6:
+            issingular = True
+            while svr[-1] < 1.e-6:
+                svr = svr[:-1]
+                k = k - 1
+
+        ur = u[:, :k]
+        vr = v[:k]
+        # center of the elliptical region
+        j0s = vr.transpose().dot((1./svr)*(ur.transpose().dot(energs)))
+        e0s = coeffs.dot(j0s)
+        esqerr = la.norm(e0s - energs)
+        scale = sizefactor * (numcalc * tol**2 - esqerr**2)/np.sqrt(4.*numparm)
+        if scale <= 0:
+            print("scale < 0. Model is incompatible")
+            return (j0s, np.array([-1 for j in j0s]),
+                    (e0s-energs)[:numcalc]/tol, 0.)
+        v = v.transpose()
+        k = len(sv)
+        ur = None
+        vr = None
+        svr = None
+
+        # Generate the random set on the elliptic upper bound
+        jtrys = np.array([rnd.normal(0, 1, numtry)/max(s/scale, 1.e-9)
+                          for s in sv])
+        jtrys = v.dot(jtrys).transpose()
+        # If the Minumum Square point is compatible,
+        # we add it to the random set
+        if max(abs(energs - e0s)) < tol:
+            jtrys = np.array([j0s + j for j in jtrys] + [j0s])
         else:
-            last_better = start
+            jtrys = np.array([j0s + j for j in jtrys])
+        # We keep just the compatible points
+        jtrys = jtrys[np.array([max(abs(coeffs.dot(j)-energs)) < tol
+                                for j in jtrys])]
 
-        num_confs = num_new_confs + len(known)
-        inequiv_confs = last_better
-        last_better_cn = self.inv_min_sv_from_config(last_better)
-        cn = last_better_cn
+        # It it resuls incompatible, show a warning.
+        if len(jtrys) == 0:
+            print("model seems incompatible. Try with a larger " +
+                  "number of points or a different sizefactor.")
+            return (j0s, np.array([-1 for j in j0s]),
+                    (e0s-energs)[:numcalc]/tol, 0.)
 
-        for it in range(its):
-            # Dadas las configuraciones equivalentes, busca un subconjunto
-            # que optimize la dependencia de la energía con los parámetros
+        if len(jtrys) == 1:
+            print("errors  estimated by boxing the  ellipse")
+            rr = np.sqrt(numcalc*tol**2-esqerr**2)
+            djs = box_ellipse(coeffs, rr)
+            return j0s, djs, (e0s-energs)/tol, 1./(numtry+1.)
+        print(len(jtrys))
+        print("Accepted rate=", len(jtrys)/(numtry+1.))
 
-            # inequiv_confs=[ocho_a_diezyseis(c) for c in repres]
-            #
-            # print("generando matriz de coeficientes para " +
-            #       "las configuraciones inequivalentes")
-            # inequiv_confs=repres
-            #
-            # Aquí se calculan los coeficientes del sistema de ecuaciones
-            # asociado al conjunto completo de configuraciones no
-            # equivalentes
-            repres = self.generate_random_configurations(update_size)
-            inequiv_confs = known + [q for q in repres] + inequiv_confs
-            inequiv_confs = normalize_configurations(inequiv_confs)
-            coefs = self.coefficient_matrix(inequiv_confs)
+        j0s = np.average(jtrys, 0)
+        jtrys = [abs(js-j0s) for js in jtrys]
+        djs = np.max(np.array(jtrys), 0)
+        # If the model is singular, discard the coefficients that
+        # couldn't be determined, setting them to 0.
+        if issingular:
+            for i, dj in enumerate(djs):
+                if dj > 100:
+                    djs[i] = np.nan
+                    j0s[i] = 0
 
-            # Este es el algoritmo que uso para buscar las óptimas:
-            # Descompongo coefs como SVD, y me quedo sólo con los
-            # vectores asociados a los valores singulares no nulos.
-            # Luego, busco cuales configuraciones definen el soporte
-            # efectivo de los vectores singulares.
-            v = ((np.linalg.svd(coefs)[0])[0:len(coefs[0])]).transpose()
-            v = v[len(known):]
-            # Busco definir un soporte efectivo sobre los vectores singulares
-            # (que dan los índices en la lista de configuraciones).
-            threshold = 1.e-6
-            if len(v) > num_new_confs:
-                threshold = sorted([np.linalg.norm(z) for z in v])[-num_new_confs]
-            
-            # relevant guarda las configuraciones que lucen relevantes
-            # (porque tienen mayor peso en los vectores singulares)
-            relevant = []
-            for j, val in enumerate(v):
-                if np.linalg.norm(val) >= threshold:
-                    if j not in relevant:
-                        relevant.append(j)
-
-            # Ordeno los índices de configuraciones relevantes
-            # y elimino duplicados.
-            relevant = sorted(relevant)[:num_new_confs]
-            relevant = [k + len(known) for k in relevant]
-            inequiv_confs = [inequiv_confs[k] for k in relevant]
-            cn = self.inv_min_sv_from_config(
-                normalize_configurations(known + inequiv_confs))
-            # a partir de los índices, fabrico una lista más corta de
-            # configuraciones relevantes
-            # print("Número de condición para el conjunto reducido de ",
-            #       len(inequiv_confs), " elementos:", cn)
-            if cn < last_better_cn:
-                last_better_cn = cn
-                last_better = inequiv_confs
-                eprint("it", it, "new 1/|A^{+}|=", cn)
-                eprint(inequiv_confs)
-            else:
-                inequiv_confs = last_better
-
-        cn = last_better_cn
-        inequiv_confs = last_better
-        return(last_better_cn, last_better)
+        e0s = coeffs.dot(j0s)
+        return j0s, djs, (e0s-energs)[:numcalc] / tol, len(jtrys)/(numtry+1.)
 
     def save_cif(self, filename, bond_names=None):
         bravais_vectors = self.bravais_vectors

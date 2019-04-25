@@ -39,23 +39,23 @@ quote = """#  BONDS GENERATOR 0.0:
 
 textmarkers = {}
 
-textmarkers["separator_symbol"] = {"latex": "", "plain": "", "wolfram": ", ", }
+textmarkers["separator_symbol"] = {"latex": "", "plain": "", "Wolfram": ", ", }
 textmarkers["Delta_symbol"] = {"latex": '\\Delta ', "plain": "Delta",
-                               "wolfram": '\\[Delta]', }
-textmarkers["times_symbol"] = {"latex": "", "plain": "*", "wolfram": "*", }
-textmarkers["equal_symbol"] = {"latex": "=", "plain": "=", "wolfram": "==", }
+                               "Wolfram": '\\[Delta]', }
+textmarkers["times_symbol"] = {"latex": "", "plain": "*", "Wolfram": "*", }
+textmarkers["equal_symbol"] = {"latex": "=", "plain": "=", "Wolfram": "==", }
 textmarkers["open_comment"] = {"latex": "% ", "plain": "#  ",
-                               "wolfram": "(*", }
-textmarkers["close_comment"] = {"latex": "", "plain": "", "wolfram": "*)", }
-textmarkers["sub_symbol"] = {"latex": "_", "plain": "", "wolfram": "", }
+                               "Wolfram": "(*", }
+textmarkers["close_comment"] = {"latex": "", "plain": "", "Wolfram": "*)", }
+textmarkers["sub_symbol"] = {"latex": "_", "plain": "", "Wolfram": "", }
 textmarkers["plusminus_symbol"] = {"latex": "\\pm", "plain": "+/-",
-                                   "wolfram": "\\[PlusMinus]", }
+                                   "Wolfram": "\\[PlusMinus]", }
 
 textmarkers["open_mod"] = {"latex": "\\left |", "plain": "|",
-                           "wolfram": "Abs[", }
+                           "Wolfram": "Abs[", }
 
 textmarkers["close_mod"] = {"latex": "\\right |", "plain": "|",
-                            "wolfram": "] ", }
+                            "Wolfram": "] ", }
 
 
 logofilename = resource_filename(spectrojotometer.__name__, "logo.gif")
@@ -942,6 +942,12 @@ class ApplicationGUI:
 
     def print_full_equations(self, ev=None):
         eqformat = self.outputformat.get()
+        if ev is None or isinstance(ev, str):
+            print("print_full_equation called without event")
+        else:
+            print(ev.widget)
+            self.reload_configs(ev)
+
         confs = self.configurations[1]
         labels = self.configurations[2]
         if len(confs) == 0 or len(self.model.bond_lists) == 0:
@@ -1099,16 +1105,18 @@ class ApplicationGUI:
         its = int(parms["Iterations"].get())
         us = max(int(parms["Bunch size"].get()), n)
         known = []
+        self.reload_configs(src_widget=self.spinconfigs)
         newconfs, cn = self.model.optimize_independent_set(self.configurations[1])
 
-        
+        fulllabels = [str(sum([k * 2**i for i, k in enumerate(c)])) for c in self.configurations[1]]
         labels = [str(confindex(c)) for c in newconfs]
+        energs = [self.configurations[0][fulllabels.index(l)]  for l in labels] 
         # self.configs=([float("nan") for i in newconfs], newconfs, labels)
         eqformat = self.outputformat.get()
         self.spinconfigs.insert(END, "\n#  Subset of optimal configurations. ")
         self.spinconfigs.insert(END, "sqrt(l)/||A^-1|| " + str(cn) + ": \n")
         for idx, nc in enumerate(newconfs):
-            row = "nan \t" + str(nc) + "\t\t # " + labels[idx] + "\n"
+            row = "# " + str(energs[idx]) + "\t" + str(nc) + "\t\t # " + labels[idx] + "\n"
             self.spinconfigs.insert(END, row)
         self.reload_configs(src_widget=self.spinconfigs)
 
@@ -1124,10 +1132,18 @@ class ApplicationGUI:
         n = int(parms['Number of configurations'].get())
         its = int(parms["Iterations"].get())
         us = max(int(parms["Bunch size"].get()), n)
+        self.reload_configs(src_widget=self.spinconfigs)
         known = []
+        start = []
+        for i, c in enumerate(self.configurations[1]):
+            if np.isnan(self.configurations[0][i]):
+                start.append(c)
+            else:
+                known.append(c)
+        
         newconfs, cn = self.model.find_optimal_configurations(
             num_new_confs=n,
-            start=[],
+            start=start,
             known=known,
             its=its, update_size=us)
         labels = [str(confindex(c)) for c in newconfs]

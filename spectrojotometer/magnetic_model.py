@@ -365,7 +365,7 @@ class MagneticModel:
                            compute_uv=False)[-1]
         return np.sqrt(lp) / sv
 
-    def optimize_independent_set(self, confs, length=None):
+    def optimize_independent_set(self, confs, length=None, forced=None):
         """
         Given a set of configurations confs, returns
 
@@ -379,11 +379,34 @@ class MagneticModel:
 
         """
         partialinfo = False
+        cost = np.nan
         if confs == []:
             return [], np.Infinity
 
-        curr = self.get_independent_confs(confs)
+        if forced is None:
+            forced = []
+            lenforced = 0
+        else:
+            lenforced = len(forced)
+
+        ids0 = [sum([k*2**i for i, k in enumerate(c)]) for c in forced + confs]
+        confs = self.get_independent_confs(confs)
+        curr = [f for f in forced]
+        for c in confs:
+            if self.check_independence(c, forced):
+                curr.append(c)
+
+        print("curr:")
+        for c in curr:
+            print(c)
+        idscurr = [sum([k*2**i for i, k in enumerate(c)]) for c in curr]
+        idscurr = [ids0.index(k) for k in idscurr]
+
         a = self.coefficient_matrix(curr, False)
+        ared = []
+        for q in a[:lenforced]:
+            ared.append(q)
+
         print("a=", a)
         u, sv, v = np.linalg.svd(a, full_matrices=False)
         v = None
@@ -405,9 +428,20 @@ class MagneticModel:
             u = u[:, :k]
         else:
             sv = sv[-1]
+            cost = np.sqrt(len(curr))/sv
 
-        weights = [(np.linalg.norm(r), i) for i, r in enumerate(u)]
+        weights = [(np.linalg.norm(r), i) for i, r in enumerate(u)
+                   if i >= lenforced]
         weights = sorted(weights, key=lambda x: -x[0])
+        print("idscurr=", idscurr)
+        print("weights: ")
+        for w in weights:
+            print(w)
+            # print(idscurr[w[1]], "->", w[0])
+        # Sorting the configurations by weights
+        curr = forced + [curr[w[1]] for w in weights]
+        # subblock of a without forced, sorted by weights
+        a = np.array([a[w[1]] for w in weights])
 
         if length is not None:
             lp = min(length, len(a))
@@ -416,9 +450,10 @@ class MagneticModel:
 
         # Look for the minimal subset that has the same information than
         # the original of length >= lp.
-        ared = []
+
         for i in range(lp):
-            ared.append(a[weights[i][1]])
+            ared.append(a[i])
+
         while lp < len(curr):
             sv = np.linalg.svd(np.array(ared),
                                full_matrices=False,
@@ -427,94 +462,99 @@ class MagneticModel:
             if sv > 1.e-6:
                 break
             else:
-                ared.append(a[weights[lp][1]])
+                ared.append(a[lp])
                 lp = lp + 1
         # If we are dealing with a set of configurations
         # with just partial info,
         # this is the best we can return.
         if partialinfo:
-            return (curr[:lp], np.Infinity)
+            print("Information is not complete." +
+                  "Picking the subset that provides the maximal information.")
+            return (curr[lenforced:lp+lenforced], np.Infinity)
         elif length is not None:
             eprint("------------ optimize_independent_set for fix length." +
                    " cost=", np.sqrt(lp) / sv)
-            return (curr[:lp], np.sqrt(lp) / sv)
+            return (curr[lenforced:lp+lenforced], np.sqrt(lp+lenforced) / sv)
         else:
             # If  l was not provided, and the set is informationally complete,
             # try to enlarge it to reduce the cost function
-            cost = np.sqrt(lp) / sv
-            while lp < len(curr):
-                nr = a[weights[lp][1]]
+            newcost = np.sqrt(lp + lenforced) / sv
+            while lp < len(a) and newcost > cost:
+                nr = a[lp]
                 sv = np.linalg.svd(np.array(ared + [nr]),
                                    full_matrices=False,
                                    compute_uv=False)[k-1]
-                newcost = np.sqrt(lp+1)/sv
+                newcost = np.sqrt(lp + lenforced + 1) / sv
+                ared.append(nr)
+                lp = lp + 1
+
+            cost = newcost
+            while lp < len(a):
+                nr = a[lp]
+                sv = np.linalg.svd(np.array(ared + [nr]),
+                                   full_matrices=False,
+                                   compute_uv=False)[k-1]
+                newcost = np.sqrt(lp + lenforced + 1)/sv
                 if newcost >= cost:
                     break
                 else:
                     cost = newcost
                     ared.append(nr)
                     lp = lp + 1
-            return (curr[:lp], cost)
+
+            return (curr[lenforced:lp+lenforced], cost)
 
     def find_optimal_configurations(self, start=None, num_new_confs=None,
                                     known=None, its=100, update_size=1):
+
+        if num_new_confs is None:
+            lmax = max(len(self.bond_lists) + 1, 1) + update_size
+        else:
+            lmax = max(num_new_confs, len(self.bond_lists) + 1, 1)
+
         if known is None:
             known = []
-        else:
-            known = self.get_independent_confs(known)
+
         eprint("--------------find_optimal_set ----------------")
-        eprint("known=", known)
-        if num_new_confs is None:
-            lmax = max(len(self.bond_lists) + 1, 1)
-        else:
-            lmax = max(num_new_confs + len(known), len(self.bond_lists) + 1, 1)
 
         if start is None:
             repres = self.generate_random_configurations(
                 max(update_size, lmax))
-            last_better = self.get_independent_confs(known +
-                                                     [q for q in repres])
+            last_better = self.get_independent_confs([q for q in repres])
         else:
-            last_better = self.get_independent_confs(known + start)
+            last_better = self.get_independent_confs(start)
 
         for i in range(its):
-            if len(last_better) >= lmax:
-                break
             repres = self.generate_random_configurations(update_size)
             last_better = self.get_independent_confs(last_better +
                                                      [q for q in repres])
-
-        last_better, cost = self.optimize_independent_set(last_better,
-                                                          num_new_confs)
+            last_better = [c for c in last_better
+                           if self.check_independence(c, known)]
+            if len(last_better) >= lmax:
+                break
 
         if len(last_better) < lmax:
-            eprint("find_optimal_configurations: can not find more " +
-                   "independent configurations. Working with this set.\n")
-        else:
-            for it in range(its):
-                repres = self.generate_random_configurations(update_size)
-                newconfs = self.get_independent_confs(known +
-                                                      last_better +
-                                                      [q for q in repres])
-                if num_new_confs is None:
-                    newconfs, newcost = self.optimize_independent_set(newconfs)
-                else:
-                    newconfs, newcost = self.optimize_independent_set(newconfs,
-                                                                      lmax)
-                if newcost < cost:
-                    last_better = newconfs
-                    cost = newcost
+            eprint("not enough configurations. Trying to optimize " +
+                   "the subset and return it.")
+            return self.optimize_independent_set(last_better,
+                                                 num_new_confs,
+                                                 forced=known)
 
-        if num_new_confs is not None and len(last_better) < num_new_confs:
-            eprint("find_optimal_configurations: can not find more " +
-                   "independent configurations. Working with this set.\n")
+        last_better, cost = self.optimize_independent_set(last_better,
+                                                          num_new_confs,
+                                                          forced=known)
+        for i in range(its):
+            repres = self.generate_random_configurations(update_size)
+            new_try = self.get_independent_confs(last_better +
+                                                 [q for q in repres])
+            new_try, newcost = self.optimize_independent_set(new_try,
+                                                             num_new_confs,
+                                                             forced=known)
+            if newcost < cost:
+                cost = newcost
+                last_better = new_try
 
-        # Remove the known configurations from the list
-        curr = []
-        for c in last_better:
-            if self.check_independence(c, known):
-                curr.append(c)
-        return curr, cost
+        return last_better, cost
 
     def compute_couplings(self, confs, energs, err_energs=.01,
                           printeqs=False, montecarlo=True,

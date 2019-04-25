@@ -323,6 +323,7 @@ class ImportConfigWindow(Toplevel):
             print(filename)
             if filename == "":
                 return
+            self.app.datafolder = str(Path(filename).parent)
             newmodel = magnetic_model_from_file(filename=filename)
             modellabel = filename
             self.models[filename] = newmodel
@@ -385,6 +386,7 @@ class ImportConfigWindow(Toplevel):
                                                    ("all files", "*.*")))
         if filename == "":
             return
+        self.app.datafolder = str(Path(filename).parent)
         self.inputconfs.delete(1.0, END)
         with open(filename, "r") as filecfg:
             self.inputconfs.insert(END, "\n" + filecfg.read())
@@ -610,13 +612,10 @@ class ApplicationGUI:
                      command=self.optimize_configs)
         btn.pack()
         btn2 = Button(controls2, text="Optimal Independent Set",
-                     command=self.optimal_independent_set)
-
+                      command=self.optimal_independent_set)
         btn2.pack()
         controls2.pack(side=TOP, fill=X)
 
-
-        
         controls3 = LabelFrame(controls, text="Format", padx=5, pady=5)
         row = Frame(controls3)
         lab = Label(row, width=12, text="Format", anchor="w")
@@ -728,7 +727,6 @@ class ApplicationGUI:
         self.parameters["page3"]["mcsizefactor"] = self.mcsizefactor
         framemethod.pack(side=TOP, fill=X)
         row.pack(side=TOP, fill=X)
-        
 
         row = Frame(controls1)
         lab = Label(row, width=14, text="Format", anchor="w")
@@ -850,6 +848,7 @@ class ApplicationGUI:
                                                    ("all files", "*.*")))
         if filename == "":
             return
+        self.datafolder = str(Path(filename).parent)
         self.model = magnetic_model_from_file(filename=filename)
         self.model.save_cif(self.tmpmodel.name)
         with open(filename, "r") as tmpf:
@@ -870,6 +869,7 @@ class ApplicationGUI:
                                                    ("all files", "*.*")))
         if filename == "":
             return
+        self.datafolder = str(Path(filename).parent)
         self.model = magnetic_model_from_file(filename=filename)
         self.model.save_cif(self.tmpmodel.name)
         self.statusbar.config(text="model loaded")
@@ -894,6 +894,7 @@ class ApplicationGUI:
             print("opening cancelled.")
             return
 
+        self.datafolder = str(Path(filename).parent)
         if clean:
             self.spinconfigs.delete(1.0, END)
 
@@ -908,7 +909,7 @@ class ApplicationGUI:
         print("... done")
 
     def save_model(self):
-        datafolder = os.getcwd()
+        datafolder = self.datafolder
         filename = fdlg.asksaveasfilename(initialdir=datafolder + "/",
                                           title="Select file",
                                           filetypes=(("cif files", "*.cif"),
@@ -918,19 +919,23 @@ class ApplicationGUI:
         print(filename.__repr__())
         if filename == "":
             return
+
+        self.datafolder = str(Path(filename).parent)
         with open(filename, "w") as tmpf:
             tmpf.write(self.modelcif.get(1.0, END))
         self.print_status(filename)
         self.statusbar.config(text="model saved.")
 
     def save_configs(self):
-        datafolder = os.getcwd()
+        datafolder = self.datafolder
         filename = fdlg.asksaveasfilename(initialdir=datafolder + "/",
                                           title="Select file",
                                           filetypes=(("spin files", "*.spin"),
                                                      ("all files", "*.*")))
         if filename == "":
             return
+
+        self.datafolder = str(Path(filename).parent)
         if self.nb.select() == self.nb.tabs()[2]:
             self.reload_configs(src_widget=self.spinconfigsenerg)
         else:
@@ -1091,14 +1096,13 @@ class ApplicationGUI:
 #             self.modelcif.delete("1.0", END)
 #             self.modelcif.insert(INSERT, modeltxt)
 
-
-
     def optimal_independent_set(self):
         if self.model is None:
             messagebox.showerror("Error", "Model was not loaded.\n")
             return
         if len(self.model.bond_lists) == 0:
-            self.print_status("Bonds must be defined before run optimization.")
+            self.print_status("Bonds must be defined before " +
+                              "run optimization.")
             return
         parms = self.parameters["page2"]
         n = int(parms['Number of configurations'].get())
@@ -1106,20 +1110,23 @@ class ApplicationGUI:
         us = max(int(parms["Bunch size"].get()), n)
         known = []
         self.reload_configs(src_widget=self.spinconfigs)
-        newconfs, cn = self.model.optimize_independent_set(self.configurations[1])
+        newconfs, cn = self.model.optimize_independent_set(
+            self.configurations[1])
 
-        fulllabels = [str(sum([k * 2**i for i, k in enumerate(c)])) for c in self.configurations[1]]
+        fulllabels = [str(sum([k * 2**i for i, k in enumerate(c)]))
+                      for c in self.configurations[1]]
         labels = [str(confindex(c)) for c in newconfs]
-        energs = [self.configurations[0][fulllabels.index(l)]  for l in labels] 
+        energs = [self.configurations[0][fulllabels.index(l)]
+                  for l in labels]
         # self.configs=([float("nan") for i in newconfs], newconfs, labels)
         eqformat = self.outputformat.get()
         self.spinconfigs.insert(END, "\n#  Subset of optimal configurations. ")
         self.spinconfigs.insert(END, "sqrt(l)/||A^-1|| " + str(cn) + ": \n")
         for idx, nc in enumerate(newconfs):
-            row = "# " + str(energs[idx]) + "\t" + str(nc) + "\t\t # " + labels[idx] + "\n"
+            row = "# " + str(energs[idx]) +
+            "\t" + str(nc) + "\t\t # " + labels[idx] + "\n"
             self.spinconfigs.insert(END, row)
         self.reload_configs(src_widget=self.spinconfigs)
-
 
     def optimize_configs(self):
         if self.model is None:
@@ -1140,7 +1147,6 @@ class ApplicationGUI:
                 start.append(c)
             else:
                 known.append(c)
-        
         newconfs, cn = self.model.find_optimal_configurations(
             num_new_confs=n,
             start=start,
@@ -1285,8 +1291,8 @@ class ApplicationGUI:
         # Inequations
         resparmtxt = resparmtxt + "\n\n region constraints:\n"
         ineqs = self.model.bound_inequalities(confs,
-                                             energs,
-                                             err_energs=tolerance)
+                                              energs,
+                                              err_energs=tolerance)
         for ineq in ineqs:
             txtineq = ""
             coeff = ineq[0]

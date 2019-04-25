@@ -149,6 +149,7 @@ class FindDialog(Toplevel):
         self.edt.tag_delete("search")
         self.edt.focus_set()
 
+
     def closewin(self, *arg):
         self.destroy()
 
@@ -157,7 +158,7 @@ class FindDialog(Toplevel):
         self.edt.tag_remove("sel", 1., END)
         self.edt.tag_delete("search")
         self.edt.tag_configure("search", background="green")
-        self.edt.tag_raise("sel")
+        
 
         targettxt = self.findstring.get()
         print("looking for " + targettxt)
@@ -215,7 +216,7 @@ class FindDialog(Toplevel):
         self.edt.tag_add("sel",
                          self.edt.tag_ranges("search")[2 * self.currmatch],
                          self.edt.tag_ranges("search")[2 * self.currmatch + 1])
-
+        
     def replace(self):
         if self.currmatch is None:
             messagebox.showinfo("Find", "There are no matches.")
@@ -285,6 +286,9 @@ class ImportConfigWindow(Toplevel):
         self.inputconfs = ScrolledText(controls2l, height=10, width=80,
                                        undo="True")
         self.inputconfs.pack()
+        self.inputconfs.tag_configure("sel",
+                                      background="black",
+                                      foreground="gray")
         buttons = Frame(controls2l)
         Button(buttons, text="Load Configuration from File",
                command=self.configs_from_file).pack(side=RIGHT)
@@ -298,7 +302,9 @@ class ImportConfigWindow(Toplevel):
         self.outputconfs = ScrolledText(controls2r, height=10, width=80)
         self.outputconfs.config(state=DISABLED)
         self.outputconfs.pack()
-
+        self.outputconfs.tag_configure("sel",
+                                      background="black",
+                                      foreground="gray")
         #  controls2r.pack(side=RIGHT, fill=Y)
         controls2.add(controls2r)
         #  controls2.pack(side=TOP, fill=X)
@@ -579,6 +585,9 @@ class ApplicationGUI:
         self.modelcif = ScrolledText(self.page1, width=150, undo="True")
         self.modelcif.bind("<FocusOut>", self.reload_model)
         self.modelcif.pack(side=RIGHT, fill=Y)
+        self.modelcif.tag_configure("sel",
+                                      background="black",
+                                      foreground="gray")
         self.modelcif.insert(END, quote)
         page1tools = Frame(self.page1)
         self.nb.add(self.page1, text="1. Define Model")
@@ -640,6 +649,9 @@ class ApplicationGUI:
         self.spinconfigs.bind("<FocusOut>",
                               self.reload_configs)
         self.spinconfigs.pack(side=LEFT, fill=Y)
+        self.spinconfigs.tag_configure("sel",
+                                      background="black",
+                                      foreground="gray")
         panels.add(frameconfs)
         self.spinconfigs.insert(END,
                                 "#  Spin configurations definition file\n" +
@@ -650,8 +662,12 @@ class ApplicationGUI:
         eqpanel = LabelFrame(results, text="Equations",
                              relief=SUNKEN, padx=5, pady=5)
         self.equationpanel = ScrolledText(eqpanel, width=20)
+        self.equationpanel.tag_configure("sel",
+                                      background="black",
+                                      foreground="gray")
         self.equationpanel.config(state=DISABLED)
         self.equationpanel.pack(side=TOP, fill=BOTH)
+        
         self.equationpanel.bind("<Button-1>",
                                 lambda ev: self.equationpanel.focus())
         eqpanel.pack(side=TOP, fill=BOTH)
@@ -750,6 +766,9 @@ class ApplicationGUI:
         self.spinconfigsenerg.bind("<FocusOut>", self.reload_configs)
         # self.spinconfigsenerg.pack(side=LEFT, fill=Y)
         panels.add(self.spinconfigsenerg)
+        self.spinconfigsenerg.tag_configure("sel",
+                                      background="black",
+                                      foreground="gray")
         self.spinconfigsenerg.insert(END,
                                      "# Spin configurations definition file" +
                                      "\n# Energy\t [config]\t\t" +
@@ -763,6 +782,9 @@ class ApplicationGUI:
         self.equationpanel2 = ScrolledText(eqpanel, state=DISABLED,
                                            height=10, width=200)
         self.equationpanel2.pack(side=LEFT, fill=BOTH, expand=1)
+        self.equationpanel2.tag_configure("sel",
+                                      background="black",
+                                      foreground="gray")
         self.equationpanel2.bind("<Button-1>",
                                  lambda ev: self.equationpanel2.focus())
 
@@ -774,6 +796,9 @@ class ApplicationGUI:
         self.resparam = ScrolledText(respanel, state=DISABLED,
                                      height=10, width=80)
         self.resparam.pack(fill=BOTH, expand=1)
+        self.resparam.tag_configure("sel",
+                                      background="black",
+                                      foreground="gray")
         self.resparam.bind("<Button-1>",
                            lambda ev: self.resparam.focus())
         panelsr.add(respanel)
@@ -787,6 +812,9 @@ class ApplicationGUI:
         self.plotbutton.pack(side=TOP)
         self.chis = ScrolledText(chipanel, state=DISABLED, height=10)
         self.chis.pack(side=LEFT, fill=BOTH)
+        self.chis.tag_configure("sel",
+                                      background="black",
+                                      foreground="gray")
         self.chis.bind("<Button-1>",
                        lambda ev: self.chis.focus())
 
@@ -1123,7 +1151,7 @@ class ApplicationGUI:
         self.spinconfigs.insert(END, "\n#  Subset of optimal configurations. ")
         self.spinconfigs.insert(END, "sqrt(l)/||A^-1|| " + str(cn) + ": \n")
         for idx, nc in enumerate(newconfs):
-            row = "# " + str(energs[idx]) +
+            row = "# " + str(energs[idx]) + \
             "\t" + str(nc) + "\t\t # " + labels[idx] + "\n"
             self.spinconfigs.insert(END, row)
         self.reload_configs(src_widget=self.spinconfigs)

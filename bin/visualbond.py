@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 from tkinter import *
+from tkinter import Tk, font
 from tkinter import ttk
 from tkinter import filedialog as fdlg
 from tkinter.scrolledtext import ScrolledText
 from tkinter import messagebox
+
 
 #  from tkmessagebox import *
 import os
@@ -495,13 +497,40 @@ class ImportConfigWindow(Toplevel):
 
 class ApplicationGUI:
     def __init__(self):
-        sys.stdout = self
-        sys.stderr = self
+        # sys.stdout = self
+        # sys.stderr = self
+
         self.application_title = "Visualbond 0.1"
         self.model = None
         self.configurations = ([], [], [])
         self.chisvals = None
         self.root = Tk()
+        print(ttk.Style().theme_use("classic"))
+        # Creating a Font object of "TkDefaultFont"
+        self.defaultFont = font.nametofont("TkDefaultFont")
+        self.textFont  = font.nametofont("TkTextFont")
+        self.fixedFont  = font.nametofont("TkFixedFont")
+  
+        # Overriding default-font with custom settings
+        # i.e changing font-family, size and weight
+        self.defaultFont.configure(family="Arial",
+                                   size=12,
+                                   weight=font.BOLD
+        )
+        # Overriding default-font with custom settings
+        # i.e changing font-family, size and weight
+        self.fixedFont.configure(family="Courier",
+                                   size=12,
+        #                           weight=font.BOLD
+        )
+        # Overriding default-font with custom settings
+        # i.e changing font-family, size and weight
+        self.textFont.configure(family="Arial",
+                                   size=10,
+        #                           weight=font.BOLD
+        )
+        
+        
         self.logo = PhotoImage(file=logofilename)
         self.vcmdi = (
             self.root.register(validate_pinteger),

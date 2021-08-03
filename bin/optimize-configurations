@@ -2,42 +2,71 @@
 
 import argparse
 
-from spectrojotometer.magnetic_model import MagneticModel 
-from spectrojotometer.model_io import magnetic_model_from_file, read_spin_configurations_file, confindex
+from spectrojotometer.magnetic_model import MagneticModel
+from spectrojotometer.model_io import (
+    magnetic_model_from_file,
+    read_spin_configurations_file,
+    confindex,
+)
 from spectrojotometer.tools import eprint
 
 
-    
-
 def main():
-    parser = argparse.ArgumentParser(description='Generate spin configurations to determine the coupling constants of a model with minimal condition number')
-    
-    parser.add_argument('modelfile', metavar='modelfile', type=str, 
-                       help='load atomic positions from a cif file')
+    parser = argparse.ArgumentParser(
+        description="Generate spin configurations to determine the coupling constants of a model with minimal condition number"
+    )
 
-    parser.add_argument('--known', metavar='[known configuration file]', type=str, 
-                       help='file with the set of configurations that we want to increase ')
+    parser.add_argument(
+        "modelfile",
+        metavar="modelfile",
+        type=str,
+        help="load atomic positions from a cif file",
+    )
 
-    parser.add_argument('--start', metavar='[start file]', type=str, 
-                       help='A file containing an initial guess for the target configurations.')
+    parser.add_argument(
+        "--known",
+        metavar="[known configuration file]",
+        type=str,
+        help="file with the set of configurations that we want to increase ",
+    )
 
-    parser.add_argument('-n', metavar='numconfs', type=int,
-                        default=1,
-                       help='number of new configurations to be generated')
-    parser.add_argument('-u', metavar='updatesize', type=int,
-                        default=10,
-                       help='number of random configurations to be generate on each step')
-    parser.add_argument('--it', metavar='iterations', type=int,
-                        default=100,
-                       help='number of iterations')
-    parser.add_argument('out', metavar='outfile', type=str,
-                        help='Name of the outputfile. If "-" is provided, the output is printed to the standard output.')
+    parser.add_argument(
+        "--start",
+        metavar="[start file]",
+        type=str,
+        help="A file containing an initial guess for the target configurations.",
+    )
 
+    parser.add_argument(
+        "-n",
+        metavar="numconfs",
+        type=int,
+        default=1,
+        help="number of new configurations to be generated",
+    )
+    parser.add_argument(
+        "-u",
+        metavar="updatesize",
+        type=int,
+        default=10,
+        help="number of random configurations to be generate on each step",
+    )
+    parser.add_argument(
+        "--it", metavar="iterations", type=int, default=100, help="number of iterations"
+    )
+    parser.add_argument(
+        "out",
+        metavar="outfile",
+        type=str,
+        help='Name of the outputfile. If "-" is provided, the output is printed to the standard output.',
+    )
 
     args = vars(parser.parse_args())
-    
+
     if args["modelfile"] is None:
-        print("A model file is required. You should provide it by means of the parameter --modelfile")
+        print(
+            "A model file is required. You should provide it by means of the parameter --modelfile"
+        )
         return -1
     model = magnetic_model_from_file(args["modelfile"])
     if model.bond_lists is None or len(model.bond_lists) == 0:
@@ -46,7 +75,9 @@ def main():
         return -1
 
     if args["known"] is not None:
-        knownenergies, knownconfs,knowncomments = read_spin_configurations_file(args["known"],model)
+        knownenergies, knownconfs, knowncomments = read_spin_configurations_file(
+            args["known"], model
+        )
     else:
         knownconfs = None
 
@@ -54,49 +85,58 @@ def main():
         for i in range(len(knownconfs)):
             if knowncomments[i] == "":
                 knowncomments[i] = str(confindex(knownconfs[i]))
-    
-    
+
     if args["start"] is not None:
-        starten,startconfs,startcomm = read_spin_configurations_file(args["start"],model)
+        starten, startconfs, startcomm = read_spin_configurations_file(
+            args["start"], model
+        )
     else:
         startconfs = None
-        
-    cn,newconfs=model.find_optimal_configurations(num_new_confs=args["n"],
-                                                  start=startconfs,
-                                                  known=knownconfs,
-                                                  its=args["it"], update_size=max(args["n"],args["u"]))
+
+    cn, newconfs = model.find_optimal_configurations(
+        num_new_confs=args["n"],
+        start=startconfs,
+        known=knownconfs,
+        its=args["it"],
+        update_size=max(args["n"], args["u"]),
+    )
     newconflabels = [str(confindex(c)) for c in newconfs]
     # Store the resume file
-    with open(args["modelfile"][:-4]+"-resume.tmp","w") as of:
+    with open(args["modelfile"][:-4] + "-resume.tmp", "w") as of:
         for idx, nc in enumerate(newconfs):
-            of.write("NAN\t"+str(nc) + "\t\t #" + newconflabels[idx] +"\n")
-        
-    # 
+            of.write("NAN\t" + str(nc) + "\t\t #" + newconflabels[idx] + "\n")
+
+    #
     if args["out"] == "-":
-        print("#  Condition number: " + str(cn) +"\n\n")
+        print("#  Condition number: " + str(cn) + "\n\n")
         print("# The optimal configurations found are\n")
-        for idx, nc in enumerate(newconfs) :
+        for idx, nc in enumerate(newconfs):
             print("NAN\t", str(nc) + "\t\t #" + newconflabels[idx])
-        
-        if len(knownconfs)>0:
+
+        if len(knownconfs) > 0:
             print("\n# Together with the known configurations\n")
             for idx, kc in enumerate(knownconfs):
-                print(knownenergies[idx],"\t", str(kc) + "\t\t #" + knowncomments[idx])
+                print(knownenergies[idx], "\t", str(kc) + "\t\t #" + knowncomments[idx])
 
     else:
-        with open(args["out"],"w") as of:
-            of.write("#  condition number: " + str(cn) +"\n\n")
+        with open(args["out"], "w") as of:
+            of.write("#  condition number: " + str(cn) + "\n\n")
             for idx, nc in enumerate(newconfs):
-                of.write("NAN\t" + str(nc) + "\t\t #" + newconflabels[idx] +"\n")
-            if knownconfs is not None and len(knownconfs)>0:
+                of.write("NAN\t" + str(nc) + "\t\t #" + newconflabels[idx] + "\n")
+            if knownconfs is not None and len(knownconfs) > 0:
                 of.write("\n# Together with the known configurations\n\n")
                 for idx, kc in enumerate(knownconfs):
-                    of.write(str(knownenergies[idx]) +"\t" + str(kc) + "\t\t #" +  knowncomments[idx] +"\n")
+                    of.write(
+                        str(knownenergies[idx])
+                        + "\t"
+                        + str(kc)
+                        + "\t\t #"
+                        + knowncomments[idx]
+                        + "\n"
+                    )
 
-    return(0)
-
+    return 0
 
 
 if __name__ == "__main__":
     main()
-

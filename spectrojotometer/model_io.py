@@ -36,9 +36,13 @@ def unpack_symmetry_and_offset(r):
 
 def find_atom_offset_by_symmetry(p, symop, magnetic_positions):
     sp = symop[0].dot(p) + symop[1]
-    j = sorted([(k, np.linalg.norm((q - sp + .5) % 1 - .5))
-                for k, q in enumerate(magnetic_positions)],
-               key=lambda u: u[1])[0][0]
+    j = sorted(
+        [
+            (k, np.linalg.norm((q - sp + 0.5) % 1 - 0.5))
+            for k, q in enumerate(magnetic_positions)
+        ],
+        key=lambda u: u[1],
+    )[0][0]
     offset = np.array(sp - magnetic_positions[j], dtype=int)
     return j, offset
 
@@ -52,10 +56,9 @@ def normalize_bond(i, j, offset):
             offset = -offset
         elif offset[2] == 0:
             if offset[1] < 0:
-                offset = - offset
-            elif offset[1] == 0 and \
-                 offset[0] < 0:
-                offset = - offset
+                offset = -offset
+            elif offset[1] == 0 and offset[0] < 0:
+                offset = -offset
     return i, j, pack_offset(offset)
 
 
@@ -78,11 +81,11 @@ def parse_symmetry(strsymm):
         terms = [term.strip() for term in terms]
         trow = [0, 0, 0, 0]
         for term in terms:
-            if term[-1] == 'x':
+            if term[-1] == "x":
                 trow[0] = term[:-1]
-            elif term[-1] == 'y':
+            elif term[-1] == "y":
                 trow[1] = term[:-1]
-            elif term[-1] == 'z':
+            elif term[-1] == "z":
                 trow[2] = term[:-1]
             else:
                 trow[3] = term
@@ -99,7 +102,7 @@ def parse_symmetry(strsymm):
             if len(factors) == 1:
                 trow[i] = float(factors[0].strip())
             else:
-                trow[i] = float(factors[0].strip())/float(factors[1].strip())
+                trow[i] = float(factors[0].strip()) / float(factors[1].strip())
         trows.append(trow)
     w = np.array(trows)
     offset = w[:, -1]
@@ -107,18 +110,15 @@ def parse_symmetry(strsymm):
     return w, offset
 
 
-def magnetic_model_from_file(filename,
-                             magnetic_atoms=["Mn", "Fe", "Co",
-                                             "Ni", "Dy", "Tb",
-                                             "Eu", "Cu", "V", "Ti", "Cr"],
-                             bond_names=None):
+def magnetic_model_from_file(
+    filename,
+    magnetic_atoms=["Mn", "Fe", "Co", "Ni", "Dy", "Tb", "Eu", "Cu", "V", "Ti", "Cr"],
+    bond_names=None,
+):
     if filename[-4:] == ".cif" or filename[-4:] == ".CIF":
-        return magnetic_model_from_cif(
-            filename, magnetic_atoms, bond_names)
+        return magnetic_model_from_cif(filename, magnetic_atoms, bond_names)
     if filename[-7:] == ".struct" or filename[-7:] == ".STRUCT":
-        return magnetic_model_from_wk2_struct(
-            filename, magnetic_atoms,
-            bond_names)
+        return magnetic_model_from_wk2_struct(filename, magnetic_atoms, bond_names)
     eprint("unknown file format")
     return -1
 
@@ -165,9 +165,7 @@ def cif_read_loop_atoms(labels, entries, magnetic_atoms):
             for cc in (xcol, ycol, zcol):
                 entry[cc] = float(entry[cc].split("(", maxsplit=1)[0])
 
-            magnetic_positions.append(np.array([entry[xcol],
-                                                entry[ycol],
-                                                entry[zcol]]))
+            magnetic_positions.append(np.array([entry[xcol], entry[ycol], entry[zcol]]))
             magnetic_species.append(entry[tcol])
             if col_g != -1:
                 g_factors.append(entry[col_g])
@@ -179,8 +177,7 @@ def cif_read_loop_atoms(labels, entries, magnetic_atoms):
                 spin_repr.append(".")
             atomlabels[entry[labelcol]] = idxma
             idxma = idxma + 1
-    return atomlabels, magnetic_species, \
-        magnetic_positions, g_factors, spin_repr
+    return atomlabels, magnetic_species, magnetic_positions, g_factors, spin_repr
 
 
 def cif_read_loop_bonds(labels, entries, atomlabels):
@@ -212,18 +209,17 @@ def cif_read_loop_bonds(labels, entries, atomlabels):
         outbond1 = np.array([0, 0, 0])
         outbond2 = np.array([0, 0, 0])
         if sym1col != -1:
-            sym,  outbond1 = unpack_symmetry_and_offset(en[sym1col])
+            sym, outbond1 = unpack_symmetry_and_offset(en[sym1col])
             if sym != 0:
                 label1 = label1 + "_" + str(sym)
         if sym2col != -1:
-            sym,  outbond2 = unpack_symmetry_and_offset(en[sym2col])
+            sym, outbond2 = unpack_symmetry_and_offset(en[sym2col])
             if sym != 0:
                 label2 = label2 + "_" + str(sym)
-        if not(label1 in atomlabels and label2 in atomlabels):
+        if not (label1 in atomlabels and label2 in atomlabels):
             continue
         outbond = np.array(outbond2) - np.array(outbond1)
-        newbond = normalize_bond(atomlabels[label1],
-                                 atomlabels[label2], outbond)
+        newbond = normalize_bond(atomlabels[label1], atomlabels[label2], outbond)
         en[distcol] = en[distcol].split(sep="(", maxsplit=1)[0]
         if jlabelcol is None:
             if en[distcol] not in bond_distances:
@@ -241,16 +237,16 @@ def cif_read_loop_bonds(labels, entries, atomlabels):
                 bondlists.append([])
 
             bondlists[bond_labels[bondlabel]].append(newbond)
-    bond_labels = sorted([(bond_labels[la], la)
-                          for la in bond_labels],
-                         key=lambda x: x[0])
+    bond_labels = sorted(
+        [(bond_labels[la], la) for la in bond_labels], key=lambda x: x[0]
+    )
     bond_labels = [x[1] for x in bond_labels]
     return bond_labels, bond_distances, bondlists
 
 
-def generate_atoms_by_symmetries(symmetries, atomlabels, magnetic_species,
-                                 magnetic_positions,
-                                 g_factors, spin_repr):
+def generate_atoms_by_symmetries(
+    symmetries, atomlabels, magnetic_species, magnetic_positions, g_factors, spin_repr
+):
     if len(symmetries) > 1:
         magnetic_positions2 = []
         magnetic_species2 = []
@@ -260,11 +256,10 @@ def generate_atoms_by_symmetries(symmetries, atomlabels, magnetic_species,
         idxma = len(atomlabels)
         for s, sym in enumerate(symmetries):
             for i, r in enumerate(magnetic_positions):
-                newposition = sym[0].dot(r)+sym[1]
+                newposition = sym[0].dot(r) + sym[1]
                 already_in_list = False
                 for pos in magnetic_positions2:
-                    if np.linalg.norm(
-                            (newposition - pos + .5) % 1 - .5) < 1.e-3:
+                    if np.linalg.norm((newposition - pos + 0.5) % 1 - 0.5) < 1.0e-3:
                         already_in_list = True
                         break
                 if already_in_list:
@@ -273,65 +268,69 @@ def generate_atoms_by_symmetries(symmetries, atomlabels, magnetic_species,
                 magnetic_species2.append(magnetic_species[i])
                 g_factors2.append(g_factors[i])
                 spin_repr2.append(spin_repr[i])
-                atomlabel = [key for key, val in atomlabels.items()
-                             if val == i][0]
+                atomlabel = [key for key, val in atomlabels.items() if val == i][0]
                 if s > 0:
-                    atomlabel += "_" + str(s+1)
+                    atomlabel += "_" + str(s + 1)
                     atomlabels[atomlabel] = idxma
                     idxma = idxma + 1
         magnetic_positions = magnetic_positions2
         magnetic_species = magnetic_species2
         g_factors = g_factors2
         spin_repr = spin_repr2
-    return atomlabels, magnetic_species, magnetic_positions, \
-            g_factors, spin_repr
+    return atomlabels, magnetic_species, magnetic_positions, g_factors, spin_repr
 
 
 def read_bravais_vectors(bravais_params):
     bravais_vectors = []
-    if bravais_params.get('a') is not None:
-        bravais_vectors.append(np.array([bravais_params.get('a'), 0, 0]))
+    if bravais_params.get("a") is not None:
+        bravais_vectors.append(np.array([bravais_params.get("a"), 0, 0]))
 
-    if bravais_params.get('b') is not None:
-        gamma = bravais_params.get('gamma')
+    if bravais_params.get("b") is not None:
+        gamma = bravais_params.get("gamma")
         if gamma is None:
-            gamma = 3.1415926 * .5
+            gamma = 3.1415926 * 0.5
         bravais_vectors.append(
-            np.array([bravais_params.get('b')*np.cos(gamma),
-                      bravais_params.get('b') * np.sin(gamma), 0]))
+            np.array(
+                [
+                    bravais_params.get("b") * np.cos(gamma),
+                    bravais_params.get("b") * np.sin(gamma),
+                    0,
+                ]
+            )
+        )
 
-    if bravais_params.get('c') is not None:
-        alpha = bravais_params.get('alpha')
-        beta = bravais_params.get('beta')
+    if bravais_params.get("c") is not None:
+        alpha = bravais_params.get("alpha")
+        beta = bravais_params.get("beta")
         if alpha is None:
-            alpha = 3.1415926*.5
+            alpha = 3.1415926 * 0.5
         if beta is None:
-            beta = 3.1415926*.5
+            beta = 3.1415926 * 0.5
         x = np.cos(alpha)
         y = np.cos(beta) - x * np.cos(gamma)
-        y = y/np.sin(gamma)
-        z = bravais_params.get('c') * np.sqrt(1-x*x-y*y)
-        x = bravais_params.get('c') * x
-        y = bravais_params.get('c') * y
+        y = y / np.sin(gamma)
+        z = bravais_params.get("c") * np.sqrt(1 - x * x - y * y)
+        x = bravais_params.get("c") * x
+        y = bravais_params.get("c") * y
         bravais_vectors.append(np.array([x, y, z]))
     return bravais_vectors
 
 
-def generate_bonds_by_symmetries(symmetries,
-                                 bond_labels,
-                                 bonddistances,
-                                 bondlists,
-                                 magnetic_positions):
+def generate_bonds_by_symmetries(
+    symmetries, bond_labels, bonddistances, bondlists, magnetic_positions
+):
     for s in range(len(symmetries) - 1):
-        symop = symmetries[s+1]
+        symop = symmetries[s + 1]
         for bidx, blst in enumerate(bondlists):
             for bnd in blst:
                 i, j, offset = bnd
                 offset = unpack_offset(offset)
                 i, offseti = find_atom_offset_by_symmetry(
-                    magnetic_positions[i], symop, magnetic_positions)
+                    magnetic_positions[i], symop, magnetic_positions
+                )
                 j, offsetj = find_atom_offset_by_symmetry(
-                    magnetic_positions[j] + offset, symop, magnetic_positions)
+                    magnetic_positions[j] + offset, symop, magnetic_positions
+                )
                 if any(offseti != 0):
                     # The source must be inside the cell
                     i, offseti, j, offsetj = j, offsetj, i, offseti
@@ -348,10 +347,11 @@ def generate_bonds_by_symmetries(symmetries,
                     blst.append(newbond)
 
 
-def magnetic_model_from_cif(filename,
-                            magnetic_atoms=["Mn", "Fe", "Co", "Ni",
-                                            "Dy", "Tb", "Eu", "Cu", "V"],
-                            bond_names=None):
+def magnetic_model_from_cif(
+    filename,
+    magnetic_atoms=["Mn", "Fe", "Co", "Ni", "Dy", "Tb", "Eu", "Cu", "V"],
+    bond_names=None,
+):
     bravais_params = {}
     magnetic_positions = None
     bravais_vectors = None
@@ -368,30 +368,30 @@ def magnetic_model_from_cif(filename,
     with open(filename, "r") as src:
         for line in src:
             listrip = line.strip()
-            if listrip[:13] == '_cell_length_':
+            if listrip[:13] == "_cell_length_":
                 varvals = listrip[13:].split()
                 varvals[1] = varvals[1].split(sep="(", maxsplit=1)[0]
                 bravais_params[varvals[0]] = float(varvals[1])
-            elif listrip[:12] == '_cell_angle_':
+            elif listrip[:12] == "_cell_angle_":
                 varvals = line[12:].strip().split()
                 varvals[1] = varvals[1].split(sep="(", maxsplit=1)[0]
-                bravais_params[varvals[0]] = float(varvals[1]) * 3.1415926/180.
-            elif listrip[:5] == 'loop_':
+                bravais_params[varvals[0]] = float(varvals[1]) * 3.1415926 / 180.0
+            elif listrip[:5] == "loop_":
                 labels = []
                 entries = []
                 ls = src.readline()
                 listrip = ls.strip()
-                if listrip == '':
+                if listrip == "":
                     break
                 if listrip != "" and line[0] == "#":
                     continue
-                while listrip[0] == '_' or listrip[0] == '#':
+                while listrip[0] == "_" or listrip[0] == "#":
                     if listrip != "" and line[0] == "#":
                         continue
                     labels.append(listrip.split()[0])
                     line = src.readline()
                     listrip = line.strip()
-                while listrip != '':
+                while listrip != "":
                     newentry = listrip.strip()
                     if newentry[0] in ('"', "'"):
                         newentry = [newentry[1:-1]]
@@ -402,36 +402,51 @@ def magnetic_model_from_cif(filename,
                     listrip = ls.strip()
 
                 # if the block contains symmetries
-                if '_symmetry_equiv_pos_as_xyz' in labels or \
-                '_space_group_symop_operation_xyz' in labels:
+                if (
+                    "_symmetry_equiv_pos_as_xyz" in labels
+                    or "_space_group_symop_operation_xyz" in labels
+                ):
                     symmetries = cif_read_loop_symmetries(labels, entries)
 
                 # if the block contains the set of atoms
-                if '_atom_site_fract_x' in labels:
-                    atomlabels, magnetic_species, magnetic_positions, \
-                    g_lande_factors, spin_repr = cif_read_loop_atoms(
-                        labels, entries, magnetic_atoms)
-                    atomlabels, magnetic_species, magnetic_positions, \
-                    g_lande_factors, spin_repr = generate_atoms_by_symmetries(
+                if "_atom_site_fract_x" in labels:
+                    (
+                        atomlabels,
+                        magnetic_species,
+                        magnetic_positions,
+                        g_lande_factors,
+                        spin_repr,
+                    ) = cif_read_loop_atoms(labels, entries, magnetic_atoms)
+                    (
+                        atomlabels,
+                        magnetic_species,
+                        magnetic_positions,
+                        g_lande_factors,
+                        spin_repr,
+                    ) = generate_atoms_by_symmetries(
                         symmetries,
                         atomlabels,
                         magnetic_species,
                         magnetic_positions,
-                        g_lande_factors, spin_repr)
+                        g_lande_factors,
+                        spin_repr,
+                    )
 
                 # If the block contains the set of bonds
-                if '_geom_bond_atom_site_label_1' in labels:
+                if "_geom_bond_atom_site_label_1" in labels:
                     bond_labels, bond_distances, bondlists = cif_read_loop_bonds(
-                        labels, entries, atomlabels)
-                    generate_bonds_by_symmetries(symmetries,
-                                                 bond_labels,
-                                                 bond_distances,
-                                                 bondlists,
-                                                 magnetic_positions)
+                        labels, entries, atomlabels
+                    )
+                    generate_bonds_by_symmetries(
+                        symmetries,
+                        bond_labels,
+                        bond_distances,
+                        bondlists,
+                        magnetic_positions,
+                    )
 
     bravais_vectors = read_bravais_vectors(bravais_params)
-    magnetic_positions = np.array(magnetic_positions).dot(
-        np.array(bravais_vectors))
+    magnetic_positions = np.array(magnetic_positions).dot(np.array(bravais_vectors))
     print("    magnetic species: ", magnetic_species)
     print("    spin representation: ", spin_repr)
     print("    lande factor: ", g_lande_factors)
@@ -439,21 +454,24 @@ def magnetic_model_from_cif(filename,
     print("    bondlabels", bond_labels)
     print("    bondlists", bondlists)
 
-    model = MagneticModel(magnetic_positions, bravais_vectors,
-                          bond_lists=bondlists,
-                          bond_names=bond_labels,
-                          magnetic_species=magnetic_species,
-                          g_lande_factors=g_lande_factors,
-                          spin_repr=spin_repr)
+    model = MagneticModel(
+        magnetic_positions,
+        bravais_vectors,
+        bond_lists=bondlists,
+        bond_names=bond_labels,
+        magnetic_species=magnetic_species,
+        g_lande_factors=g_lande_factors,
+        spin_repr=spin_repr,
+    )
     model.bond_distances = [float(d) for d in bond_distances]
     return model
 
 
-def magnetic_model_from_wk2_struct(filename,
-                                   magnetic_atoms=["Mn", "Fe", "Co",
-                                                   "Ni", "Dy", "Tb",
-                                                   "Eu", "V"],
-                                   bond_names=None):
+def magnetic_model_from_wk2_struct(
+    filename,
+    magnetic_atoms=["Mn", "Fe", "Co", "Ni", "Dy", "Tb", "Eu", "V"],
+    bond_names=None,
+):
     bravais_params = {}
     magnetic_positions = []
     bravais_vectors = None
@@ -466,8 +484,8 @@ def magnetic_model_from_wk2_struct(filename,
 
     with open(filename) as fin:
         title = fin.readline()
-        fin.readline()         # size
-        fin.readline()         # not any clue
+        fin.readline()  # size
+        fin.readline()  # not any clue
         bravais = fin.readline()
         for l in fin:
             sl = l.strip()
@@ -483,17 +501,21 @@ def magnetic_model_from_wk2_struct(filename,
                     sl = "".join(sl)
                 fields = sl.split()
                 idxatom = fields[0][4:-1]
-                positions.append([float(fields[1][3:]),
-                                  float(fields[2][3:]),
-                                  float(fields[3][3:])])
+                positions.append(
+                    [float(fields[1][3:]), float(fields[2][3:]), float(fields[3][3:])]
+                )
                 mult = int(fin.readline().strip().split()[1])
                 mult = mult - 1
                 for k in range(mult):
                     sl = fin.readline()
                     fields = sl.split()
-                    positions.append([float(fields[1][3:]),
-                                      float(fields[2][3:]),
-                                      float(fields[2][3:])])
+                    positions.append(
+                        [
+                            float(fields[1][3:]),
+                            float(fields[2][3:]),
+                            float(fields[2][3:]),
+                        ]
+                    )
 
                 atomlabelfield = fin.readline().strip()
                 if atomlabelfield[1] == " ":
@@ -501,7 +523,7 @@ def magnetic_model_from_wk2_struct(filename,
                 else:
                     atomspecies = atomlabelfield[:2]
                 atomlabel = atomspecies + idxatom
-                lrm = fin.readline()              # Rotation matrix
+                lrm = fin.readline()  # Rotation matrix
                 lrm = lrm + fin.readline()
                 lrm = lrm + fin.readline()
 
@@ -515,51 +537,58 @@ def magnetic_model_from_wk2_struct(filename,
         bravais_params["a"] = float(bravais_fields[0])
         bravais_params["b"] = float(bravais_fields[1])
         bravais_params["c"] = float(bravais_fields[2])
-        bravais_params["alpha"] = float(bravais_fields[3]) * 3.1415926/180
-        bravais_params["beta"] = float(bravais_fields[4]) * 3.1415926/180
-        bravais_params["gamma"] = float(bravais_fields[5]) * 3.1415926/180
+        bravais_params["alpha"] = float(bravais_fields[3]) * 3.1415926 / 180
+        bravais_params["beta"] = float(bravais_fields[4]) * 3.1415926 / 180
+        bravais_params["gamma"] = float(bravais_fields[5]) * 3.1415926 / 180
 
         bravais_vectors = []
-        if bravais_params.get('a') is not None:
-            bravais_vectors.append(np.array([bravais_params.get('a'), 0, 0]))
+        if bravais_params.get("a") is not None:
+            bravais_vectors.append(np.array([bravais_params.get("a"), 0, 0]))
 
-        if bravais_params.get('b') is not None:
-            gamma = bravais_params.get('gamma')
+        if bravais_params.get("b") is not None:
+            gamma = bravais_params.get("gamma")
             if gamma is None:
-                gamma = 3.1415926*.5
-            bravais_vectors.append(np.array([bravais_params.get('b') *
-                                             np.cos(gamma),
-                                             bravais_params.get('b') *
-                                             np.sin(gamma), 0]))
+                gamma = 3.1415926 * 0.5
+            bravais_vectors.append(
+                np.array(
+                    [
+                        bravais_params.get("b") * np.cos(gamma),
+                        bravais_params.get("b") * np.sin(gamma),
+                        0,
+                    ]
+                )
+            )
 
-        if bravais_params.get('c') is not None:
-            alpha = bravais_params.get('alpha')
-            beta = bravais_params.get('beta')
+        if bravais_params.get("c") is not None:
+            alpha = bravais_params.get("alpha")
+            beta = bravais_params.get("beta")
             if alpha is None:
-                alpha = 3.1415926*.5
+                alpha = 3.1415926 * 0.5
             if beta is None:
-                beta = 3.1415926*.5
+                beta = 3.1415926 * 0.5
             x = np.cos(alpha)
             y = np.cos(beta) - x * np.cos(gamma)
-            y = y/np.sin(gamma)
-            z = bravais_params.get('c') * np.sqrt(1-x*x-y*y)
-            x = bravais_params.get('c') * x
-            y = bravais_params.get('c') * y
+            y = y / np.sin(gamma)
+            z = bravais_params.get("c") * np.sqrt(1 - x * x - y * y)
+            x = bravais_params.get("c") * x
+            y = bravais_params.get("c") * y
             bravais_vectors.append(np.array([x, y, z]))
 
-    magnetic_positions = np.array(magnetic_positions).dot(
-        np.array(bravais_vectors))
-    model = MagneticModel(magnetic_positions, bravais_vectors,
-                          bond_lists=None,
-                          bond_names=None,
-                          magnetic_species=magnetic_species,
-                          model_label=title)
+    magnetic_positions = np.array(magnetic_positions).dot(np.array(bravais_vectors))
+    model = MagneticModel(
+        magnetic_positions,
+        bravais_vectors,
+        bond_lists=None,
+        bond_names=None,
+        magnetic_species=magnetic_species,
+        model_label=title,
+    )
     model.bond_distances = [float(d) for d in bond_distances]
     return model
 
 
 def confindex(c):
-    return sum([i*2**n for n, i in enumerate(c)])
+    return sum([i * 2 ** n for n, i in enumerate(c)])
 
 
 def read_spin_configurations_file(filename, model):
@@ -578,7 +607,7 @@ def read_spin_configurations_file(filename, model):
             comment = ""
             for pos, c in enumerate(ls):
                 if c == "#":
-                    comment = ls[(pos+1):]
+                    comment = ls[(pos + 1) :]
                     break
                 elif c == "0":
                     newconf.append(0)

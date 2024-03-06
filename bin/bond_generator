@@ -1,8 +1,8 @@
 #!/opt/anaconda/bin/python3
 from __future__ import print_function
 
-
 import argparse
+
 from spectrojotometer.magnetic_model import MagneticModel
 from spectrojotometer.model_io import magnetic_model_from_file
 from spectrojotometer.tools import eprint

@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 
 from __future__ import print_function
-import sys
 
 import argparse
+import sys
 
 from spectrojotometer.magnetic_model import MagneticModel
-from spectrojotometer.model_io import (
-    magnetic_model_from_file,
-    read_spin_configurations_file,
-)
+from spectrojotometer.model_io import (magnetic_model_from_file,
+                                       read_spin_configurations_file)
 from spectrojotometer.tools import eprint
 
 

@@ -1,13 +1,14 @@
 # coding: utf-8
+"""
+Magnetic Model class
+"""
 
-
-from __future__ import print_function
-import sys
-
+import logging
 import numpy as np
 import numpy.linalg as la
 import numpy.random as rnd
-from .tools import *
+
+from .tools import box_ellipse, offset_orientation, pack_offset
 
 # import matplotlib.pyplot as plt
 # from mpl_toolkits.mplot3d import Axes3
@@ -16,7 +17,80 @@ from .tools import *
 # ******************************************************************************
 
 
+SYMBOLS = {
+    "plain": {
+        "times_symbol": "*",
+        "equal_symbol": "=",
+        "open_comment": "# ",
+        "close_comment": "",
+        "sub_symb": "_",
+    },
+    "wolfram": {
+        "times_symbol": "*",
+        "equal_symbol": "==",
+        "open_comment": "(* ",
+        "close_comment": " *)",
+        "sub_symb": "",
+    },
+    "latex": {
+        "times_symbol": "",
+        "equal_symbol": "=",
+        "open_comment": "% ",
+        "close_comment": "",
+        "sub_symb": "_",
+    },
+}
+
+
+def supercell_iterator(supercell_size, coord_atomos, bravais_vectors):
+    """Iterator over subcells in the supercell."""
+
+    # Basis vectors must be np.arrays.
+    bravais_vectors = [np.array(vector) for vector in bravais_vectors]
+
+    # If no bravais_vectors , the supercell is just the cell.
+    if len(bravais_vectors) == 0:
+        yield ([], coord_atomos)
+        return
+
+    current = [-supercell_size] * len(bravais_vectors)
+    max_indx = len(current)
+    while True:
+        offset = sum(coeff * v_b for coeff, v_b in zip(current, bravais_vectors))
+        yield (current, [site + offset for site in coord_atomos])
+        # Update the indices of the supercell
+        indx = 0
+        # Moves the position to the next replica.
+        while True:
+            if indx == max_indx:
+                return
+            sub_idx = current[indx] + 1
+            if sub_idx <= supercell_size:
+                current[indx] = sub_idx
+                break
+            current[indx] = -supercell_size
+            indx = indx + 1
+
+
+def build_supercell(supercell_size, coord_atomos, bravais_vectors):
+    """Build a list of offsets for the supercell"""
+
+    return np.array(
+        [
+            cell[1]
+            for cell in supercell_iterator(
+                supercell_size, coord_atomos, bravais_vectors
+            )
+        ]
+    )
+
+
 class MagneticModel:
+    """
+    MagneticModel represents a set of magnetic atoms
+    bound by pairwise Heisenberg-like interactions.
+    """
+
     def __init__(
         self,
         atomic_pos,
@@ -24,7 +98,7 @@ class MagneticModel:
         bond_lists=None,
         bond_names=None,
         ranges=None,
-        supercell_size=2,
+        supercell_size=1,
         discretization=0.02,
         magnetic_species=None,
         onfly=True,
@@ -33,124 +107,82 @@ class MagneticModel:
         spin_repr=None,
     ):
         self.model_label = model_label
-        self.cell_size = len(atomic_pos)
-        self.supercell_size = supercell_size
-        self.coord_atomos = atomic_pos
-        self.bravais_vectors = bravais_lat
         self.onfly = onfly
-        self.g_lande_factors = g_lande_factors
-        self.spin_repr = spin_repr
 
+        print("supercell size:", supercell_size)
+        supercell_size = min(4, supercell_size)
+
+        print("atomic_pos", atomic_pos)
         if magnetic_species is None:
-            self.magnetic_species = ["X" for i in atomic_pos]
-        else:
-            self.magnetic_species = []
-            self.magnetic_species[:] = magnetic_species
+            magnetic_species = ["X"] * len(atomic_pos)
+
+        print("magnetic_species", magnetic_species)
 
         if g_lande_factors is None:
-            self.g_lande_factors = [2.0 for i in self.magnetic_species]
+            g_lande_factors = [2.0] * len(magnetic_species)
         else:
-            for i, g in enumerate(self.g_lande_factors):
-                if g == ".":
-                    self.g_lande_factors[i] = 2.0
+            for indx, g_str in enumerate(g_lande_factors):
+                g_lande_factors[indx] = 2.0 if g_str == "." else float(g_str)
 
         if spin_repr is None:
-            self.spin_repr = [0.5 for i in self.magnetic_species]
+            spin_repr = [0.5 for i in magnetic_species]
         else:
-            for i, g in enumerate(self.spin_repr):
-                if g == ".":
-                    self.spin_repr[i] = 0.5
-
-        if len(bravais_lat) == 1:
-            self.supercell = np.array(
-                [
-                    [site[idx] + i * self.bravais_vectors[0][idx] for idx in range(3)]
-                    for i in range(-supercell_size, supercell_size + 1)
-                    for site in self.coord_atomos
-                ]
-            )
-
-        elif len(bravais_lat) == 2:
-            self.supercell = np.array(
-                [
-                    [
-                        site[idx]
-                        + i * self.bravais_vectors[0][idx]
-                        + j * self.bravais_vectors[1][idx]
-                        for idx in range(3)
-                    ]
-                    for i in range(-supercell_size, supercell_size + 1)
-                    for j in range(-supercell_size, supercell_size + 1)
-                    for site in self.coord_atomos
-                ]
-            )
-        elif len(bravais_lat) == 3:
-            self.supercell = np.array(
-                [
-                    [
-                        site[idx]
-                        + i * self.bravais_vectors[0][idx]
-                        + j * self.bravais_vectors[1][idx]
-                        + k * self.bravais_vectors[2][idx]
-                        for idx in range(3)
-                    ]
-                    for i in range(-supercell_size, supercell_size + 1)
-                    for j in range(-supercell_size, supercell_size + 1)
-                    for k in range(-supercell_size, supercell_size + 1)
-                    for site in self.coord_atomos
-                ]
-            )
-        else:
-            self.supercell = self.coord_atomos
+            for indx, s_max in enumerate(spin_repr):
+                spin_repr[indx] = 0.5 if s_max == "." else float(s_max)
 
         if ranges is None:
             maxdist = 0
-            for p in self.coord_atomos:
-                for q in self.coord_atomos:
-                    d = np.linalg.norm(p - q)
-                    if d > maxdist:
-                        maxdist = d
-            ranges = [[0, d]]
-        elif type(ranges) is float:
+            for p_vec in atomic_pos:
+                for q_vec in atomic_pos:
+                    dist = np.linalg.norm(p_vec - q_vec)
+                    if dist > maxdist:
+                        maxdist = dist
+            ranges = [[0, dist]]
+        elif isinstance(ranges, float):
             ranges = [[0, ranges]]
-        elif type(ranges) is list and type(ranges[0]) is float:
+        elif isinstance(ranges, list) and isinstance(ranges[0], float):
             ranges = [ranges]
 
         if bond_lists is not None:
-            self.bond_lists = bond_lists
-            bond_distances = [0 for i in bond_lists]
-            if bond_names is not None:
-                self.bond_names = bond_names
-            else:
-                self.bond_names = ["J" + str(i) for i in range(len(self.bond_lists))]
+            print("recibí", len(bond_lists), "couplings")
+            bond_distances = [0] * len(bond_lists)
+            if bond_names is None:
+                bond_names = ["J" + str(i) for i in range(len(bond_lists))]
         else:
-            self.bond_names = []
+            bond_names = []
             if bond_names is not None:
-                self.bond_names[:] = bond_names
-            self.bond_lists = []
-            self.bond_distances = []
-            self.discretization = discretization
-            self.generate_bonds(discretization, ranges)
+                bond_names[:] = bond_names
+            bond_lists = []
+            bond_distances = []
 
-    # Handling bonds
-    def remover_bond(self, idx):
-        """
-        Remove the idx-esim bond
-        """
-        self.bond_distances.pop(idx)
-        self.bond_names.pop(idx)
-        self.bond_lists.pop(idx)
+        self.site_properties = site_properties = {}
+        site_properties["coord_atomos"] = atomic_pos
+        site_properties["g_lande_factors"] = g_lande_factors
+        site_properties["spin_repr"] = spin_repr
+        site_properties["magnetic_species"] = magnetic_species
+
+        self.lattice_properties = lattice_properties = {}
+        lattice_properties["bravais_vectors"] = bravais_lat
+        lattice_properties["cell_size"] = len(atomic_pos)
+        lattice_properties["supercell_size"] = supercell_size
+
+        self.bonds = {
+            b_name: {"distance": b_distance, "bonds": b_list}
+            for b_name, b_distance, b_list in zip(
+                bond_names, bond_distances, bond_lists
+            )
+        }
 
     def remover_bond_by_name(self, name):
         """
         Remove the bond with name <name>
         """
         try:
-            idx = self.bond_names.index(name)
-        except ValueError:
-            eprint("bond " + name + " not found")
+            self.bonds.pop(name)
+        except KeyError:
+            msg = "bond " + name + " not found"
+            logging.error(msg)
             return
-        self.remover_bond(idx)
 
     def generate_bonds(self, discretization, ranges, bond_names=None):
         """
@@ -160,169 +192,126 @@ class MagneticModel:
         esto es, los pares de sitios magnéticos que interactúan según cada
         una de las constantes de acoplamiento a determinar.
         """
-        cell_size = self.cell_size
-        coord_atomos = self.coord_atomos
-        bravais_vectors = self.bravais_vectors
-        supercell = self.supercell
-        old_bond_lists = self.bond_lists
-        old_bond_distances = self.bond_distances
-        old_bond_names = self.bond_names
+        atom_type = self.site_properties["magnetic_species"]
+        cell_size = self.lattice_properties["cell_size"]
+        coord_atomos = self.site_properties["coord_atomos"]
+        supercell_size = self.lattice_properties["supercell_size"]
+        bonds = self.bonds
 
-        bond_lists = []
-        bond_distances = []
-        bond_type = []
-        bond_names = []
-        atom_type = self.magnetic_species
+        if bond_names is None:
+            bond_names = []
 
         def is_in_range(val):
-            for r in ranges:
-                if r[0] < val < r[1]:
+            for min_r, max_r in ranges:
+                if min_r < val < max_r:
                     return True
             return False
 
-        for d, bt in sorted(
-            [
-                (np.linalg.norm(q - p), set([atom_type[i], atom_type[j]]))
-                for i, q in enumerate(self.coord_atomos)
-                for j, p in enumerate(self.coord_atomos)
-            ]
+        def normalize_key(bond_distance):
+            return round(bond_distance / discretization) * discretization
+
+        # Collect bonds
+        new_bonds = {}
+        for supercell_idx, sites_sc in supercell_iterator(
+            supercell_size,
+            coord_atomos,
+            self.lattice_properties["bravais_vectors"],
         ):
-            dr = round(d / discretization) * discretization
-            if not is_in_range(dr):
-                continue
-            if dr != 0 and (dr not in bond_distances or bt not in bond_type):
-                bond_distances.append(dr)
-                bond_lists.append([])
-                bond_type.append(bt)
-
-        # supercell=np.array([p for p in supercell if p[2]>0])
-        for p, x in enumerate(coord_atomos):
-            for q, y in enumerate(self.supercell):
-                qred = q % cell_size
-                offset = qred - q
-                bravais_lat = self.bravais_vectors
-                if len(bravais_lat) == 1:
-                    offset = np.array([offset + 5, 5, 5])
-                elif len(bravais_lat) == 2:
-                    lsc = 2 * self.supercell_size + 1
-                    offset = np.array([offset % lsc + 5, int(offset / lsc) + 5, 5])
-                elif len(bravais_lat) == 3:
-                    lsc = 2 * self.supercell_size + 1
-                    offset = np.array(
-                        [
-                            offset % lsc + 5,
-                            int(offset / lsc) % lsc + 5,
-                            5 + int(offset / lsc ** 2),
-                        ]
-                    )
-                else:
-                    offset = np.array([5, 5, 5])
-
-                if offset[0] == offset[1] == offset[2] == 5:
-                    offset = "."
-                elif (
-                    (0 <= offset[0] <= 9)
-                    and (0 <= offset[1] <= 9)
-                    and (0 <= offset[2] <= 9)
-                ):
-                    offset = str(offset[0]) + str(offset[1]) + str(offset[2])
-                else:
-                    offset = "."
-                if p < qred:
-                    d = x - y
-                    d = np.sqrt(d[0] ** 2 + d[1] ** 2 + d[2] ** 2)
-                    if not is_in_range(d):
+            for i, pos_i in enumerate(coord_atomos):
+                for j, pos_j in enumerate(sites_sc):
+                    print([i, j], supercell_idx)
+                    rel_pos = pos_j - pos_i
+                    orientation = offset_orientation(rel_pos)
+                    if orientation < 0:
                         continue
-                    bt = set([atom_type[p], atom_type[qred]])
-                    for i in range(len(bond_distances)):
-                        if (
-                            np.abs(d - bond_distances[i]) < discretization
-                            and bt == bond_type[i]
-                        ):
-                            bond_lists[i].append((p, qred, offset))
+                    distance = np.linalg.norm(rel_pos)
+                    print("   distance", distance)
+                    if not is_in_range(distance):
+                        continue
 
-        self.bond_lists = old_bond_lists + bond_lists
-        self.bond_distances = old_bond_distances + bond_distances
+                    print("bond between ", i, "and ", j, "(", supercell_idx, ")")
+                    bound_type = tuple(set([atom_type[i], atom_type[j]]))
+                    key = (normalize_key(distance), bound_type)
+                    offset_key = pack_offset(supercell_idx)
+                    new_bonds.setdefault(key, []).append((i, j % cell_size, offset_key))
 
-        nnames = len(self.bond_names)
-        while len(self.bond_names) < len(self.bond_lists):
-            while "J" + str(nnames + 1) in self.bond_names:
-                nnames = nnames + 1
-            self.bond_names.append("J" + str(nnames + 1))
-        return
+        bn_index = 0
+        while len(new_bonds) > len(bond_names):
+            while "J" + str(bn_index + 1) in bond_names:
+                bn_index = bn_index + 1
+            print("adding ", "J" + str(bn_index + 1))
+            bond_names.append("J" + str(bn_index + 1))
 
-    def formatted_equations(self, cm, ensname=None, comments=None, format="plain"):
+        # Update the bonds dict.
+        print("current bonds:", bonds)
+        print("new bond names:", bond_names)
+
+        for name, dist_type in zip(bond_names, sorted(new_bonds)):
+            dist = dist_type[0]
+            if name in bonds:
+                if abs(bonds[name]["distance"] - dist) > discretization:
+                    while name in bonds:
+                        name = "J" + name
+                else:
+                    bonds[name]["bonds"].extend(new_bonds[dist_type])
+                    continue
+            bonds[name] = {"distance": dist, "bonds": new_bonds[dist_type]}
+
+    def formatted_equations(
+        self, coeff_matrix, ensname=None, comments=None, eq_format="plain"
+    ):
+        """Format the equations"""
+
         res = ""
-        if format == "latex":
-            times_symbol = ""
-        else:
-            times_symbol = "*"
-        if format == "plain" or format == "latex":
-            equal_symbol = "="
-        else:
-            equal_symbol = "=="
-
-        if format == "plain":
-            open_comment = "# "
-            close_comment = ""
-        elif format == "latex":
-            open_comment = "% "
-            close_comment = ""
-        elif format == "wolfram":
-            open_comment = "(*"
-            close_comment = "*)"
-        else:
-            open_comment = "# "
-            close_comment = ""
-
-        if format == "latex":
-            sub_symb = "_"
-        else:
-            sub_symb = ""
-
+        symb = SYMBOLS[eq_format]
         jsname = []
-        jsname[:] = self.bond_names
-        jsname.append("E" + sub_symb + "0")
+        jsname[:] = self.bonds
+        jsname.append("E" + symb["sub_symb"] + "0")
         if ensname is None:
-            ensname = ["E" + sub_symb + str(i + 1) for i in range(len(cm))]
-        for i, row in enumerate(cm):
-            eq = ""
-            for k, c in enumerate(row):
-                cr = round(c * 100) / 100.0
-                if c > 0:
-                    if eq != "":
-                        eq = eq + " + "
+            ensname = [
+                "E" + symb["sub_symb"] + str(i + 1) for i in range(len(coeff_matrix))
+            ]
+        for indx, row in enumerate(coeff_matrix):
+            eq_str = ""
+            for k, coeff in enumerate(row):
+                coeff_round = round(coeff * 100) / 100.0
+                if coeff > 0:
+                    if eq_str != "":
+                        eq_str = eq_str + " + "
                     else:
-                        eq = "  "
-                    if cr != 1:
-                        eq = eq + str(cr) + " " + times_symbol
-                    eq = eq + " " + jsname[k]
-                elif c < 0:
-                    if eq != "":
-                        eq = eq + " "
-                    eq = eq + "- "
-                    if cr != -1:
-                        eq = eq + str(-cr) + " " + times_symbol
-                    eq = eq + " " + jsname[k]
+                        eq_str = "  "
+                    if coeff_round != 1:
+                        eq_str = eq_str + str(coeff_round) + " " + symb["times_symbol"]
+                    eq_str = eq_str + " " + jsname[k]
+                elif coeff < 0:
+                    if eq_str != "":
+                        eq_str = eq_str + " "
+                    eq_str = eq_str + "- "
+                    if coeff_round != -1:
+                        eq_str = eq_str + str(-coeff_round) + " " + symb["times_symbol"]
+                    eq_str = eq_str + " " + jsname[k]
             if comments is not None:
                 res = (
                     res
-                    + eq
-                    + equal_symbol
-                    + ensname[i]
+                    + eq_str
+                    + symb["equal_symbol"]
+                    + ensname[indx]
                     + "  "
-                    + open_comment
-                    + comments[i]
-                    + close_comment
+                    + symb["open_comment"]
+                    + comments[indx]
+                    + symb["close_comment"]
                     + "\n\n"
                 )
             else:
-                res = res + eq + equal_symbol + ensname[i] + "\n\n"
+                res = res + eq_str + symb["equal_symbol"] + ensname[indx] + "\n\n"
         return res
 
-    def print_equations(self, cm, ensname=None, comments=None, format="plain"):
+    def print_equations(
+        self, coeff_matrix, ensname=None, comments=None, eq_format="plain"
+    ):
+        """Print the equations found"""
         print("\n\n# Equations: \n============\n\n")
-        print(self.formatted_eqnations(self, cm, ensname, comments, format))
+        print(self.formatted_equations(coeff_matrix, ensname, comments, eq_format))
 
     def coefficient_matrix(self, configs, normalizar=False):
         """
@@ -330,57 +319,74 @@ class MagneticModel:
         connecting coupling constants with simulated energies
         for a given set of configurations configs.
         """
+        logging.info("compute the coefficient matrix")
+
         rawcm = [
             np.array(
                 [
-                    -sum([(-1) ** sc[b[0]] * (-1) ** sc[b[1]] for b in bondfamily])
+                    -sum((-1) ** sc[b[0]] * (-1) ** sc[b[1]] for b in bondfamily)
                     for sc in configs
                 ]
             )
-            for bondfamily in self.bond_lists
+            for bondfamily in (bd["bonds"] for bd in self.bonds.values())
         ]
+        print("raw cm\n", rawcm[0])
         if normalizar:
-            cm = [v - np.average(v) for v in rawcm]
+            coeff_matrix = [v - np.average(v) for v in rawcm]
         else:
-            cm = rawcm
+            coeff_matrix = rawcm
 
-        cm = np.array(
-            cm
+        coeff_matrix = np.array(
+            coeff_matrix
             +
             # Energía no magnética
             [np.array([1.0 for sc in configs])]
         ).transpose()
-        return cm
+        return coeff_matrix
 
     def generate_configurations_onfly(self):
-        size = self.cell_size
+        """Generate spin configurations"""
+        size = self.lattice_properties["cell_size"]
         for c in range(2 ** ((size - 1))):
             yield [c >> i & 1 for i in range(size - 1, -1, -1)]
 
-    def generate_random_configurations(self, t=10):
-        size = self.cell_size
-        for c in np.random.random_integers(0, 2 ** ((size - 1)), t):
-            yield [c >> i & 1 for i in range(size - 1, -1, -1)]
+    def generate_random_configurations(self, num_confs=10):
+        """Generate spin configurations"""
+        size = self.lattice_properties["cell_size"]
+        for s_val in np.random.random_integers(0, 2 ** ((size - 1)), num_confs):
+            yield [s_val >> i & 1 for i in range(size - 1, -1, -1)]
 
     def check_independence(self, conf, setconfs):
+        """
+        Check the linear independence between the equations
+        associated to the configurations.
+        """
         if conf == []:
             return False
         if setconfs == []:
             return True
-        a = self.coefficient_matrix(setconfs, False)
-        r0 = self.coefficient_matrix([conf], False)[0]
-        for r in a:
-            if np.linalg.norm(r - r0) < 0.1:
+        a_coeffs = self.coefficient_matrix(setconfs, False)
+        r0_coeffs = self.coefficient_matrix([conf], False)[0]
+        for r_coeffs in a_coeffs:
+            if np.linalg.norm(r_coeffs - r0_coeffs) < 0.1:
                 return False
         return True
 
     def add_independent_confs(self, confs, newconfs):
-        for c in newconfs:
-            if self.check_independence(c, confs):
-                confs.apppend(c)
+        """
+        Produce new independent configurations and add
+        them to the list.
+        """
+        for conf in newconfs:
+            if self.check_independence(conf, confs):
+                confs.apppend(conf)
         return confs
 
     def get_independent_confs(self, confs):
+        """
+        Choose the subset of configurations that produces
+        independent equations.
+        """
         res = []
         if confs == []:
             return res
@@ -424,9 +430,9 @@ class MagneticModel:
         else:
             lenforced = len(forced)
 
-        ids0 = [sum([k * 2 ** i for i, k in enumerate(c)]) for c in forced + confs]
+        ids0 = [sum(k * 2**i for i, k in enumerate(c)) for c in forced + confs]
         confs = self.get_independent_confs(confs)
-        curr = [f for f in forced]
+        curr = list(forced)
         for c in confs:
             if self.check_independence(c, forced):
                 curr.append(c)
@@ -434,7 +440,7 @@ class MagneticModel:
         print("curr:")
         for c in curr:
             print(c)
-        idscurr = [sum([k * 2 ** i for i, k in enumerate(c)]) for c in curr]
+        idscurr = [sum(k * 2**i for i, k in enumerate(c)) for c in curr]
         idscurr = [ids0.index(k) for k in idscurr]
 
         a = self.coefficient_matrix(curr, False)
@@ -443,21 +449,20 @@ class MagneticModel:
             ared.append(q)
 
         print("a=", a)
-        u, sv, v = np.linalg.svd(a, full_matrices=False)
-        v = None
+        u, sv = np.linalg.svd(a, full_matrices=False)[:2]
         k = len(sv)
         while sv[k - 1] < 1.0e-6:
             k = k - 1
 
         if k == 0:
-            eprint(
+            logging.info(
                 "optimize_independent_set: the set of configurations"
                 + " does not provide any information."
             )
             return ([], np.Infinity)
 
         if k < len(sv):
-            eprint(
+            logging.info(
                 "optimize_independent_set: the set of configurations just"
                 + " provides partial information. "
                 + "Optimizing the set for this information."
@@ -471,11 +476,6 @@ class MagneticModel:
 
         weights = [(np.linalg.norm(r), i) for i, r in enumerate(u) if i >= lenforced]
         weights = sorted(weights, key=lambda x: -x[0])
-        print("idscurr=", idscurr)
-        print("weights: ")
-        for w in weights:
-            print(w)
-            # print(idscurr[w[1]], "->", w[0])
         # Sorting the configurations by weights
         curr = forced + [curr[w[1]] for w in weights]
         # subblock of a without forced, sorted by weights
@@ -496,12 +496,11 @@ class MagneticModel:
             sv = np.linalg.svd(np.array(ared), full_matrices=False, compute_uv=False)[
                 k - 1
             ]
-            eprint("------------------------------------------------", sv)
             if sv > 1.0e-6:
                 break
-            else:
-                ared.append(a[lp])
-                lp = lp + 1
+
+            ared.append(a[lp])
+            lp = lp + 1
         # If we are dealing with a set of configurations
         # with just partial info,
         # this is the best we can return.
@@ -511,70 +510,88 @@ class MagneticModel:
                 + "Picking the subset that provides the maximal information."
             )
             return (curr[lenforced : lp + lenforced], np.Infinity)
-        elif length is not None:
-            eprint(
-                "------------ optimize_independent_set for fix length." + " cost=",
-                np.sqrt(lp) / sv,
+        if length is not None:
+            msg = (
+                "------------\n"
+                "optimize_independent_set for fix length."
+                " cost="
+                f"{np.sqrt(lp) / sv}"
             )
-            return (curr[lenforced : lp + lenforced], np.sqrt(lp + lenforced) / sv)
-        else:
-            # If  l was not provided, and the set is informationally complete,
-            # try to enlarge it to reduce the cost function
-            newcost = np.sqrt(lp + lenforced) / sv
-            while lp < len(a) and newcost > cost:
-                nr = a[lp]
-                sv = np.linalg.svd(
-                    np.array(ared + [nr]), full_matrices=False, compute_uv=False
-                )[k - 1]
-                newcost = np.sqrt(lp + lenforced + 1) / sv
-                ared.append(nr)
-                lp = lp + 1
+            logging.info(msg)
+            return (
+                curr[lenforced : lp + lenforced],
+                np.sqrt(lp + lenforced) / sv,
+            )
+
+        # If  l was not provided, and the set is informationally complete,
+        # try to enlarge it to reduce the cost function
+        newcost = np.sqrt(lp + lenforced) / sv
+        while lp < len(a) and newcost > cost:
+            nr = a[lp]
+            sv = np.linalg.svd(
+                np.array(ared + [nr]),
+                full_matrices=False,
+                compute_uv=False,
+            )[k - 1]
+            newcost = np.sqrt(lp + lenforced + 1) / sv
+            ared.append(nr)
+            lp = lp + 1
+
+        cost = newcost
+        while lp < len(a):
+            nr = a[lp]
+            sv = np.linalg.svd(
+                np.array(ared + [nr]),
+                full_matrices=False,
+                compute_uv=False,
+            )[k - 1]
+            newcost = np.sqrt(lp + lenforced + 1) / sv
+            if newcost >= cost:
+                break
 
             cost = newcost
-            while lp < len(a):
-                nr = a[lp]
-                sv = np.linalg.svd(
-                    np.array(ared + [nr]), full_matrices=False, compute_uv=False
-                )[k - 1]
-                newcost = np.sqrt(lp + lenforced + 1) / sv
-                if newcost >= cost:
-                    break
-                else:
-                    cost = newcost
-                    ared.append(nr)
-                    lp = lp + 1
+            ared.append(nr)
+            lp = lp + 1
 
-            return (curr[lenforced : lp + lenforced], cost)
+        return (curr[lenforced : lp + lenforced], cost)
 
     def find_optimal_configurations(
-        self, start=None, num_new_confs=None, known=None, its=100, update_size=1
+        self,
+        start=None,
+        num_new_confs=None,
+        known=None,
+        its=100,
+        update_size=1,
     ):
-
+        """
+        Find an optimal set of configurations in order to estimate the
+        coupling constants with the best accuracy.
+        """
         if num_new_confs is None:
-            lmax = max(len(self.bond_lists) + 1, 1) + update_size
+            lmax = max(len(self.bonds) + 1, 1) + update_size
         else:
-            lmax = max(num_new_confs, len(self.bond_lists) + 1, 1)
+            lmax = max(num_new_confs, len(self.bonds) + 1, 1)
 
         if known is None:
             known = []
 
-        eprint("--------------find_optimal_set ----------------")
+        logging.info("--------------find_optimal_set ----------------")
 
         if start is None:
             repres = self.generate_random_configurations(max(update_size, lmax))
-            last_better = self.get_independent_confs([q for q in repres])
+            last_better = self.get_independent_confs(list(repres))
         else:
             last_better = self.get_independent_confs(start)
 
-        for i in range(its):
+        for _ in range(its):
             repres = self.generate_random_configurations(update_size)
-            last_better = self.get_independent_confs(last_better + [q for q in repres])
+            last_better = self.get_independent_confs(last_better + list(repres))
             last_better = [c for c in last_better if self.check_independence(c, known)]
             if len(last_better) >= lmax:
                 break
 
         if len(last_better) < lmax:
-            eprint(
+            logging.info(
                 "not enough configurations. Trying to optimize "
                 + "the subset and return it."
             )
@@ -585,9 +602,9 @@ class MagneticModel:
         last_better, cost = self.optimize_independent_set(
             last_better, num_new_confs, forced=known
         )
-        for i in range(its):
+        for _ in range(its):
             repres = self.generate_random_configurations(update_size)
-            new_try = self.get_independent_confs(last_better + [q for q in repres])
+            new_try = self.get_independent_confs(last_better + list(repres))
             new_try, newcost = self.optimize_independent_set(
                 new_try, num_new_confs, forced=known
             )
@@ -638,7 +655,7 @@ class MagneticModel:
 
         if printeqs:
             coeffs = self.coefficient_matrix(confs, normalizar=False)
-            eprint("\n# Configurations:\n=================\n\n")
+            logging.info("\n# Configurations:\n=================\n\n")
             for c in confs:
                 print(c)
             self.print_equations(coeffs)
@@ -655,30 +672,33 @@ class MagneticModel:
         print(singularvalues)
         cond_number = np.sqrt(len(rcoeffs)) / max(min(singularvalues), 1.0e-9)
         if printeqs:
-            eprint("\nInverse of the minimum singular value: ", cond_number, "\n\n")
+            msg = "\nInverse of the minimum singular value: " f"{cond_number}\n\n"
+            logging.info(msg)
 
         # If Montecarlo, uses the montecarlo routine to estimate the box.
         if montecarlo:
             return self.montecarlo_box(
                 coeffs, energs, err_energs, mcsteps, mcsizefactor
             )
+        # Otherwise, it gives an estimation in terms of the bigger ellipse.
+        # js = (A^t A )^{-1} A^t En, i.e. least squares solution
+        resolvent = np.linalg.pinv(coeffs.transpose().dot(coeffs), rcond=1.0e-6).dot(
+            coeffs.transpose()
+        )
+        js = resolvent.dot(energs)
+        model_chi = (coeffs.dot(js) - energs) / err_energs
+        rr = len(model_chi) - sum(model_chi**2)
+        if rr < 0:
+            deltaJ = [-1 for i in js]
         else:
-            # Otherwise, it gives an estimation in terms of the bigger ellipse.
-            # js = (A^t A )^{-1} A^t En, i.e. least squares solution
-            resolvent = np.linalg.pinv(
-                coeffs.transpose().dot(coeffs), rcond=1.0e-6
-            ).dot(coeffs.transpose())
-            js = resolvent.dot(energs)
-            model_chi = (coeffs.dot(js) - energs) / err_energs
-            rr = len(model_chi) - sum(model_chi ** 2)
-            if rr < 0:
-                deltaJ = [-1 for i in js]
-            else:
-                rr = np.sqrt(rr) * err_energs
-                deltaJ = box_ellipse(coeffs, rr)
-            return (js, deltaJ, model_chi, 1.0)
+            rr = np.sqrt(rr) * err_energs
+            deltaJ = box_ellipse(coeffs, rr)
+        return (js, deltaJ, model_chi, 1.0)
 
     def bound_inequalities(self, confs, energs, err_energs=0.01):
+        """
+        Compute the compatibility regions for the coupling constants
+        """
         print("confs: ", confs)
         print("energs: ", energs)
         print("err: ", err_energs)
@@ -687,8 +707,7 @@ class MagneticModel:
         s0 = singularvalues[0]
         resolvent = []
         vhr = []
-        for i in range(len(singularvalues)):
-            si = singularvalues[i]
+        for i, si in enumerate(singularvalues):
             if si / s0 < 1e-3:
                 break
             resolvent.append(u[:, i] / si)
@@ -697,7 +716,7 @@ class MagneticModel:
         vhr = None
         j0s = np.array(vh).transpose().dot(np.array(resolvent).dot(energs))
         err = (
-            len(energs) * err_energs ** 2
+            len(energs) * err_energs**2
             - np.linalg.norm(energs - coeffs.dot(j0s)) ** 2
         )
         if err < 0:
@@ -718,6 +737,9 @@ class MagneticModel:
         return ineqs
 
     def montecarlo_box(self, coeffs, energs, tol, numtry=1000, sizefactor=1.0):
+        """
+        Build an error box by Monte Carlo sampling parameters.
+        """
         numcalc = len(energs)
         numparm = len(coeffs[0])
         issingular = False
@@ -725,20 +747,15 @@ class MagneticModel:
         # number of parameters to be determined. Otherwise, add trivial
         # equations.
         if numparm > numcalc:
-            coeffs = np.array(
-                [c for c in coeffs]
-                + [np.zeros(numparm) for i in range(numparm - numcalc)]
-            )
-            energs = np.array(
-                [c for c in energs] + [0.0 for i in range(numparm - numcalc)]
-            )
+            coeffs = np.array(list(coeffs) + [np.zeros(numparm)] * (numparm - numcalc))
+            energs = np.array(list(energs) + [0.0] * (numparm - numcalc))
 
         # Look for the singular value decomposition
         u, sv, v = la.svd(coeffs, full_matrices=True, compute_uv=True)
         # Check if the system is determined and discard vanishing
         # singular values/vectors.
         k = len(sv)
-        svr = np.array([s for s in sv])
+        svr = np.array(list(sv))
         if svr[-1] < 1.0e-6:
             issingular = True
             while svr[-1] < 1.0e-6:
@@ -751,7 +768,7 @@ class MagneticModel:
         j0s = vr.transpose().dot((1.0 / svr) * (ur.transpose().dot(energs)))
         e0s = coeffs.dot(j0s)
         esqerr = la.norm(e0s - energs)
-        scale = sizefactor * (numcalc * tol ** 2 - esqerr ** 2) / np.sqrt(4.0 * numparm)
+        scale = sizefactor * (numcalc * tol**2 - esqerr**2) / np.sqrt(4.0 * numparm)
         if scale <= 0:
             print("scale < 0. Model is incompatible")
             return (
@@ -795,7 +812,7 @@ class MagneticModel:
 
         if len(jtrys) == 1:
             print("errors  estimated by boxing the  ellipse")
-            rr = np.sqrt(numcalc * tol ** 2 - esqerr ** 2)
+            rr = np.sqrt(numcalc * tol**2 - esqerr**2)
             djs = box_ellipse(coeffs, rr)
             return j0s, djs, (e0s - energs) / tol, 1.0 / (numtry + 1.0)
         print(len(jtrys))
@@ -803,39 +820,50 @@ class MagneticModel:
 
         j0s = np.average(jtrys, 0)
         jtrys = [abs(js - j0s) for js in jtrys]
-        djs = np.max(np.array(jtrys), 0)
+        d_js = np.max(np.array(jtrys), 0)
         # If the model is singular, discard the coefficients that
         # couldn't be determined, setting them to 0.
         if issingular:
-            for i, dj in enumerate(djs):
-                if dj > 100:
-                    djs[i] = np.nan
+            for i, d_j in enumerate(d_js):
+                if d_j > 100:
+                    d_js[i] = np.nan
                     j0s[i] = 0
 
         e0s = coeffs.dot(j0s)
-        return j0s, djs, (e0s - energs)[:numcalc] / tol, len(jtrys) / (numtry + 1.0)
+        return (
+            j0s,
+            d_js,
+            (e0s - energs)[:numcalc] / tol,
+            len(jtrys) / (numtry + 1.0),
+        )
 
     def save_cif(self, filename, bond_names=None):
-        bravais_vectors = self.bravais_vectors
+        """Save the model in a CIF file"""
+        bravais_vectors = self.lattice_properties["bravais_vectors"]
+        if bond_names is None:
+            bond_names = tuple(self.bonds)
+        msg = "save cif" + filename
+        logging.info(msg)
+        model_name = "data_magnetic_model_1"
 
         with open(filename, "w") as fileout:
             head = (
-                """
+                f"""
 # ======================================================================
 
 # CRYSTAL DATA
 
 # ----------------------------------------------------------------------
 
-data_magnetic_model_1
+{model_name}
 
 _chemical_name_common                  """
                 + self.model_label
                 + "\n"
             )
             fileout.write(head)
-            bbn = ["a", "b", "c"]
-            bbnang = ["alpha", "beta", "gamma"]
+            # bbn = ["a", "b", "c"]
+            # bbnang = ["alpha", "beta", "gamma"]
 
             if len(bravais_vectors) == 1:
                 fileout.write(
@@ -847,43 +875,49 @@ _chemical_name_common                  """
                     "loop_\n _space_group_symop_operation_xyz" + "\t\t\t\n'z'\n"
                 )
             elif len(bravais_vectors) == 2:
-                a = np.linalg.norm(bravais_vectors[0])
-                b = np.linalg.norm(bravais_vectors[1])
+                a_norm = np.linalg.norm(bravais_vectors[0])
+                b_norm = np.linalg.norm(bravais_vectors[1])
                 gamma = round(
                     180
                     / 3.1415926
                     * bravais_vectors[0].dot(bravais_vectors[1])
-                    / (a * b)
+                    / (a_norm * b_norm)
                 )
-                fileout.write("_cell_length_a \t\t\t" + str(a) + "\n")
-                fileout.write("_cell_length_b \t\t\t" + str(b) + "\n")
+                fileout.write("_cell_length_a \t\t\t" + str(a_norm) + "\n")
+                fileout.write("_cell_length_b \t\t\t" + str(b_norm) + "\n")
                 fileout.write("_cell_length_gamma \t\t\t" + str(gamma) + "\n\n")
                 fileout.write(
                     "loop_\n _space_group_symop_operation_xyz" + "\n'x, y'\n\n"
                 )
 
             elif len(bravais_vectors) == 3:
-                a = np.linalg.norm(bravais_vectors[0])
-                b = np.linalg.norm(bravais_vectors[1])
-                c = np.linalg.norm(bravais_vectors[2])
+                a_norm = np.linalg.norm(bravais_vectors[0])
+                b_norm = np.linalg.norm(bravais_vectors[1])
+                c_norm = np.linalg.norm(bravais_vectors[2])
                 gamma = round(
                     180
                     / 3.1415926
-                    * np.arccos(bravais_vectors[0].dot(bravais_vectors[1]) / (a * b))
+                    * np.arccos(
+                        bravais_vectors[0].dot(bravais_vectors[1]) / (a_norm * b_norm)
+                    )
                 )
                 alpha = round(
                     180
                     / 3.1415926
-                    * np.arccos(bravais_vectors[0].dot(bravais_vectors[2]) / (a * c))
+                    * np.arccos(
+                        bravais_vectors[0].dot(bravais_vectors[2]) / (a_norm * c_norm)
+                    )
                 )
                 beta = round(
                     180
                     / 3.1415926
-                    * np.arccos(bravais_vectors[1].dot(bravais_vectors[2]) / (c * b))
+                    * np.arccos(
+                        bravais_vectors[1].dot(bravais_vectors[2]) / (c_norm * b_norm)
+                    )
                 )
-                fileout.write("_cell_length_a \t\t\t" + str(a) + "\n")
-                fileout.write("_cell_length_b \t\t\t" + str(b) + "\n")
-                fileout.write("_cell_length_c \t\t\t" + str(c) + "\n")
+                fileout.write("_cell_length_a \t\t\t" + str(a_norm) + "\n")
+                fileout.write("_cell_length_b \t\t\t" + str(b_norm) + "\n")
+                fileout.write("_cell_length_c \t\t\t" + str(c_norm) + "\n")
                 fileout.write("_cell_angle_alpha \t\t\t" + str(alpha) + "\n")
                 fileout.write("_cell_angle_beta \t\t\t" + str(beta) + "\n")
                 fileout.write("_cell_angle_gamma \t\t\t" + str(gamma) + "\n\n")
@@ -905,33 +939,29 @@ _chemical_name_common                  """
                 + "_atom_site_type_symbol\n"
             )
 
-            bravaiscoords = self.coord_atomos.dot(
+            bravais_coords = self.site_properties["coord_atomos"].dot(
                 np.linalg.inv(np.array(bravais_vectors))
             )
 
-            for i, pos in enumerate(bravaiscoords):
-                fileout.write(
-                    self.magnetic_species[i]
-                    + str(i + 1)
-                    + "\t 1.\t"
-                    + str(round(1e5 * pos[0]) * 1e-5)
-                    + "\t"
-                    + str(round(1e5 * pos[1]) * 1e-5)
-                    + "\t"
-                    + str(round(1e5 * pos[2]) * 1e-5)
-                    + "\t"
-                    + "Biso \t"
-                    + "1 \t"
-                    + str(self.spin_repr[i])
-                    + "\t"
-                    + str(self.g_lande_factors[i])
-                    + "\t"
-                    + self.magnetic_species[i]
-                    + " \n"
+            magnetic_species = self.site_properties["magnetic_species"]
+            print("magnetic species", magnetic_species)
+            g_lande_factors = self.site_properties["g_lande_factors"]
+            spin_repr = self.site_properties["spin_repr"]
+            for i, pos in enumerate(bravais_coords):
+                line = (
+                    f"{magnetic_species[i]}{i+1}\t 1.\t"
+                    f"{round(1e5 * pos[0]) * 1e-5}\t"
+                    f"{round(1e5 * pos[1]) * 1e-5}\t"
+                    f"{round(1e5 * pos[2]) * 1e-5}\t"
+                    f"Biso \t 1\t{spin_repr[i]}\t"
+                    f"{g_lande_factors[i]}\t"
+                    f"{magnetic_species[i]} \n"
                 )
+
+                fileout.write(line)
             fileout.write("   \n")
 
-            if len(self.bond_lists) > 0:
+            if len(self.bonds) > 0:
                 fileout.write("# Bonds  \n")
                 fileout.write("loop_\n")
                 fileout.write("_geom_bond_atom_site_label_1\n")
@@ -939,22 +969,18 @@ _chemical_name_common                  """
                 fileout.write("_geom_bond_distance\n")
                 fileout.write("_geom_bond_label\n")
                 fileout.write("_geom_bond_site_symmetry_2\n")
-                for k, bl in enumerate(self.bond_names):
-                    print(k, " bondlist: ", self.bond_lists[k])
-                    for a, b, c in self.bond_lists[k]:
-                        fileout.write(
-                            self.magnetic_species[a]
-                            + str(a + 1)
-                            + "\t"
-                            + self.magnetic_species[b]
-                            + str(b + 1)
-                            + "\t"
-                            + str(self.bond_distances[k])
-                            + "\t"
-                            + str(bl)
-                            + "\t"
-                            + c
-                            + "\n"
+                for k, bond_name in enumerate(self.bonds):
+                    bond_list = self.bonds[bond_name]["bonds"]
+                    distance = self.bonds[bond_name]["distance"]
+                    print(k, " bondlist: ", bond_list)
+                    for src, dest, offset in bond_list:
+                        line = (
+                            f"{magnetic_species[src]}{src+1}\t"
+                            f"{magnetic_species[dest]}{dest+1}\t"
+                            f"{distance}\t"
+                            f"{bond_name}\t"
+                            f"{offset}\n"
                         )
+                        fileout.write(line)
                 fileout.write("   \n")
         return True

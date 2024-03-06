@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 
-import numpy as np
 import argparse
+
+import numpy as np
 from spectrojotometer.magnetic_model import MagneticModel
-from spectrojotometer.model_io import (
-    magnetic_model_from_file,
-    read_spin_configurations_file,
-)
+from spectrojotometer.model_io import (magnetic_model_from_file,
+                                       read_spin_configurations_file)
 
 
 def main():

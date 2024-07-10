@@ -14,7 +14,7 @@ def readme():
 setup(
     name="spectrojotometer",
     version="0.0",
-    description="Toolbox for determine effective magnetic models from ab-initio simulations",
+    description="Toolbox for determining effective magnetic models from ab-initio simulations",
     long_description=readme(),
     classifiers=[
         "Development Status :: 1 - Alpha",

@@ -330,7 +330,7 @@ class MagneticModel:
             )
             for bondfamily in (bd["bonds"] for bd in self.bonds.values())
         ]
-        print("raw cm\n", rawcm[0])
+        print("raw cm\n", "  \n".join(str(row) for row in rawcm))
         if normalizar:
             coeff_matrix = [v - np.average(v) for v in rawcm]
         else:

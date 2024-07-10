@@ -26,7 +26,7 @@ setup(
     author_email="matera@fisica.unlp.edu.ar",
     url="https://mauricio-matera.blogspot.com",
     license="GNU",
-    install_requires=["argparse", "numpy", "matplotlib"],
+    install_requires=["argparse", "numpy", "matplotlib", "pymatgen"],
     packages=["spectrojotometer"],
     include_package_data=True,
     package_data={"spectrojotometer": ["doc/*.html", "logo.gif"],},

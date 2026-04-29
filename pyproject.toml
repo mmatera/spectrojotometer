@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spectrojotometer"
+version = "0.0"
+description = "Toolbox for determining effective magnetic models from ab-initio simulations"
+# long-description = "file: README.rst"
+# long-description-content-type = "text/x-rst"
+classifiers = [
+    "Development Status :: 1 - Alpha",
+    "License :: OSI Approved :: GNU General Public License (GPL)",
+    "Programming Language :: Python :: 3.4",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+authors = [{ name = "Juan Mauricio Matera", email = "matera@fisica.unlp.edu.ar" }]
+# url = "https://mauricio-matera.blogspot.com"
+license = { text = "GNU" }
+dependencies = [
+    "argparse",
+    "numpy",
+    "matplotlib",
+    "pymatgen"
+]
+
+[project.optional-dependencies]
+# No optional dependencies listed in setup.py
+
+[project.scripts]
+print_equations = "bin.print_equations:main"
+map_configs = "bin.map_configs:main"
+optimize-configurations = "bin.optimize_configurations:main"
+bond_generator = "bin.bond_generator:main"
+evaluate_cc = "bin.evaluate_cc:main"
+visualbond = "bin.visualbond:main"
+
+
+
+
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.setuptools.exclude-package-data]
+"your_package" = ["bin/*"]
+
+[tool.setuptools.package-data]
+"*" = ["doc/*.html", "logo.gif"]
+
+[tool.setuptools]
+include-package-data = true
+
+

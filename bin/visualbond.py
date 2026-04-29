@@ -6,7 +6,11 @@ Visual interface for the spectrojotometer.
 
 from spectrojotometer.gui import ApplicationGUI
 
-
-if __name__ == "__main__":
+def main():
     ApplicationGUI()
     exit(0)
+
+
+
+if __name__ == "__main__":
+    main()

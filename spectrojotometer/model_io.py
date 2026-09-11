@@ -704,11 +704,13 @@ def magnetic_model_from_cif(
         bravais_vectors,
         bond_lists=bondlists,
         bond_names=bond_labels,
+        bond_distances=(
+            [float(d) for d in bond_distances] if bondlists is not None else None
+        ),
         magnetic_species=magnetic_species,
         g_lande_factors=g_lande_factors,
         spin_repr=spin_repr,
     )
-    model.bond_distances = [float(d) for d in bond_distances]
 
     return model
 

@@ -111,6 +111,7 @@ class MagneticModel:
         bravais_lat,
         bond_lists=None,
         bond_names=None,
+        bond_distances=None,
         ranges=None,
         supercell_size=1,
         discretization=0.02,
@@ -163,7 +164,13 @@ class MagneticModel:
 
         if bond_lists is not None:
             print("recibí", len(bond_lists), "couplings")
-            bond_distances = [0] * len(bond_lists)
+            if bond_distances is None:
+                bond_distances = [0] * len(bond_lists)
+            elif len(bond_distances) != len(bond_lists):
+                raise ValueError(
+                    "bond_distances must have the same length as bond_lists "
+                    f"({len(bond_distances)} != {len(bond_lists)})"
+                )
             if bond_names is None:
                 bond_names = ["J" + str(i) for i in range(len(bond_lists))]
         else:

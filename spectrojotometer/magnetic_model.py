@@ -440,7 +440,7 @@ class MagneticModel:
         partialinfo = False
         cost = np.nan
         if confs == []:
-            return [], np.Infinity
+            return [], np.inf
 
         if forced is None:
             forced = []
@@ -477,7 +477,7 @@ class MagneticModel:
                 "optimize_independent_set: the set of configurations"
                 + " does not provide any information."
             )
-            return ([], np.Infinity)
+            return ([], np.inf)
 
         if k < len(sv):
             logging.info(
@@ -527,7 +527,7 @@ class MagneticModel:
                 "Information is not complete."
                 + "Picking the subset that provides the maximal information."
             )
-            return (curr[lenforced : lp + lenforced], np.Infinity)
+            return (curr[lenforced : lp + lenforced], np.inf)
         if length is not None:
             msg = (
                 "------------\n"

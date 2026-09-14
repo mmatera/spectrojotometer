@@ -51,9 +51,8 @@ from tkinter.scrolledtext import ScrolledText
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-from pkg_resources import resource_filename
+# from importlib.resources import path as resource_filename
 
-from spectrojotometer import __name__ as spectrojotometer_name
 from spectrojotometer import __path__ as spectrojotometer_path
 from spectrojotometer import __version__ as spectrojotometerversion
 from spectrojotometer.model_io import confindex, magnetic_model_from_file
@@ -63,8 +62,8 @@ from .importconfig import ImportConfigWindow
 from .markers import textmarkers
 from .validators import show_number, validate_float, validate_pinteger
 
-logofilename = resource_filename(spectrojotometer_name, "logo.gif")
-print(logofilename)
+#logofilename = resource_filename(spectrojotometer_name, "logo.gif")
+#print(logofilename)
 
 QUOTE = """#  BONDS GENERATOR 0.0:
 #  1-Please open a .CIF file with the site positions to start...
@@ -113,7 +112,8 @@ class ApplicationGUI:
             #                           weight=font.BOLD
         )
 
-        self.logo = PhotoImage(file=logofilename)
+
+#        self.logo = PhotoImage(file=logofilename)
         self.vcmdi = (
             self.root.register(validate_pinteger),
             "%d",
@@ -164,7 +164,7 @@ class ApplicationGUI:
         if True:
             logocvs = Canvas(statusregion, width=125, height=125)
             logocvs.pack(side=LEFT, fill=X)
-            logocvs.create_image((64, 62), image=self.logo)
+            # logocvs.create_image((64, 62), image=self.logo)
             self.status = ScrolledText(statusregion, height=10, width=170)
             # Frame(height=5, bd=1, relief=SUNKEN).pack(fill=X, padx=5, pady=5)
             self.status.config(background="black", foreground="white")
@@ -848,7 +848,7 @@ class ApplicationGUI:
         with open(self.tmpconfig.name, "w"):
             for idx, nc in enumerate(confs):
                 row = (
-                    str(energies[idx]) + "\t" + str(nc) + "\t\t # " + labels[idx] + "\n"
+                    str(energies[idx]) + "\t" + str([int(x) for x in nc]) + "\t\t # " + labels[idx] + "\n"
                 )
         self.print_full_equations()
         logging.info("updating window")
@@ -931,7 +931,7 @@ class ApplicationGUI:
                 "# "
                 + str(energs[idx])
                 + "\t"
-                + str(nc)
+                + str([int(x) for x in nc])
                 + "\t\t # "
                 + labels[idx]
                 + "\n"
@@ -976,7 +976,7 @@ class ApplicationGUI:
             + ": \n",
         )
         for idx, nc in enumerate(newconfs):
-            row = "nan \t" + str(nc) + "\t\t # " + labels[idx] + "\n"
+            row = "nan \t" + str([int(x) for x in nc]) + "\t\t # " + labels[idx] + "\n"
             self.spinconfigs.insert(END, row)
         self.reload_configs(src_widget=self.spinconfigs)
 

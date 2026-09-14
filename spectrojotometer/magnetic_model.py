@@ -43,33 +43,47 @@ SYMBOLS = {
 
 
 def supercell_iterator(supercell_size, coord_atomos, bravais_vectors):
-    """Iterator over subcells in the supercell."""
+    """Iterator over subcells in the supercell.
+
+    supercell_size can be:
+      - an int  : same size along all axes (backward-compatible)
+      - a list  : [sx, sy, sz] — independent size per Bravais axis
+    """
 
     # Basis vectors must be np.arrays.
     bravais_vectors = [np.array(vector) for vector in bravais_vectors]
 
-    # If no bravais_vectors , the supercell is just the cell.
+    # If no bravais_vectors, the supercell is just the cell.
     if len(bravais_vectors) == 0:
         yield ([], coord_atomos)
         return
 
-    current = [-supercell_size] * len(bravais_vectors)
-    max_indx = len(current)
+    # Normalise to a per-axis list, one entry per Bravais vector.
+    n = len(bravais_vectors)
+    if np.isscalar(supercell_size):
+        sizes = [int(supercell_size)] * n
+    else:
+        sizes = [int(s) for s in supercell_size]
+        if len(sizes) < n:
+            sizes += [sizes[-1]] * (n - len(sizes))  # pad with last value
+        sizes = sizes[:n]
+
+    current = [-s for s in sizes]
+    max_indx = n
     while True:
         offset = sum(coeff * v_b for coeff, v_b in zip(current, bravais_vectors))
-        yield (current, [site + offset for site in coord_atomos])
-        # Update the indices of the supercell
+        yield (current[:], [site + offset for site in coord_atomos])
+        # Advance to next replica (mixed-radix counter)
         indx = 0
-        # Moves the position to the next replica.
         while True:
             if indx == max_indx:
                 return
             sub_idx = current[indx] + 1
-            if sub_idx <= supercell_size:
+            if sub_idx <= sizes[indx]:
                 current[indx] = sub_idx
                 break
-            current[indx] = -supercell_size
-            indx = indx + 1
+            current[indx] = -sizes[indx]
+            indx += 1
 
 
 def build_supercell(supercell_size, coord_atomos, bravais_vectors):
@@ -97,6 +111,7 @@ class MagneticModel:
         bravais_lat,
         bond_lists=None,
         bond_names=None,
+        bond_distances=None,
         ranges=None,
         supercell_size=1,
         discretization=0.02,
@@ -110,7 +125,11 @@ class MagneticModel:
         self.onfly = onfly
 
         print("supercell size:", supercell_size)
-        supercell_size = min(4, supercell_size)
+        # Normalise: accept int or [sx, sy, sz]; clamp each axis to 1–4
+        if np.isscalar(supercell_size):
+            supercell_size = min(4, max(1, int(supercell_size)))
+        else:
+            supercell_size = [min(4, max(1, int(s))) for s in supercell_size]
 
         print("atomic_pos", atomic_pos)
         if magnetic_species is None:
@@ -145,7 +164,13 @@ class MagneticModel:
 
         if bond_lists is not None:
             print("recibí", len(bond_lists), "couplings")
-            bond_distances = [0] * len(bond_lists)
+            if bond_distances is None:
+                bond_distances = [0] * len(bond_lists)
+            elif len(bond_distances) != len(bond_lists):
+                raise ValueError(
+                    "bond_distances must have the same length as bond_lists "
+                    f"({len(bond_distances)} != {len(bond_lists)})"
+                )
             if bond_names is None:
                 bond_names = ["J" + str(i) for i in range(len(bond_lists))]
         else:
@@ -422,7 +447,7 @@ class MagneticModel:
         partialinfo = False
         cost = np.nan
         if confs == []:
-            return [], np.Infinity
+            return [], np.inf
 
         if forced is None:
             forced = []
@@ -459,7 +484,7 @@ class MagneticModel:
                 "optimize_independent_set: the set of configurations"
                 + " does not provide any information."
             )
-            return ([], np.Infinity)
+            return ([], np.inf)
 
         if k < len(sv):
             logging.info(
@@ -509,7 +534,7 @@ class MagneticModel:
                 "Information is not complete."
                 + "Picking the subset that provides the maximal information."
             )
-            return (curr[lenforced : lp + lenforced], np.Infinity)
+            return (curr[lenforced : lp + lenforced], np.inf)
         if length is not None:
             msg = (
                 "------------\n"

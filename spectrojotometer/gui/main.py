@@ -133,6 +133,7 @@ class ApplicationGUI:
         )
         self.root.title("Bonds generator 0.2")
         self.datafolder = os.getcwd()
+        self.primitive_cell_var = BooleanVar(value=False)
         self.tmpmodel = tempfile.NamedTemporaryFile(mode="w", suffix=".cif")
         self.tmpmodel.close()
         self.tmpconfig = tempfile.NamedTemporaryFile(mode="w", suffix=".spin")
@@ -205,6 +206,11 @@ class ApplicationGUI:
         filemenu.add_command(label="Open model file...", command=self.open_model)
         filemenu.add_command(label="Import model file...", command=self.import_model)
         filemenu.add_command(label="Open config file...", command=self.import_configs)
+        filemenu.add_separator()
+        filemenu.add_checkbutton(
+            label="Use primitive cell (centering symmetries)",
+            variable=self.primitive_cell_var,
+        )
         filemenu.add_separator()
         filemenu.add_command(label="Save model as ...", command=self.save_model)
         filemenu.add_command(
@@ -635,7 +641,9 @@ class ApplicationGUI:
         if filename == "":
             return
         self.datafolder = str(Path(filename).parent)
-        self.model = magnetic_model_from_file(filename=filename, primitive_cell=True)
+        self.model = magnetic_model_from_file(
+            filename=filename, primitive_cell=self.primitive_cell_var.get()
+        )
         self.model.save_cif(self.tmpmodel.name)
         with open(filename, "r") as tmpf:
             modeltxt = tmpf.read()
@@ -659,7 +667,9 @@ class ApplicationGUI:
         if filename == "":
             return
         self.datafolder = str(Path(filename).parent)
-        self.model = magnetic_model_from_file(filename=filename, primitive_cell=True)
+        self.model = magnetic_model_from_file(
+            filename=filename, primitive_cell=self.primitive_cell_var.get()
+        )
         self.model.save_cif(self.tmpmodel.name)
         self.statusbar.config(text="model loaded")
         with open(self.tmpmodel.name, "r") as tmpf:
@@ -810,8 +820,8 @@ class ApplicationGUI:
         energies = []
 
         conftxt = spinconfigs.get(1.0, END)
-        for linnum, line in enumerate(conftxt.split(sep="\n")):
-            ls = line.strip()
+        for linnum, l in enumerate(conftxt.split(sep="\n")):
+            ls = l.strip()
             if ls == "" or ls[0] == "#":
                 continue
             fields = ls.split(maxsplit=1)
@@ -840,13 +850,11 @@ class ApplicationGUI:
             confs.append(newconf)
             energies.append(energy)
         self.configurations = (energies, confs, labels)
-        with open(self.tmpconfig.name, "w") as f:
+        with open(self.tmpconfig.name, "w"):
             for idx, nc in enumerate(confs):
                 row = (
                     str(energies[idx]) + "\t" + str([int(x) for x in nc]) + "\t\t # " + labels[idx] + "\n"
                 )
-                f.write(row)
-
         self.print_full_equations()
         logging.info("updating window")
         if spinconfigs == self.spinconfigs:
@@ -867,7 +875,9 @@ class ApplicationGUI:
         with open(newtmpfile.name, "w") as ff:
             ff.write(current_model)
         try:
-            model = magnetic_model_from_file(filename=newtmpfile.name, primitive_cell=True)
+            model = magnetic_model_from_file(
+                filename=newtmpfile.name, primitive_cell=self.primitive_cell_var.get()
+            )
         except Exception:
             self.print_status("the model can not be loaded. Check the syntax.")
             self.statusbar.config(text="the model can not be loaded. Check the syntax.")
@@ -905,12 +915,11 @@ class ApplicationGUI:
         if len(self.model.bonds) == 0:
             self.print_status("Bonds must be defined before " + "run optimization.")
             return
-
-        # TODO: Consider using these parameters...
-        # parms = self.parameters["page2"]
-        # n = int(parms["Number of configurations"].get())
-        # its = int(parms["Iterations"].get())
-        # us = max(int(parms["Bunch size"].get()), n)
+        parms = self.parameters["page2"]
+        n = int(parms["Number of configurations"].get())
+        its = int(parms["Iterations"].get())
+        us = max(int(parms["Bunch size"].get()), n)
+        known = []
         self.reload_configs(src_widget=self.spinconfigs)
         newconfs, cn = self.model.optimize_independent_set(self.configurations[1])
 
@@ -919,7 +928,7 @@ class ApplicationGUI:
             for c in self.configurations[1]
         ]
         labels = [str(confindex(c)) for c in newconfs]
-        energs = [self.configurations[0][full_labels.index(label)] for label in labels]
+        energs = [self.configurations[0][full_labels.index(l)] for l in labels]
         # self.configs=([float("nan") for i in newconfs], newconfs, labels)
         # eq_format = self.outputformat.get()
         self.spinconfigs.insert(END, "\n#  Subset of optimal configurations. ")

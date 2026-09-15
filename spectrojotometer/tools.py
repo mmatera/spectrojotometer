@@ -67,6 +67,69 @@ def offset_orientation(offset: list) -> int:
     return 0
 
 
+def format_symmetry_operator(rot, trans, tol: float = 1e-6) -> str:
+    """
+    Format a (rotation, translation) symmetry operator as a CIF-style
+    string such as "x, y+1/2, z+1/2". This is the inverse of
+    `model_io.parse_symmetry`.
+
+    Parameters
+    ----------
+    rot : array-like
+        3x3 rotation/point-group matrix (entries expected to be 0, 1 or
+        -1, as for any crystallographic operator).
+    trans : array-like
+        Length-3 translation vector, in fractional coordinates.
+    tol : float, optional
+        Numerical tolerance. The default is 1e-6.
+
+    Returns
+    -------
+    str
+        The CIF-style symmetry operator string.
+    """
+    var_names = ("x", "y", "z")
+    rot = np.array(rot, dtype=float)
+    trans = np.array(trans, dtype=float)
+
+    def format_frac(val: float) -> str:
+        for denom in (1, 2, 3, 4, 6):
+            num = val * denom
+            if abs(num - round(num)) < 1e-4:
+                num = int(round(num))
+                return str(num) if denom == 1 else f"{num}/{denom}"
+        return f"{val:.6f}"
+
+    rows = []
+    for i in range(3):
+        terms = []
+        for j in range(3):
+            coeff = rot[i][j]
+            if abs(coeff) < tol:
+                continue
+            sign = "+" if coeff > 0 else "-"
+            mag = abs(coeff)
+            term = (
+                var_names[j]
+                if abs(mag - 1) < tol
+                else f"{format_frac(mag)}{var_names[j]}"
+            )
+            terms.append((sign, term))
+        shift = trans[i] % 1.0
+        if shift > 0.5 + tol:
+            shift -= 1.0
+        if abs(shift) > tol:
+            terms.append(("+" if shift > 0 else "-", format_frac(abs(shift))))
+        if not terms:
+            rows.append("0")
+            continue
+        row_str = ""
+        for k, (sign, term) in enumerate(terms):
+            row_str += (sign if (k > 0 or sign == "-") else "") + term
+        rows.append(row_str)
+    return ", ".join(rows)
+
+
 def pack_offset(r_list: list) -> str:
     """
     Parameters

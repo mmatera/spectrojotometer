@@ -9,7 +9,12 @@ import logging
 import numpy as np
 
 from .magnetic_model import MagneticModel
-from .tools import pack_offset, unpack_offset, unpack_symmetry_and_offset
+from .tools import (
+    format_symmetry_operator,
+    pack_offset,
+    unpack_offset,
+    unpack_symmetry_and_offset,
+)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -143,22 +148,22 @@ def parse_symmetry(strsymm: str) -> Tuple[list, list]:
 
 
 def magnetic_model_from_file(
-        filename: str,
-        magnetic_atoms: tuple = (
-            "Mn",
-            "Fe",
-            "Co",
-            "Ni",
-            "Dy",
-            "Tb",
-            "Eu",
-            "Cu",
-            "V",
-            "Ti",
-            "Cr",
-        ),
-        bond_names: Optional[list] = None,
-        primitive_cell=False,
+    filename: str,
+    magnetic_atoms: tuple = (
+        "Mn",
+        "Fe",
+        "Co",
+        "Ni",
+        "Dy",
+        "Tb",
+        "Eu",
+        "Cu",
+        "V",
+        "Ti",
+        "Cr",
+    ),
+    bond_names: Optional[list] = None,
+    primitive_cell: bool = False,
 ) -> MagneticModel:
     """
     Parameters
@@ -171,6 +176,10 @@ def magnetic_model_from_file(
     bond_names : Optional[list], optional
         The names of the bonds.  The default is None, meaning that the bonds
         are named automatically.
+    primitive_cell : bool, optional
+        Only used for CIF files. See `magnetic_model_from_cif`. Ignored
+        (with a warning if set) for `.struct` files, which don't support
+        this reduction.
 
     Returns
     -------
@@ -178,9 +187,16 @@ def magnetic_model_from_file(
         a MagneticModel.
     """
     if filename[-4:] == ".cif" or filename[-4:] == ".CIF":
-        return magnetic_model_from_cif(filename, magnetic_atoms, bond_names, primitive_cell=primitive_cell)
+        return magnetic_model_from_cif(
+            filename, magnetic_atoms, bond_names, primitive_cell=primitive_cell
+        )
     if filename[-7:] == ".struct" or filename[-7:] == ".STRUCT":
-        return magnetic_model_from_wk2_struct(filename, magnetic_atoms, bond_names, primitive_cell=primitive_cell)
+        if primitive_cell:
+            logging.warning(
+                "primitive_cell=True is not supported for .struct files; "
+                "ignoring it."
+            )
+        return magnetic_model_from_wk2_struct(filename, magnetic_atoms, bond_names)
     logging.error("unknown file format")
     return -1
 
@@ -507,13 +523,37 @@ def primitive_vectors_from_symmetries(
         are not pure translations, or no valid sublattice basis of the
         expected index could be found (in which case the caller should
         fall back to expanding atoms with `generate_atoms_by_symmetries`
-        instead).
+        instead). Call `primitive_vectors_from_symmetries_reason` for a
+        human-readable explanation of why `None` was returned.
     """
+    result, _ = _primitive_vectors_from_symmetries_impl(symmetries, conventional_vectors)
+    return result
+
+
+def primitive_vectors_from_symmetries_reason(
+    symmetries: list, conventional_vectors
+) -> str:
+    """
+    Same computation as `primitive_vectors_from_symmetries`, but returns
+    a human-readable explanation instead of the basis itself. Useful to
+    build an informative error message when `primitive_cell=True` fails.
+    """
+    _, reason = _primitive_vectors_from_symmetries_impl(symmetries, conventional_vectors)
+    return reason
+
+
+def _primitive_vectors_from_symmetries_impl(symmetries: list, conventional_vectors):
     conventional_vectors = np.array(conventional_vectors)
     translations = []
-    for rot, trans in symmetries:
+    for k, (rot, trans) in enumerate(symmetries):
         if not np.allclose(rot, np.eye(3), atol=1e-6):
-            return None
+            reason = (
+                f"symmetry operator #{k + 1} ({format_symmetry_operator(rot, trans)}) "
+                "has a non-identity rotation part; primitive_cell=True only "
+                "supports lattices whose symmetries are pure translations "
+                "(centering: F, I, C, A or B), not point-group rotations."
+            )
+            return None, reason
         translations.append(np.array(trans) % 1.0)
 
     uniq = []
@@ -523,17 +563,39 @@ def primitive_vectors_from_symmetries(
         uniq.append(t)
     n_cosets = len(uniq)
     if n_cosets <= 1:
-        return None
+        # Nothing to reduce: the lattice already has no extra centering
+        # translations beyond the identity (e.g. a CIF that was already
+        # saved from a compact/primitive-cell model). The "primitive"
+        # basis is then just the conventional vectors themselves.
+        return (np.eye(3), conventional_vectors), ""
 
     candidates = [t for t in uniq if not np.allclose(t, 0, atol=1e-6)]
+    tried_dets = []
     for combo in combinations(candidates, 3):
         mat = np.array(combo)
         det = abs(np.linalg.det(mat))
+        tried_dets.append(det)
         if det < 1e-6:
             continue
         if abs(det - 1.0 / n_cosets) < 1e-3:
-            return mat, mat.dot(conventional_vectors)
-    return None
+            return (mat, mat.dot(conventional_vectors)), ""
+
+    coset_list = ", ".join(
+        str(tuple(round(float(x), 4) for x in t)) for t in candidates
+    )
+    reason = (
+        f"found {n_cosets} distinct translations (besides identity: "
+        f"{coset_list}), but no combination of 3 of them spans a sublattice "
+        f"of the expected index (1/{n_cosets} of the conventional cell "
+        f"volume; closest determinants tried: "
+        f"{[round(d, 4) for d in tried_dets]}). This can happen if the "
+        "symmetries mix more than one centering type, if fewer than 3 "
+        "independent translations are listed (e.g. I or C centering, "
+        "which need to be combined with the conventional vectors, not "
+        "supported yet), or if there's a numerical inconsistency in the "
+        "listed translations."
+    )
+    return None, reason
 
 
 def frac_offset_to_primitive_int(delta_frac, primitive_frac_basis, tol: float = 1e-3):
@@ -1025,12 +1087,12 @@ def magnetic_model_from_cif(
                             symmetries, conventional_vectors
                         )
                         if primitive_basis is None:
+                            reason = primitive_vectors_from_symmetries_reason(
+                                symmetries, conventional_vectors
+                            )
                             raise ValueError(
-                                "primitive_cell=True requires the CIF's symmetry "
-                                "operators to be pure translations describing a "
-                                "centered Bravais lattice (F, I, C, A or B); could "
-                                "not find a valid primitive basis from the "
-                                f"symmetries listed in {filename}."
+                                f"cannot build a primitive-cell model from {filename}: "
+                                f"{reason}"
                             )
                         primitive_frac_basis, primitive_bravais_vectors = (
                             primitive_basis
@@ -1079,11 +1141,12 @@ def magnetic_model_from_cif(
                 symmetries, conventional_vectors
             )
             if primitive_basis is None:
+                reason = primitive_vectors_from_symmetries_reason(
+                    symmetries, conventional_vectors
+                )
                 raise ValueError(
-                    "primitive_cell=True requires the CIF's symmetry operators "
-                    "to be pure translations describing a centered Bravais "
-                    "lattice (F, I, C, A or B); could not find a valid "
-                    f"primitive basis from the symmetries listed in {filename}."
+                    f"cannot build a primitive-cell model from {filename}: "
+                    f"{reason}"
                 )
             _, primitive_bravais_vectors = primitive_basis
         bravais_vectors = primitive_bravais_vectors
@@ -1111,6 +1174,17 @@ def magnetic_model_from_cif(
         magnetic_species=magnetic_species,
         g_lande_factors=g_lande_factors,
         spin_repr=spin_repr,
+        # NOTE: `symmetries` here must always be expressed in the same
+        # fractional frame as `bravais_vectors`. The CIF's own symmetries
+        # (identity + centering) are defined relative to the *conventional*
+        # cell; once reduced to a primitive cell (primitive_cell=True) or
+        # fully expanded (the default), no further symmetry is needed to
+        # describe the model, so we deliberately do NOT forward them here
+        # (that would make `save_cif` write a symmetry loop that no longer
+        # matches the stored lattice vectors). `space_group_symbol` is kept
+        # purely as informational metadata; it is not used by `save_cif`.
+        symmetries=None,
+        space_group_symbol=space_group_symbol,
     )
 
     return model
@@ -1144,20 +1218,20 @@ def magnetic_model_from_wk2_struct(
     bravais_params = {}
     magnetic_positions = []
     bravais_vectors = None
-    # labels = None
-    # entries = None
+    labels = None
+    entries = None
     magnetic_species = []
-    # bond_labels = None
-    # bondlists = None
-    # bond_distances = []
+    bond_labels = None
+    bondlists = None
+    bond_distances = []
 
     with open(filename) as fin:
         title = fin.readline()
         fin.readline()  # size
         fin.readline()  # not any clue
         bravais = fin.readline()
-        for line in fin:
-            sl = line.strip()
+        for l in fin:
+            sl = l.strip()
             if sl[:4] == "ATOM":
                 positions = []
                 if sl[4] == " ":
@@ -1169,7 +1243,7 @@ def magnetic_model_from_wk2_struct(
                     sl[5] = "-"
                     sl = "".join(sl)
                 fields = sl.split()
-                # idxatom = fields[0][4:-1]
+                idxatom = fields[0][4:-1]
                 positions.append(
                     [
                         float(fields[1][3:]),
@@ -1195,7 +1269,7 @@ def magnetic_model_from_wk2_struct(
                     atomspecies = atomlabelfield[0]
                 else:
                     atomspecies = atomlabelfield[:2]
-                # atomlabel = atomspecies + idxatom
+                atomlabel = atomspecies + idxatom
                 lrm = fin.readline()  # Rotation matrix
                 lrm = lrm + fin.readline()
                 lrm = lrm + fin.readline()

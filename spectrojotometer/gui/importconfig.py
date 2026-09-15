@@ -129,7 +129,9 @@ class ImportConfigWindow(Toplevel):
             if filename == "":
                 return
             self.app.datafolder = str(Path(filename).parent)
-            newmodel = magnetic_model_from_file(filename=filename)
+            newmodel = magnetic_model_from_file(
+                filename=filename, primitive_cell=self.app.primitive_cell_var.get()
+            )
             self.models[filename] = newmodel
             menu = self.optmodels["menu"]
             menu.delete(0, "end")

@@ -8,7 +8,7 @@ import numpy as np
 import numpy.linalg as la
 import numpy.random as rnd
 
-from .tools import box_ellipse, offset_orientation, pack_offset
+from .tools import box_ellipse, format_symmetry_operator, offset_orientation, pack_offset
 
 # import matplotlib.pyplot as plt
 # from mpl_toolkits.mplot3d import Axes3
@@ -120,6 +120,8 @@ class MagneticModel:
         model_label="default",
         g_lande_factors=None,
         spin_repr=None,
+        symmetries=None,
+        space_group_symbol=None,
     ):
         self.model_label = model_label
         self.onfly = onfly
@@ -190,6 +192,15 @@ class MagneticModel:
         lattice_properties["bravais_vectors"] = bravais_lat
         lattice_properties["cell_size"] = len(atomic_pos)
         lattice_properties["supercell_size"] = supercell_size
+        # Symmetry operators actually used to build this model (empty for a
+        # plain P1 description). Kept mainly so `save_cif` can write a
+        # faithful CIF back out instead of always collapsing to P1, and so
+        # downstream tools (e.g. the web interface) can tell how the model
+        # was built.
+        lattice_properties["symmetries"] = (
+            list(symmetries) if symmetries is not None else []
+        )
+        lattice_properties["space_group_symbol"] = space_group_symbol
 
         self.bonds = {
             b_name: {"distance": b_distance, "bonds": b_list}
@@ -440,7 +451,7 @@ class MagneticModel:
         where res is the subset of configurations that optimizes the
         cost function    sqrt(len(res))/|| coefficient_matrix(res)^+ ||
 
-        If the optional parameter length is provided, then it tries to optimize
+        If the optional parameter l is provided, then it tries to optimize
         the cost function for a fixed size length.
 
         """
@@ -871,6 +882,16 @@ class MagneticModel:
         logging.info(msg)
         model_name = "data_magnetic_model_1"
 
+        symmetries = self.lattice_properties.get("symmetries") or []
+        n_dim = len(bravais_vectors)
+        var_names = ["z"] if n_dim == 1 else (["x", "y"] if n_dim == 2 else ["x", "y", "z"])
+        if symmetries:
+            symop_lines = "\n".join(
+                f"'{format_symmetry_operator(rot, trans)}'" for rot, trans in symmetries
+            )
+        else:
+            symop_lines = f"'{', '.join(var_names)}'"
+
         with open(filename, "w") as fileout:
             head = (
                 f"""
@@ -897,7 +918,7 @@ _chemical_name_common                  """
                     + "\n\n\n"
                 )
                 fileout.write(
-                    "loop_\n _space_group_symop_operation_xyz" + "\t\t\t\n'z'\n"
+                    "loop_\n _space_group_symop_operation_xyz" + "\t\t\t\n" + symop_lines + "\n"
                 )
             elif len(bravais_vectors) == 2:
                 a_norm = np.linalg.norm(bravais_vectors[0])
@@ -912,7 +933,7 @@ _chemical_name_common                  """
                 fileout.write("_cell_length_b \t\t\t" + str(b_norm) + "\n")
                 fileout.write("_cell_length_gamma \t\t\t" + str(gamma) + "\n\n")
                 fileout.write(
-                    "loop_\n _space_group_symop_operation_xyz" + "\n'x, y'\n\n"
+                    "loop_\n _space_group_symop_operation_xyz" + "\n" + symop_lines + "\n\n"
                 )
 
             elif len(bravais_vectors) == 3:
@@ -947,7 +968,7 @@ _chemical_name_common                  """
                 fileout.write("_cell_angle_beta \t\t\t" + str(beta) + "\n")
                 fileout.write("_cell_angle_gamma \t\t\t" + str(gamma) + "\n\n")
                 fileout.write(
-                    "loop_\n _space_group_symop_operation_xyz" + "\t\t\t\n'x, y, z'\n\n"
+                    "loop_\n _space_group_symop_operation_xyz" + "\t\t\t\n" + symop_lines + "\n\n"
                 )
 
             fileout.write("# Atom positions \n\n")

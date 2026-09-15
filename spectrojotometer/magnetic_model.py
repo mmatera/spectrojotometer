@@ -440,7 +440,7 @@ class MagneticModel:
         where res is the subset of configurations that optimizes the
         cost function    sqrt(len(res))/|| coefficient_matrix(res)^+ ||
 
-        If the optional parameter l is provided, then it tries to optimize
+        If the optional parameter length is provided, then it tries to optimize
         the cost function for a fixed size length.
 
         """

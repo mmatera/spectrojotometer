@@ -4,6 +4,7 @@ model_io
 Tools to load modules from files.
 """
 from typing import Optional, Tuple, Union
+from itertools import combinations
 import logging
 import numpy as np
 
@@ -142,21 +143,22 @@ def parse_symmetry(strsymm: str) -> Tuple[list, list]:
 
 
 def magnetic_model_from_file(
-    filename: str,
-    magnetic_atoms: tuple = (
-        "Mn",
-        "Fe",
-        "Co",
-        "Ni",
-        "Dy",
-        "Tb",
-        "Eu",
-        "Cu",
-        "V",
-        "Ti",
-        "Cr",
-    ),
-    bond_names: Optional[list] = None,
+        filename: str,
+        magnetic_atoms: tuple = (
+            "Mn",
+            "Fe",
+            "Co",
+            "Ni",
+            "Dy",
+            "Tb",
+            "Eu",
+            "Cu",
+            "V",
+            "Ti",
+            "Cr",
+        ),
+        bond_names: Optional[list] = None,
+        primitive_cell=False,
 ) -> MagneticModel:
     """
     Parameters
@@ -176,11 +178,110 @@ def magnetic_model_from_file(
         a MagneticModel.
     """
     if filename[-4:] == ".cif" or filename[-4:] == ".CIF":
-        return magnetic_model_from_cif(filename, magnetic_atoms, bond_names)
+        return magnetic_model_from_cif(filename, magnetic_atoms, bond_names, primitive_cell=primitive_cell)
     if filename[-7:] == ".struct" or filename[-7:] == ".STRUCT":
-        return magnetic_model_from_wk2_struct(filename, magnetic_atoms, bond_names)
+        return magnetic_model_from_wk2_struct(filename, magnetic_atoms, bond_names, primitive_cell=primitive_cell)
     logging.error("unknown file format")
     return -1
+
+
+_CENTERING_TRANSLATIONS = {
+    "P": [(0.0, 0.0, 0.0)],
+    "A": [(0.0, 0.0, 0.0), (0.0, 0.5, 0.5)],
+    "B": [(0.0, 0.0, 0.0), (0.5, 0.0, 0.5)],
+    "C": [(0.0, 0.0, 0.0), (0.5, 0.5, 0.0)],
+    "I": [(0.0, 0.0, 0.0), (0.5, 0.5, 0.5)],
+    "F": [(0.0, 0.0, 0.0), (0.0, 0.5, 0.5), (0.5, 0.0, 0.5), (0.5, 0.5, 0.0)],
+    # Rhombohedral, obverse setting, hexagonal axes.
+    "R": [(0.0, 0.0, 0.0), (2 / 3, 1 / 3, 1 / 3), (1 / 3, 2 / 3, 2 / 3)],
+}
+
+
+def centering_letter_from_symbol(symbol: Optional[str]) -> str:
+    """
+    Extract the lattice-centering letter (P, A, B, C, I, F or R) from a
+    Hermann-Mauguin space-group symbol, e.g. read from
+    `_symmetry_space_group_name_H-M` or `_space_group_name_H-M_alt`
+    in a CIF file.
+
+    Parameters
+    ----------
+    symbol : Optional[str]
+        The Hermann-Mauguin symbol (e.g. "F d -3 m"), or None if not
+        available.
+
+    Returns
+    -------
+    str
+        The centering letter. Defaults to "P" (primitive, i.e. no
+        extra translations) when the symbol is missing or not
+        recognized.
+    """
+    if not symbol:
+        return "P"
+    symbol = symbol.strip().strip("'\"")
+    if not symbol:
+        return "P"
+    letter = symbol[0].upper()
+    return letter if letter in _CENTERING_TRANSLATIONS else "P"
+
+
+def expand_symmetries_with_centering(
+    symmetries: list, space_group_symbol: Optional[str]
+) -> list:
+    """
+    Complete a (possibly partial) list of symmetry operators read from a
+    CIF file with the lattice-centering translations implied by the
+    space group's Bravais lattice type (P, A, B, C, I, F or R).
+
+    Many CIF files only list the coset representatives of the point
+    group in `_space_group_symop_operation_xyz` /
+    `_symmetry_equiv_pos_as_xyz`, and leave the centering translations
+    implicit in the space group symbol. For example, a spinel like
+    ZnCr2O4 (space group Fd-3m, FCC Bravais lattice) is sometimes
+    described with only the 48 point-group operators instead of the
+    full 192. Without the centering translations, bonds related by an
+    FCC centering translation (e.g. (0,½,½)) are treated as
+    inequivalent, so the reduction of independent coupling constants
+    is incomplete.
+
+    NOTE: this is meant to be used only to complete the symmetries fed
+    to `generate_bonds_by_symmetries` (equivalence of couplings), not
+    the ones fed to `generate_atoms_by_symmetries`: atomic positions
+    are taken exactly as listed in the CIF and are never expanded.
+
+    This is a no-op (returns `symmetries` unchanged) for primitive
+    lattices, for an empty/unknown symbol, or when `symmetries` is
+    empty.
+
+    Parameters
+    ----------
+    symmetries : list
+        A list of (rotation_matrix, translation_vector) pairs, as
+        returned by `cif_read_loop_symmetries`.
+    space_group_symbol : Optional[str]
+        The Hermann-Mauguin space-group symbol, if available.
+
+    Returns
+    -------
+    list
+        The symmetry list, completed with centering translations.
+    """
+    centerings = _CENTERING_TRANSLATIONS[centering_letter_from_symbol(space_group_symbol)]
+    if len(centerings) == 1 or not symmetries:
+        return symmetries
+
+    expanded = []
+    seen = set()
+    for rot, trans in symmetries:
+        for cvec in centerings:
+            new_trans = (np.array(trans) + np.array(cvec)) % 1.0
+            key = (tuple(np.round(np.array(rot).flatten(), 6)), tuple(np.round(new_trans, 6)))
+            if key in seen:
+                continue
+            seen.add(key)
+            expanded.append((rot, new_trans))
+    return expanded
 
 
 def cif_read_loop_symmetries(labels: list, entries: tuple) -> list:
@@ -368,6 +469,212 @@ def cif_read_loop_bonds(labels: list, entries: list, atomlabels: list) -> tuple:
                 bondlists.append([])
 
             bondlists[bond_labels[bondlabel]].append(newbond)
+    bond_labels = sorted(
+        [(value, la) for la, value in bond_labels.items()], key=lambda x: x[0]
+    )
+    bond_labels = [x[1] for x in bond_labels]
+    return bond_labels, bond_distances, bondlists
+
+
+def primitive_vectors_from_symmetries(
+    symmetries: list, conventional_vectors
+) -> Optional[tuple]:
+    """
+    Given a list of symmetry operators that are all pure translations
+    (i.e. describe a centered Bravais lattice: F, I, C, A or B), find a
+    primitive basis for the full lattice (conventional cell + centering
+    translations).
+
+    This is used to build a *compact* model (only the atoms of the
+    asymmetric unit) whose periodicity is expressed with a primitive
+    Bravais basis, instead of expanding the atoms to fill the
+    conventional cell.
+
+    Parameters
+    ----------
+    symmetries : list
+        (rotation, translation) pairs. All rotations must be the
+        identity (a purely translational coset) for this to apply.
+    conventional_vectors : array-like
+        The 3 conventional (e.g. cubic/orthorhombic) Cartesian lattice
+        vectors, as returned by `read_bravais_vectors`.
+
+    Returns
+    -------
+    Optional[tuple]
+        `(primitive_frac_vectors, primitive_cartesian_vectors)` if a
+        valid primitive basis was found, or `None` if the symmetries
+        are not pure translations, or no valid sublattice basis of the
+        expected index could be found (in which case the caller should
+        fall back to expanding atoms with `generate_atoms_by_symmetries`
+        instead).
+    """
+    conventional_vectors = np.array(conventional_vectors)
+    translations = []
+    for rot, trans in symmetries:
+        if not np.allclose(rot, np.eye(3), atol=1e-6):
+            return None
+        translations.append(np.array(trans) % 1.0)
+
+    uniq = []
+    for t in translations:
+        if any(np.allclose(t, u, atol=1e-6) for u in uniq):
+            continue
+        uniq.append(t)
+    n_cosets = len(uniq)
+    if n_cosets <= 1:
+        return None
+
+    candidates = [t for t in uniq if not np.allclose(t, 0, atol=1e-6)]
+    for combo in combinations(candidates, 3):
+        mat = np.array(combo)
+        det = abs(np.linalg.det(mat))
+        if det < 1e-6:
+            continue
+        if abs(det - 1.0 / n_cosets) < 1e-3:
+            return mat, mat.dot(conventional_vectors)
+    return None
+
+
+def frac_offset_to_primitive_int(delta_frac, primitive_frac_basis, tol: float = 1e-3):
+    """
+    Express a fractional displacement (given in conventional-cell
+    fractional coordinates) as an integer combination of a primitive
+    lattice basis.
+
+    Parameters
+    ----------
+    delta_frac : array-like
+        The displacement, in conventional fractional coordinates.
+    primitive_frac_basis : array-like
+        3 primitive lattice vectors, in conventional fractional
+        coordinates (as returned by `primitive_vectors_from_symmetries`).
+    tol : float, optional
+        Maximum deviation from an integer allowed for the result to be
+        accepted. The default is 1e-3.
+
+    Returns
+    -------
+    Optional[np.ndarray]
+        The integer coefficients, or `None` if `delta_frac` is not (to
+        within `tol`) an integer combination of the given basis.
+    """
+    mat = np.array(primitive_frac_basis).T
+    try:
+        coeffs = np.linalg.solve(mat, np.array(delta_frac, dtype=float))
+    except np.linalg.LinAlgError:
+        return None
+    rounded = np.round(coeffs)
+    if np.max(np.abs(coeffs - rounded)) > tol:
+        return None
+    return rounded.astype(int)
+
+
+def cif_read_loop_bonds_compact(
+    labels: list,
+    entries: list,
+    atomlabels: dict,
+    symmetries: list,
+    primitive_frac_basis,
+) -> tuple:
+    """
+    Like `cif_read_loop_bonds`, but for a *compact* model: atoms are
+    exactly the ones declared in `_atom_site` (the asymmetric unit,
+    never expanded), and `_geom_bond_site_symmetry_2` (or `_1`) is
+    resolved using the actual symmetry operator it refers to (an index
+    into `symmetries`, following the standard CIF convention), rather
+    than by looking up a separately-labeled symmetry-image atom.
+
+    Bonds whose relative symmetry is not a pure translation, or whose
+    resulting displacement is not an integer combination of the
+    primitive lattice (`primitive_frac_basis`), are skipped with a
+    warning: they cannot be represented in a 4-atom/primitive-cell
+    model and require expanding the atoms instead (the default
+    behaviour of `magnetic_model_from_cif`).
+    """
+    logging.info("Reading bonds from cif (compact/primitive mode)")
+    jlabelcol = None
+    bondlists = []
+    bond_distances = []
+    bond_labels = {}
+    sym1col = -1
+    sym2col = -1
+    for i, t in enumerate(labels):
+        if t == "_geom_bond_atom_site_label_1":
+            at1col = i
+        if t == "_geom_bond_atom_site_label_2":
+            at2col = i
+        if t == "_geom_bond_distance":
+            distcol = i
+        if t == "_geom_bond_label":
+            jlabelcol = i
+        if t == "_geom_bond_site_symmetry_1":
+            sym1col = i
+        if t == "_geom_bond_site_symmetry_2":
+            sym2col = i
+
+    def resolve_delta(code):
+        sym, conv_offset = unpack_symmetry_and_offset(code)
+        if sym < 0 or sym >= len(symmetries):
+            msg = f"symmetry index {sym + 1} in '{code}' is out of range"
+            logging.warning(msg)
+            return None
+        rot, trans = symmetries[sym]
+        if not np.allclose(rot, np.eye(3), atol=1e-6):
+            msg = (
+                f"symmetry operator {sym + 1} used in '{code}' is not a pure "
+                "translation; bonds related by point-group rotations cannot "
+                "be folded into a compact/primitive-cell model"
+            )
+            logging.warning(msg)
+            return None
+        return np.array(trans) + np.array(conv_offset)
+
+    for en in entries:
+        label1 = en[at1col]
+        label2 = en[at2col]
+        delta1 = np.zeros(3)
+        delta2 = np.zeros(3)
+        if sym1col != -1:
+            delta1 = resolve_delta(en[sym1col])
+            if delta1 is None:
+                continue
+        if sym2col != -1:
+            delta2 = resolve_delta(en[sym2col])
+            if delta2 is None:
+                continue
+        if not (label1 in atomlabels and label2 in atomlabels):
+            msg = f"{[label1, label2]} not in atomlabels"
+            logging.info(msg)
+            continue
+        offset = frac_offset_to_primitive_int(delta2 - delta1, primitive_frac_basis)
+        if offset is None:
+            msg = (
+                f"the offset between {label1} and {label2} "
+                f"({delta2 - delta1}) is not an integer combination of the "
+                "primitive lattice vectors; skipping this bond"
+            )
+            logging.warning(msg)
+            continue
+
+        newbond = normalize_bond(atomlabels[label1], atomlabels[label2], offset)
+        en[distcol] = en[distcol].split(sep="(", maxsplit=1)[0]
+        if jlabelcol is None:
+            if en[distcol] not in bond_distances:
+                bond_distances.append(en[distcol])
+                bondlabel = "J" + str(len(bond_distances))
+                bond_labels[bondlabel] = len(bond_labels)
+                bondlists.append([])
+            bs = bond_distances.index(en[distcol])
+            bondlists[bs].append(newbond)
+        else:
+            bondlabel = en[jlabelcol]
+            if bond_labels.get(bondlabel) is None:
+                bond_labels[bondlabel] = len(bondlists)
+                bond_distances.append(en[distcol])
+                bondlists.append([])
+            bondlists[bond_labels[bondlabel]].append(newbond)
+
     bond_labels = sorted(
         [(value, la) for la, value in bond_labels.items()], key=lambda x: x[0]
     )
@@ -571,6 +878,7 @@ def magnetic_model_from_cif(
         "V",
     ),
     bond_names: Optional[list] = None,
+    primitive_cell: bool = False,
 ) -> MagneticModel:
     """
     Parameters
@@ -583,6 +891,19 @@ def magnetic_model_from_cif(
     bond_names : Optional[list], optional
         The names of the bonds.  The default is None, meaning that the bonds
         are named automatically.
+    primitive_cell : bool, optional
+        If False (the default), atoms are expanded to fill the
+        conventional cell using the CIF's symmetry operators (the
+        historical behaviour).
+        If True, atoms are taken exactly as declared in `_atom_site`
+        (never expanded), and the model's Bravais vectors are switched
+        to a primitive basis built from the symmetry operators, which
+        must all be pure translations (i.e. describe a centered lattice
+        such as F, I, C, A or B — not a general point-group symmetry).
+        Bonds must then reference symmetry images using the standard
+        CIF `_geom_bond_site_symmetry_2` code (e.g. "2_555" for the
+        second listed symmetry operator, no extra cell shift), not by
+        inventing extra atom labels beyond those in `_atom_site`.
 
     Returns
     -------
@@ -600,8 +921,19 @@ def magnetic_model_from_cif(
     bondlists = None
     bond_distances = []
     symmetries = []
+    space_group_symbol = None
+    primitive_bravais_vectors = None
     g_lande_factors = None
     spin_repr = None
+
+    # CIF tags (outside of a loop_ block) that may carry the Hermann-Mauguin
+    # space-group symbol, used to infer the lattice centering (P, A, B, C,
+    # I, F, R) when the symmetries loop only lists coset representatives.
+    space_group_name_tags = (
+        "_symmetry_space_group_name_h-m",
+        "_space_group_name_h-m_alt",
+        "_space_group_name_h-m_ref",
+    )
 
     msg = f"loaading model from{filename}"
     logging.info(msg)
@@ -616,6 +948,11 @@ def magnetic_model_from_cif(
                 varvals = line[12:].strip().split()
                 varvals[1] = varvals[1].split(sep="(", maxsplit=1)[0]
                 bravais_params[varvals[0]] = float(varvals[1]) * 3.1415926 / 180.0
+            elif listrip[:1] == "_":
+                tag_value = listrip.split(None, 1)
+                if tag_value and tag_value[0].lower() in space_group_name_tags:
+                    if len(tag_value) > 1:
+                        space_group_symbol = tag_value[1].strip().strip("'\"")
             elif listrip[:5] == "loop_":
                 labels = []
                 entries = []
@@ -657,38 +994,102 @@ def magnetic_model_from_cif(
                         g_lande_factors,
                         spin_repr,
                     ) = cif_read_loop_atoms(labels, entries, magnetic_atoms)
-                    (
-                        atomlabels,
-                        magnetic_species,
-                        magnetic_positions,
-                        g_lande_factors,
-                        spin_repr,
-                    ) = generate_atoms_by_symmetries(
-                        symmetries,
-                        atomlabels,
-                        magnetic_species,
-                        magnetic_positions,
-                        g_lande_factors,
-                        spin_repr,
-                    )
+                    if not primitive_cell:
+                        (
+                            atomlabels,
+                            magnetic_species,
+                            magnetic_positions,
+                            g_lande_factors,
+                            spin_repr,
+                        ) = generate_atoms_by_symmetries(
+                            symmetries,
+                            atomlabels,
+                            magnetic_species,
+                            magnetic_positions,
+                            g_lande_factors,
+                            spin_repr,
+                        )
 
                 # If the block contains the set of bonds
                 if "_geom_bond_atom_site_label_1" in labels:
-                    (
-                        bond_labels,
-                        bond_distances,
-                        bondlists,
-                    ) = cif_read_loop_bonds(labels, entries, atomlabels)
-                    generate_bonds_by_symmetries(
-                        symmetries,
-                        bond_labels,
-                        bond_distances,
-                        bondlists,
-                        magnetic_positions,
-                    )
+                    if primitive_cell:
+                        # Atoms stay exactly as declared (the asymmetric
+                        # unit). Bonds are resolved against a primitive
+                        # Bravais basis built from the (pure-translation)
+                        # symmetry operators, using the standard CIF
+                        # `_geom_bond_site_symmetry_2` convention (a
+                        # symmetry-operator index, not an extra atom
+                        # label) to refer to symmetry images.
+                        conventional_vectors = read_bravais_vectors(bravais_params)
+                        primitive_basis = primitive_vectors_from_symmetries(
+                            symmetries, conventional_vectors
+                        )
+                        if primitive_basis is None:
+                            raise ValueError(
+                                "primitive_cell=True requires the CIF's symmetry "
+                                "operators to be pure translations describing a "
+                                "centered Bravais lattice (F, I, C, A or B); could "
+                                "not find a valid primitive basis from the "
+                                f"symmetries listed in {filename}."
+                            )
+                        primitive_frac_basis, primitive_bravais_vectors = (
+                            primitive_basis
+                        )
+                        (
+                            bond_labels,
+                            bond_distances,
+                            bondlists,
+                        ) = cif_read_loop_bonds_compact(
+                            labels,
+                            entries,
+                            atomlabels,
+                            symmetries,
+                            primitive_frac_basis,
+                        )
+                    else:
+                        (
+                            bond_labels,
+                            bond_distances,
+                            bondlists,
+                        ) = cif_read_loop_bonds(labels, entries, atomlabels)
+                        # Atoms are taken exactly as given in the CIF (no
+                        # expansion). For finding *equivalent bonds*, however,
+                        # we do want the full space-group symmetry, completing
+                        # whatever the CIF's symmetry loop lists with the
+                        # lattice-centering translations implied by the space
+                        # group symbol (e.g. F for an FCC lattice like the
+                        # spinel structure of ZnCr2O4). This only groups
+                        # existing bonds into equivalence classes; it never
+                        # creates new atoms.
+                        bond_symmetries = expand_symmetries_with_centering(
+                            symmetries, space_group_symbol
+                        )
+                        generate_bonds_by_symmetries(
+                            bond_symmetries,
+                            bond_labels,
+                            bond_distances,
+                            bondlists,
+                            magnetic_positions,
+                        )
 
-    bravais_vectors = read_bravais_vectors(bravais_params)
-    magnetic_positions = np.array(magnetic_positions).dot(np.array(bravais_vectors))
+    conventional_vectors = read_bravais_vectors(bravais_params)
+    if primitive_cell:
+        if primitive_bravais_vectors is None:
+            primitive_basis = primitive_vectors_from_symmetries(
+                symmetries, conventional_vectors
+            )
+            if primitive_basis is None:
+                raise ValueError(
+                    "primitive_cell=True requires the CIF's symmetry operators "
+                    "to be pure translations describing a centered Bravais "
+                    "lattice (F, I, C, A or B); could not find a valid "
+                    f"primitive basis from the symmetries listed in {filename}."
+                )
+            _, primitive_bravais_vectors = primitive_basis
+        bravais_vectors = primitive_bravais_vectors
+    else:
+        bravais_vectors = conventional_vectors
+    magnetic_positions = np.array(magnetic_positions).dot(np.array(conventional_vectors))
     for msg in (
         f"    magnetic species: {magnetic_species}",
         f"    spin representation: {spin_repr}",
@@ -743,20 +1144,20 @@ def magnetic_model_from_wk2_struct(
     bravais_params = {}
     magnetic_positions = []
     bravais_vectors = None
-    labels = None
-    entries = None
+    # labels = None
+    # entries = None
     magnetic_species = []
-    bond_labels = None
-    bondlists = None
-    bond_distances = []
+    # bond_labels = None
+    # bondlists = None
+    # bond_distances = []
 
     with open(filename) as fin:
         title = fin.readline()
         fin.readline()  # size
         fin.readline()  # not any clue
         bravais = fin.readline()
-        for l in fin:
-            sl = l.strip()
+        for line in fin:
+            sl = line.strip()
             if sl[:4] == "ATOM":
                 positions = []
                 if sl[4] == " ":
@@ -768,7 +1169,7 @@ def magnetic_model_from_wk2_struct(
                     sl[5] = "-"
                     sl = "".join(sl)
                 fields = sl.split()
-                idxatom = fields[0][4:-1]
+                # idxatom = fields[0][4:-1]
                 positions.append(
                     [
                         float(fields[1][3:]),
@@ -794,7 +1195,7 @@ def magnetic_model_from_wk2_struct(
                     atomspecies = atomlabelfield[0]
                 else:
                     atomspecies = atomlabelfield[:2]
-                atomlabel = atomspecies + idxatom
+                # atomlabel = atomspecies + idxatom
                 lrm = fin.readline()  # Rotation matrix
                 lrm = lrm + fin.readline()
                 lrm = lrm + fin.readline()

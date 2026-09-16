@@ -18,6 +18,11 @@ from .tools import (
 
 logging.basicConfig(level=logging.INFO)
 
+DEFAULT_MAGNETIC_ATOMS = tuple(
+    (
+        "Co", "Cr", "Cu", "Cu", "Dy", "Eu", "Fe", "Mn", "Ni", "Tb", "Ti", "V",
+    )
+)
 
 def find_atom_offset_by_symmetry(p, symop, magnetic_positions) -> tuple:
     """
@@ -149,19 +154,7 @@ def parse_symmetry(strsymm: str) -> Tuple[list, list]:
 
 def magnetic_model_from_file(
     filename: str,
-    magnetic_atoms: tuple = (
-        "Mn",
-        "Fe",
-        "Co",
-        "Ni",
-        "Dy",
-        "Tb",
-        "Eu",
-        "Cu",
-        "V",
-        "Ti",
-        "Cr",
-    ),
+    magnetic_atoms: tuple = DEFAULT_MAGNETIC_ATOMS,
     bond_names: Optional[list] = None,
     primitive_cell: bool = False,
 ) -> MagneticModel:
@@ -172,7 +165,7 @@ def magnetic_model_from_file(
         The name of the file to read.
     magnetic_atoms : tuple, optional
         The set of atoms to be considered magnetic.
-        The default is ("Mn", "Fe", "Co", "Ni", "Dy", "Tb", "Eu", "Cu", "V").
+        The default is ("Co", "Cr", "Cu", "Cu", "Dy", "Eu", "Fe", "Mn", "Ni", "Tb", "Ti", "V").
     bond_names : Optional[list], optional
         The names of the bonds.  The default is None, meaning that the bonds
         are named automatically.
@@ -928,17 +921,7 @@ def generate_bonds_by_symmetries(
 
 def magnetic_model_from_cif(
     filename: str,
-    magnetic_atoms: tuple = (
-        "Mn",
-        "Fe",
-        "Co",
-        "Ni",
-        "Dy",
-        "Tb",
-        "Eu",
-        "Cu",
-        "V",
-    ),
+    magnetic_atoms: tuple = DEFAULT_MAGNETIC_ATOMS,
     bond_names: Optional[list] = None,
     primitive_cell: bool = False,
 ) -> MagneticModel:
@@ -949,7 +932,7 @@ def magnetic_model_from_cif(
         The name of the file to read.
     magnetic_atoms : tuple, optional
         The set of atoms to be considered magnetic.
-        The default is ("Mn", "Fe", "Co", "Ni", "Dy", "Tb", "Eu", "Cu", "V").
+        The default is ("Co", "Cr", "Cu", "Cu", "Dy", "Eu", "Fe", "Mn", "Ni", "Tb", "Ti", "V").
     bond_names : Optional[list], optional
         The names of the bonds.  The default is None, meaning that the bonds
         are named automatically.
@@ -1191,9 +1174,9 @@ def magnetic_model_from_cif(
 
 
 def magnetic_model_from_wk2_struct(
-    filename: str,
-    magnetic_atoms: tuple = ("Mn", "Fe", "Co", "Ni", "Dy", "Tb", "Eu", "V"),
-    bond_names: Optional[list] = None,
+        filename: str,
+        magnetic_atoms: tuple = DEFAULT_MAGNETIC_ATOMS,
+        bond_names: Optional[list] = None,
 ) -> MagneticModel:
     """
 
@@ -1204,7 +1187,7 @@ def magnetic_model_from_wk2_struct(
         The file to read.
     magnetic_atoms : tuple, optional
         The set of atoms species to be included.
-        The default is ("Mn", "Fe", "Co", "Ni", "Dy", "Tb", "Eu", "V").
+        The default is ("Co", "Cr", "Cu", "Cu", "Dy", "Eu", "Fe", "Mn", "Ni", "Tb", "Ti", "V").
     bond_names : Optional[list], optional
         Names to be used for the couplings.
         The default is None: use automatic names .

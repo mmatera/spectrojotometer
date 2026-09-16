@@ -25,7 +25,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# No optional dependencies listed in setup.py
+test = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [project.scripts]
 print_equations = "bin.print_equations:main"

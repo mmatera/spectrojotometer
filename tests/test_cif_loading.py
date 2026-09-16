@@ -177,4 +177,4 @@ def test_cromita_without_cr_in_magnetic_atoms_raises(examples_dir):
     test_default_magnetic_atoms_inconsistencies.py.
     """
     with pytest.raises(ValueError):
-        magnetic_model_from_cif(str(examples_dir / "cromita_ortogonal.cif"))
+        magnetic_model_from_cif(str(examples_dir / "h2o.cif"))

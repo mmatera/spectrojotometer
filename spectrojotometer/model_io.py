@@ -314,9 +314,12 @@ def cif_read_loop_symmetries(labels: list, entries: tuple) -> list:
     for i, t in enumerate(labels):
         if t == "_symmetry_equiv_pos_as_xyz":
             symmdefcol = i
-        if t == "_space_group_symop_operation_xyz":
+        elif t == "_space_group_symop_operation_xyz":
             symmdefcol = i
-        for i, entry in enumerate(entries):
+        else:
+            # label is not a symmetry operation
+            continue
+        for j, entry in enumerate(entries):
             symmetries.append(parse_symmetry(entry[symmdefcol]))
     return symmetries
 

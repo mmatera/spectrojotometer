@@ -113,16 +113,16 @@ class TestDefaultMagneticAtomsInconsistencies:
 
     def test_cif_direct_call_default_excludes_cr(self, examples_dir):
         with pytest.raises(ValueError):
-            magnetic_model_from_cif(str(examples_dir / "cromita_ortogonal.cif"))
+            magnetic_model_from_cif(str(examples_dir / "h2o.cif"))
 
     def test_dispatch_default_includes_cr(self, examples_dir):
         model = magnetic_model_from_file(str(examples_dir / "cromita_ortogonal.cif"))
         assert "Cr" in model.site_properties["magnetic_species"]
 
-    def test_struct_direct_call_default_excludes_cu(self, fixtures_dir):
+    def test_struct_direct_call_default_excludes_zn(self, fixtures_dir):
         with pytest.raises(ValueError):
             magnetic_model_from_wk2_struct(
-                str(fixtures_dir / "synthetic_single_atom.struct")
+                str(fixtures_dir / "synthetic_nm_single_atom.struct")
             )
 
     def test_dispatch_default_includes_cu_for_struct(self, fixtures_dir):

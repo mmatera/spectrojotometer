@@ -120,10 +120,11 @@ class TestDefaultMagneticAtomsInconsistencies:
         assert "Cr" in model.site_properties["magnetic_species"]
 
     def test_struct_direct_call_default_excludes_zn(self, fixtures_dir):
-        with pytest.raises(ValueError):
-            magnetic_model_from_wk2_struct(
+        
+        model = magnetic_model_from_wk2_struct(
                 str(fixtures_dir / "synthetic_nm_single_atom.struct")
             )
+        assert len(model.site_properties["coord_atomos"])==0
 
     def test_dispatch_default_includes_cu_for_struct(self, fixtures_dir):
         model = magnetic_model_from_file(

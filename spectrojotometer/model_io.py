@@ -1138,7 +1138,8 @@ def magnetic_model_from_cif(
         bravais_vectors = primitive_bravais_vectors
     else:
         bravais_vectors = conventional_vectors
-    magnetic_positions = np.array(magnetic_positions).dot(np.array(conventional_vectors))
+    if len(magnetic_positions)!=0:
+        magnetic_positions = np.array(magnetic_positions).dot(np.array(conventional_vectors))
     for msg in (
         f"    magnetic species: {magnetic_species}",
         f"    spin representation: {spin_repr}",
@@ -1307,7 +1308,8 @@ def magnetic_model_from_wk2_struct(
             y = bravais_params.get("c") * y
             bravais_vectors.append(np.array([x, y, z]))
 
-    magnetic_positions = np.array(magnetic_positions).dot(np.array(bravais_vectors))
+    if len(magnetic_positions)!=0:
+        magnetic_positions = np.array(magnetic_positions).dot(np.array(bravais_vectors))
     model = MagneticModel(
         magnetic_positions,
         bravais_vectors,

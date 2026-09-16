@@ -153,19 +153,22 @@ class MagneticModel:
 
         if ranges is None:
             maxdist = 0
+            dist = 0
             for p_vec in atomic_pos:
                 for q_vec in atomic_pos:
                     dist = np.linalg.norm(p_vec - q_vec)
                     if dist > maxdist:
                         maxdist = dist
-            ranges = [[0, dist]]
+            if maxdist == 0:
+                maxdist = 1
+            ranges = [[0, maxdist]]
         elif isinstance(ranges, float):
             ranges = [[0, ranges]]
         elif isinstance(ranges, list) and isinstance(ranges[0], float):
             ranges = [ranges]
 
         if bond_lists is not None:
-            print("recibí", len(bond_lists), "couplings")
+            print("Got", len(bond_lists), "couplings")
             if bond_distances is None:
                 bond_distances = [0] * len(bond_lists)
             elif len(bond_distances) != len(bond_lists):
@@ -985,9 +988,13 @@ _chemical_name_common                  """
                 + "_atom_site_type_symbol\n"
             )
 
-            bravais_coords = self.site_properties["coord_atomos"].dot(
-                np.linalg.inv(np.array(bravais_vectors))
-            )
+            coord_atoms =  self.site_properties["coord_atomos"]
+            if len(coord_atoms)!=0:
+                bravais_coords = coord_atoms.dot(
+                    np.linalg.inv(np.array(bravais_vectors))
+                )
+            else:
+                bravais_coords = np.array([])
 
             magnetic_species = self.site_properties["magnetic_species"]
             print("magnetic species", magnetic_species)

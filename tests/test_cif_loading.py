@@ -82,18 +82,14 @@ def test_example1_bonds_are_read(examples_dir):
 
 def test_example1_magnetic_atoms_filter_excludes_non_magnetic(examples_dir):
     """
-    Documenta el comportamiento actual: si ningún átomo del archivo
-    pertenece a `magnetic_atoms`, `magnetic_model_from_cif` no
-    devuelve un modelo vacío sino que falla con un ValueError poco
-    informativo (viene de intentar hacer `.dot()` entre un array
-    vacío y la matriz de vectores de Bravais). Ver también
-    `test_cromita_without_cr_in_magnetic_atoms_raises` más abajo,
-    mismo problema con otro archivo.
+    If the structure does not contain magnetic atoms, no magnetic site
+    must be loaded.
     """
-    with pytest.raises(ValueError):
-        magnetic_model_from_cif(
+    
+    model =  magnetic_model_from_cif(
             str(examples_dir / "example1.cif"), magnetic_atoms=("Fe",)
         )
+    assert len(model.site_properties["coord_atomos"])==0
 
 
 # ---------------------------------------------------------------------

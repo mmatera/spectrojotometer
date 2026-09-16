@@ -46,10 +46,11 @@ def test_species_filtering_keeps_only_magnetic_atoms(fixtures_dir):
 
 
 def test_magnetic_atoms_filter_can_exclude_everything(fixtures_dir):
-    with pytest.raises(ValueError):
-        magnetic_model_from_wk2_struct(
+    
+    model = magnetic_model_from_wk2_struct(
             str(fixtures_dir / "synthetic_two_species.struct"), magnetic_atoms=("Fe",)
         )
+    assert len(model.site_properties["magnetic_species"])==0
 
 
 def test_no_bonds_are_generated_from_struct(fixtures_dir):

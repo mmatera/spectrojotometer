@@ -1246,7 +1246,7 @@ def magnetic_model_from_wk2_struct(
                         [
                             float(fields[1][3:]),
                             float(fields[2][3:]),
-                            float(fields[2][3:]),
+                            float(fields[3][3:]),
                         ]
                     )
 

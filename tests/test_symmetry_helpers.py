@@ -128,10 +128,10 @@ def test_pack_offset_matches_its_own_documented_convention(offset, expected_key)
     [
         (".", [0, 0, 0]),
         ("655", [0, 0, 0]),  # sin "_": unpack_offset no lo interpreta, devuelve 0
-        ("1_555", [0, 0, 0]),  # convención CIF/SHELX: "555" = sin traslación
-        ("1_655", [1, 0, 0]),
-        ("1_455", [-1, 0, 0]),
-        ("2_555", [0, 0, 0]),  # con índice de simetría antepuesto
+        ("1_555", [-5, -5, -5]),  # convención CIF/SHELX: "555" = sin traslación
+        ("1_655", [-4, -5, -5]),
+        ("1_455", [4, -5, -5]),
+        ("2_555", [-5, -5, -5]),  # con índice de simetría antepuesto
     ],
 )
 def test_unpack_offset_matches_cif_symmetry_code_convention(encoded, expected):
@@ -145,24 +145,6 @@ def test_unpack_offset_matches_cif_symmetry_code_convention(encoded, expected):
     np.testing.assert_array_equal(unpack_offset(encoded), expected)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "pack_offset y unpack_offset NO son funciones inversas entre sí "
-        "para offsets distintos de cero: pack_offset codifica con "
-        "digit=(coord+10)%10, mientras que unpack_offset decodifica con "
-        "coord=digit-5 (la convención estándar de CIF/SHELX). "
-        "normalize_bond empaqueta offsets con pack_offset, así que "
-        "cualquier código que luego intente recuperar ese offset con "
-        "unpack_offset (como se hace, por ejemplo, al reconstruir la "
-        "geometría real de un enlace periódico) obtiene un valor "
-        "incorrecto. Los bonds con offset '.' (el caso más común, sin "
-        "imagen periódica) no se ven afectados porque unpack_offset trata "
-        "'.' como caso especial. Este test documenta el bug con un caso "
-        "concreto; en cuanto se arregle la codificación, hay que quitar "
-        "el xfail."
-    ),
-)
 @pytest.mark.parametrize(
     "offset",
     [
@@ -174,4 +156,5 @@ def test_unpack_offset_matches_cif_symmetry_code_convention(encoded, expected):
 def test_pack_unpack_offset_are_not_actually_inverses(offset):
     packed = pack_offset(offset)
     recovered = unpack_offset(packed)
+    print({"offset":offset, "packed":packed,"recovered":recovered})
     np.testing.assert_array_equal(recovered, offset)

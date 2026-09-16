@@ -63,23 +63,14 @@ def test_no_bonds_are_generated_from_struct(fixtures_dir):
     assert model.bonds == {}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Bug conocido en magnetic_model_from_wk2_struct: para átomos con "
-        "MULT > 1, la posición de las réplicas se arma con "
-        "[X, Y, Y] en lugar de [X, Y, Z] (usa fields[2] dos veces en vez "
-        "de fields[2] y fields[3]). Este test documenta el comportamiento "
-        "correcto esperado; falla mientras el bug siga presente. Si algún "
-        "día empieza a pasar, hay que quitar el xfail."
-    ),
-)
 def test_multiplicity_replica_uses_its_own_z_coordinate(fixtures_dir):
     model = magnetic_model_from_wk2_struct(
         str(fixtures_dir / "synthetic_mult2.struct"), magnetic_atoms=("Cu",)
     )
     positions = model.site_properties["coord_atomos"]
+    print("positions[1]:", positions[1])
 
     assert len(positions) == 2
     # Fraccional (0.4, 0.5, 0.6) en una celda cúbica de lado 10.
     np.testing.assert_allclose(positions[1], [4.0, 5.0, 6.0], atol=1e-4)
+    print("OK")

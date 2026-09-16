@@ -175,7 +175,7 @@ def unpack_offset(encoded_offset: str) -> np.ndarray:
     if len(encoded_offset_parts) == 1:
         return np.array([0, 0, 0])
     encoded_offset = encoded_offset_parts[1]
-    result = np.array([int(c) - 5 for c in encoded_offset], dtype=int)
+    result = np.array([(int(c)+5)% 10 - 5 for c in encoded_offset], dtype=int)
     return result
 
 

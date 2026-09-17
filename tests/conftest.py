@@ -60,3 +60,45 @@ def all_bond_lengths(model, bond_name: str) -> list:
         bond_length(model, src, dest, offset)
         for src, dest, offset in model.bonds[bond_name]["bonds"]
     ]
+
+
+def assert_models_equivalent(model_a, model_b, atol: float = 1e-3) -> None:
+    """
+    Compara dos ``MagneticModel`` construidos a partir del MISMO
+    archivo por dos implementaciones distintas del lector de CIF, y
+    verifica que describan la misma geometría física -- sin asumir
+    que los átomos quedaron en el mismo orden, que es lo único que
+    puede variar legítimamente entre dos parsers.
+    """
+    positions_a = np.array(model_a.site_properties["coord_atomos"])
+    positions_b = np.array(model_b.site_properties["coord_atomos"])
+    species_a = model_a.site_properties["magnetic_species"]
+    species_b = model_b.site_properties["magnetic_species"]
+
+    assert len(positions_a) == len(positions_b), (
+        f"distinto número de átomos: {len(positions_a)} vs {len(positions_b)}"
+    )
+    assert sorted(species_a) == sorted(species_b)
+
+    np.testing.assert_allclose(
+        model_a.lattice_properties["bravais_vectors"],
+        model_b.lattice_properties["bravais_vectors"],
+        atol=atol,
+    )
+
+    if len(positions_a) > 0:
+        def as_sorted_set(points):
+            return np.array(sorted(tuple(row) for row in np.round(points, 4)))
+
+        np.testing.assert_allclose(
+            as_sorted_set(positions_a), as_sorted_set(positions_b), atol=atol
+        )
+
+    assert set(model_a.bonds) == set(model_b.bonds)
+    for name in model_a.bonds:
+        assert model_a.bonds[name]["distance"] == pytest.approx(
+            model_b.bonds[name]["distance"], abs=atol
+        )
+        lengths_a = sorted(all_bond_lengths(model_a, name))
+        lengths_b = sorted(all_bond_lengths(model_b, name))
+        np.testing.assert_allclose(lengths_a, lengths_b, atol=atol)

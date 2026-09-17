@@ -26,6 +26,11 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest"]
+# Prototipo experimental (spectrojotometer/model_io_pymatgen.py) que
+# reescribe la lectura de CIF sobre pymatgen. No es una dependencia
+# del paquete en sí, sólo de ese módulo y de sus tests, que se
+# saltean automáticamente si no está instalado.
+pymatgen = ["pymatgen"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

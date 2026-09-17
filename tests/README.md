@@ -30,3 +30,44 @@ pytest tests/ -v
 - `test_geometry_consistency.py` — cross invariants:: safe with
   `save_cif` and reread  must reproduce the geometry; conventional cells and primitives of a same structure must describe the same atomic density.
 
+## pymatgen-based prototype battery
+
+`spectrojotometer/model_io_pymatgen.py` is an experimental prototype
+of `magnetic_model_from_cif` built on top of pymatgen's CIF parser.
+It has its own battery, which needs `pip install -e ".[pymatgen]"`:
+
+- `test_cif_loading_pymatgen.py` — same checks as
+  `test_cif_loading.py`, but exercising the prototype on its own
+  (not compared against anything), so a bug shared by both
+  implementations doesn't go unnoticed.
+- `test_cif_parser_equivalence.py` — compares the current
+  implementation against the prototype, file by file (same atoms,
+  same cell, same bonds, via `assert_models_equivalent` in
+  `conftest.py`). Runs over the 8 CIFs used elsewhere in this suite,
+  including the two that used to break the line-by-line reader
+  (`h2o.cif`, `fe2o_synthetic.cif`) and a new one exercising the
+  non-standard `_atom_site_g_factor`/`_atom_site_spin` columns.
+
+If pymatgen isn't installed, both files skip themselves
+(`pytest.importorskip`) without affecting the rest of the suite.
+
+### Another bug found along the way
+
+While building the `synthetic_bond_via_symmetry.cif` fixture (a bond
+declared with `_geom_bond_site_symmetry_2` pointing at a
+non-identity symmetry operator, e.g. `"2_555"`), another pre-existing
+bug showed up — shared by both implementations, since the prototype
+reuses `cif_read_loop_bonds`/`generate_atoms_by_symmetries` unchanged:
+`cif_read_loop_bonds` builds the replica's atom label as
+`<label>_<sym>` with `sym = cif_index - 1`, but
+`generate_atoms_by_symmetries` had labeled that same replica as
+`<label>_<sym + 1>`. Since the labels don't match, the bond is
+silently dropped (0 bonds instead of 1) instead of failing loudly.
+Documented as `xfail` in
+`test_bond_via_non_identity_symmetry_is_currently_dropped`
+(parametrized over both implementations) in
+`test_cif_parser_equivalence.py`.
+
+Neither of these was fixed here — the goal was to finish the
+prototype's test battery, not to fix the code.
+

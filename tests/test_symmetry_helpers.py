@@ -13,7 +13,7 @@ from spectrojotometer.model_io import (
     normalize_bond,
     parse_symmetry,
 )
-from spectrojotometer.tools import pack_offset, unpack_offset
+from spectrojotometer.tools import pack_offset, split_cif_loop_line, unpack_offset
 
 
 # ---------------------------------------------------------------------
@@ -105,10 +105,7 @@ def test_normalize_bond_keeps_order_when_already_sorted():
 def test_normalize_bond_swaps_and_negates_offset_when_reversed():
     src, dest, offset = normalize_bond(2, 1, np.array([1, -1, 0]))
     assert (src, dest) == (1, 2)
-    # Comparamos contra lo que produce pack_offset directamente (ver
-    # más abajo por qué NO usamos unpack_offset(offset) acá: no es su
-    # inversa).
-    assert offset == pack_offset([-1, 1, 0])
+    np.testing.assert_array_equal(unpack_offset(offset), [-1, 1, 0])
 
 
 @pytest.mark.parametrize(
@@ -128,19 +125,19 @@ def test_pack_offset_matches_its_own_documented_convention(offset, expected_key)
     [
         (".", [0, 0, 0]),
         ("655", [0, 0, 0]),  # sin "_": unpack_offset no lo interpreta, devuelve 0
-        ("1_555", [-5, -5, -5]),  # convención CIF/SHELX: "555" = sin traslación
+        ("1_555", [-5, -5, -5]),
         ("1_655", [-4, -5, -5]),
         ("1_455", [4, -5, -5]),
         ("2_555", [-5, -5, -5]),  # con índice de simetría antepuesto
     ],
 )
-def test_unpack_offset_matches_cif_symmetry_code_convention(encoded, expected):
+def test_unpack_offset_matches_pack_offset_convention(encoded, expected):
     """
     `unpack_offset` sólo decodifica cadenas con el formato
-    "<indice>_<ddd>" (la convención estándar de CIF/SHELX para
-    códigos de simetría: dígito 5 = sin desplazamiento, dígito
-    d = desplazamiento d-5, como en `_geom_bond_site_symmetry_2`, p.ej.
-    "2_655"). Una cadena sin guion bajo se interpreta como offset nulo.
+    "<indice>_<ddd>": cada dígito `d` se traduce a `(d+5) % 10 - 5`.
+    Esta es la convención propia de `pack_offset` (no la estándar de
+    CIF/SHELX, digit-5); ver `test_pack_offset_and_unpack_offset_are_inverses`
+    más abajo. Una cadena sin guion bajo se interpreta como offset nulo.
     """
     np.testing.assert_array_equal(unpack_offset(encoded), expected)
 
@@ -153,8 +150,32 @@ def test_unpack_offset_matches_cif_symmetry_code_convention(encoded, expected):
         [-4, 4, -4],
     ],
 )
-def test_pack_unpack_offset_are_not_actually_inverses(offset):
+def test_pack_offset_and_unpack_offset_are_inverses(offset):
+    """
+    Con el fix de "fix default magnetic atoms and offset unpacking",
+    `unpack_offset` ya es la inversa de `pack_offset` para offsets en
+    el rango representable [-4, 4] por eje (el que puede producirse,
+    dado que `MagneticModel` acota `supercell_size` a un máximo de 4).
+    """
     packed = pack_offset(offset)
     recovered = unpack_offset(packed)
-    print({"offset":offset, "packed":packed,"recovered":recovered})
     np.testing.assert_array_equal(recovered, offset)
+
+
+# ---------------------------------------------------------------------
+# split_cif_loop_line: tokenizado de una fila de un bloque `loop_`
+# ---------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "line,expected",
+    [
+        ("x, y, z", ["x,", "y,", "z"]),
+        ("'x, y, z'", ["x, y, z"]),
+        ("1  'x, y, z'", ["1", "x, y, z"]),
+        ('2 "x, y+1/2, z"', ["2", "x, y+1/2, z"]),
+        ("Cu1 1.0 0.0 0.0 0.0 Biso 1 Cu", "Cu1 1.0 0.0 0.0 0.0 Biso 1 Cu".split()),
+        ("'x, y, z' 'x, -y, z'", ["x, y, z", "x, -y, z"]),
+    ],
+)
+def test_split_cif_loop_line(line, expected):
+    assert split_cif_loop_line(line) == expected

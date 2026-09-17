@@ -164,13 +164,85 @@ def test_cromita_primitive_cell_volume_matches_centering_order(examples_dir):
     assert vol_conventional / vol_primitive == pytest.approx(4.0, rel=1e-6)
 
 
-def test_cromita_without_cr_in_magnetic_atoms_raises(examples_dir):
+def test_cromita_without_cr_in_magnetic_atoms_returns_empty_model(examples_dir):
     """
-    Documenta el comportamiento actual: si `magnetic_atoms` no incluye
-    la especie presente en el archivo, no queda ningún átomo
-    magnético y la construcción del modelo falla con un ValueError
-    (en lugar de, por ejemplo, devolver un modelo vacío). Ver también
-    test_default_magnetic_atoms_inconsistencies.py.
+    Con el fix "handle files without magnetic atoms", si
+    `magnetic_atoms` no incluye ninguna especie presente en el
+    archivo, el modelo resultante queda vacío en lugar de fallar.
+    `h2o.cif` sólo tiene H y O, ninguno magnético por default.
     """
-    with pytest.raises(ValueError):
-        magnetic_model_from_cif(str(examples_dir / "h2o.cif"))
+    model = magnetic_model_from_cif(str(examples_dir / "h2o.cif"))
+    assert model.site_properties["coord_atomos"] == []
+    assert model.site_properties["magnetic_species"] == []
+
+
+# ---------------------------------------------------------------------
+# CIFs "estilo pymatgen": columna de índice antepuesta a la simetría
+# entre comillas, y bloques `loop_` consecutivos sin línea en blanco
+# entre ellos. Antes rompía cif_read_loop_symmetries con un
+# ValueError al intentar convertir "'x," a float, porque la fila
+# `1  'x, y, z'` se tokenizaba con un simple `.split()` que no
+# respeta las comillas.
+# ---------------------------------------------------------------------
+
+def test_h2o_loads_despite_quoted_symmetry_with_leading_id_column(examples_dir):
+    """
+    `examples/h2o.cif` declara la simetría con
+    `_symmetry_equiv_pos_site_id` + `_symmetry_equiv_pos_as_xyz`
+    (en vez de `_space_group_symop_operation_xyz` sola), es decir con
+    una columna numérica antes del operador entre comillas:
+
+        loop_
+         _symmetry_equiv_pos_site_id
+         _symmetry_equiv_pos_as_xyz
+          1  'x, y, z'
+        loop_
+         _atom_site_type_symbol
+         ...
+
+    Además, no hay una línea en blanco entre el `loop_` de simetrías
+    y el siguiente `loop_` de átomos.
+    """
+    model = magnetic_model_from_cif(str(examples_dir / "h2o.cif"), magnetic_atoms=("O",))
+
+    assert len(model.site_properties["coord_atomos"]) == 12
+    assert model.site_properties["magnetic_species"] == ["O"] * 12
+    np.testing.assert_allclose(
+        model.lattice_properties["bravais_vectors"][2], [0.0, 0.0, 7.142962], atol=1e-4
+    )
+
+
+def test_h2o_atom_loop_labels_are_not_corrupted_by_previous_loop(examples_dir):
+    """
+    Regresión específica para el bug de "loops consecutivos sin línea
+    en blanco": si el `loop_` de átomos quedara mal delimitado, sus
+    posiciones fraccionarias (columnas 4, 5 y 6) quedarían corridas o
+    directamente ausentes. Comprobamos la posición cartesiana del
+    primer átomo de oxígeno contra el valor fraccionario declarado en
+    el archivo (0.32664200, 0.0, 0.05565800) multiplicado por los
+    vectores de Bravais.
+    """
+    model = magnetic_model_from_cif(str(examples_dir / "h2o.cif"), magnetic_atoms=("O",))
+    bravais_vectors = np.array(model.lattice_properties["bravais_vectors"])
+    expected = np.array([0.326642, 0.0, 0.055658]).dot(bravais_vectors)
+
+    np.testing.assert_allclose(
+        model.site_properties["coord_atomos"][0], expected, atol=1e-4
+    )
+
+
+def test_fe2o_fixture_loads_correctly(fixtures_dir):
+    """
+    Caso concreto que disparó el bug: un CIF generado con pymatgen
+    para una estructura "Fe2O" ficticia (H2O con el H reemplazado por
+    Fe), en el mismo formato que `h2o.cif`.
+    """
+    model = magnetic_model_from_cif(str(fixtures_dir / "fe2o_synthetic.cif"))
+
+    assert len(model.site_properties["coord_atomos"]) == 24
+    assert model.site_properties["magnetic_species"] == ["Fe"] * 24
+    # Celda hexagonal: a == b != c, gamma == 120°.
+    bravais_vectors = np.array(model.lattice_properties["bravais_vectors"])
+    np.testing.assert_allclose(np.linalg.norm(bravais_vectors[0]), 7.6035663, atol=1e-4)
+    np.testing.assert_allclose(np.linalg.norm(bravais_vectors[1]), 7.6035663, atol=1e-4)
+    np.testing.assert_allclose(np.linalg.norm(bravais_vectors[2]), 7.142962, atol=1e-4)

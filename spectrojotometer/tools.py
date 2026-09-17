@@ -1,7 +1,55 @@
 """
 Tools used along the code.
 """
+import re
+
 import numpy as np
+
+# Matches a single-quoted field, a double-quoted field, or a run of
+# non-whitespace characters. Used to tokenize a CIF ``loop_`` data
+# line while keeping quoted fields (which may contain spaces, as in
+# symmetry operators like 'x, y, z') together as a single token.
+_CIF_TOKEN_RE = re.compile(r"'[^']*'|\"[^\"]*\"|\S+")
+
+
+def split_cif_loop_line(line: str) -> list:
+    """
+    Split a single ``loop_`` data line of a CIF file into its fields,
+    the way a real CIF parser would: whitespace-separated, except
+    that a field enclosed in single or double quotes is kept as one
+    token even if it contains spaces (surrounding quotes are
+    stripped from the returned token).
+
+    This matters for files (e.g. produced by pymatgen) where the
+    symmetry-operators loop has an extra numeric id column before the
+    quoted operator, such as::
+
+        1  'x, y, z'
+
+    A naive ``line.split()`` would break the quoted operator into
+    three separate tokens (``"'x,"``, ``"y,"``, ``"z'"``); this
+    function returns ``["1", "x, y, z"]`` instead.
+
+    Parameters
+    ----------
+    line : str
+        One data line of a CIF ``loop_`` block (already stripped of
+        the trailing newline is not required).
+
+    Returns
+    -------
+    list of str
+        The fields of the line, with any enclosing quotes removed.
+    """
+    tokens = _CIF_TOKEN_RE.findall(line.strip())
+    fields = []
+    for token in tokens:
+        if len(token) >= 2 and token[0] == token[-1] and token[0] in ("'", '"'):
+            fields.append(token[1:-1])
+        else:
+            fields.append(token)
+    return fields
+
 
 
 def box_ellipse(coeff_matrix, radius):

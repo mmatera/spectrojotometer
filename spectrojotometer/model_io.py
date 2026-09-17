@@ -12,6 +12,7 @@ from .magnetic_model import MagneticModel
 from .tools import (
     format_symmetry_operator,
     pack_offset,
+    split_cif_loop_line,
     unpack_offset,
     unpack_symmetry_and_offset,
 )
@@ -986,7 +987,19 @@ def magnetic_model_from_cif(
     msg = f"loaading model from{filename}"
     logging.info(msg)
     with open(filename, "r") as src:
-        for line in src:
+        # `pending_line` lets an inner block (below) hand back a line it
+        # read ahead but did not consume, so the next outer iteration can
+        # still process it. This matters for CIF files where consecutive
+        # `loop_` blocks are not separated by a blank line.
+        pending_line = None
+        while True:
+            if pending_line is not None:
+                line = pending_line
+                pending_line = None
+            else:
+                line = src.readline()
+                if line == "":
+                    break
             listrip = line.strip()
             if listrip[:13] == "_cell_length_":
                 varvals = listrip[13:].split()
@@ -1016,15 +1029,18 @@ def magnetic_model_from_cif(
                     labels.append(listrip.split()[0])
                     line = src.readline()
                     listrip = line.strip()
-                while listrip != "":
-                    newentry = listrip.strip()
-                    if newentry[0] in ('"', "'"):
-                        newentry = [newentry[1:-1]]
-                    else:
-                        newentry = newentry.split()
+                while listrip != "" and listrip[0] != "_" and listrip[:5] != "loop_":
+                    newentry = split_cif_loop_line(listrip)
                     entries.append(newentry)
                     ls = src.readline()
                     listrip = ls.strip()
+                if listrip != "":
+                    # `listrip` is either a new tag ("_...") or the start
+                    # of the next `loop_` block, read ahead while looking
+                    # for the end of this loop's data rows. Since it was
+                    # never appended as an entry, hand it back so the next
+                    # outer iteration processes it instead of losing it.
+                    pending_line = listrip + "\n"
 
                 # if the block contains symmetries
                 if (

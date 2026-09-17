@@ -93,38 +93,56 @@ def test_primitive_cell_true_is_ignored_with_warning_for_struct(
     assert model.site_properties["magnetic_species"] == ["Cu"]
 
 
-class TestDefaultMagneticAtomsInconsistencies:
+class TestDefaultMagneticAtomsAreUnified:
     """
-    Las tres funciones de este módulo definen, cada una por su lado,
-    un default distinto para `magnetic_atoms`:
-
-    - magnetic_model_from_cif:         ... Cu, V            (sin Cr, sin Ti)
-    - magnetic_model_from_wk2_struct:  ... V                (sin Cu, sin Cr, sin Ti)
-    - magnetic_model_from_file:        ... Cu, V, Ti, Cr     (superconjunto de ambas)
-
-    Esto significa que un CIF con, por ejemplo, átomos de Cr sólo se
-    puede cargar con sus valores por default a través del
-    despachador `magnetic_model_from_file`, pero falla si se llama
-    directamente a `magnetic_model_from_cif` sin pasar
-    `magnetic_atoms` explícitamente. Estos tests documentan ese
-    comportamiento para que un cambio futuro en los defaults sea una
-    decisión consciente y no una regresión silenciosa.
+    Las tres funciones de este módulo solían tener, cada una por su
+    lado, un default distinto para `magnetic_atoms` (bug corregido en
+    "fix default magnetic atoms and offset unpacking" / "uniformize
+    default atoms"). Estos tests son la regresión: verifican que las
+    tres funciones comparten exactamente el mismo default, y que un
+    archivo con Cr (antes excluido del default de
+    `magnetic_model_from_cif`) o con Cu (antes excluido del default
+    de `magnetic_model_from_wk2_struct`) ahora carga correctamente
+    también cuando se llama a cada función directamente, sin pasar
+    `magnetic_atoms` explícitamente.
     """
 
-    def test_cif_direct_call_default_excludes_cr(self, examples_dir):
-        with pytest.raises(ValueError):
-            magnetic_model_from_cif(str(examples_dir / "h2o.cif"))
+    def test_defaults_are_the_same_tuple(self):
+        import inspect
+
+        cif_default = inspect.signature(
+            magnetic_model_from_cif
+        ).parameters["magnetic_atoms"].default
+        struct_default = inspect.signature(
+            magnetic_model_from_wk2_struct
+        ).parameters["magnetic_atoms"].default
+        file_default = inspect.signature(
+            magnetic_model_from_file
+        ).parameters["magnetic_atoms"].default
+
+        assert set(cif_default) == set(struct_default) == set(file_default)
+
+    def test_cif_direct_call_default_now_includes_cr(self, examples_dir):
+        model = magnetic_model_from_cif(str(examples_dir / "cromita_ortogonal.cif"))
+        assert "Cr" in model.site_properties["magnetic_species"]
 
     def test_dispatch_default_includes_cr(self, examples_dir):
         model = magnetic_model_from_file(str(examples_dir / "cromita_ortogonal.cif"))
         assert "Cr" in model.site_properties["magnetic_species"]
 
-    def test_struct_direct_call_default_excludes_zn(self, fixtures_dir):
-        
+    def test_struct_direct_call_default_excludes_non_magnetic_species(
+        self, fixtures_dir
+    ):
         model = magnetic_model_from_wk2_struct(
-                str(fixtures_dir / "synthetic_nm_single_atom.struct")
-            )
-        assert len(model.site_properties["coord_atomos"])==0
+            str(fixtures_dir / "synthetic_nm_single_atom.struct")
+        )
+        assert model.site_properties["coord_atomos"] == []
+
+    def test_struct_direct_call_default_now_includes_cu(self, fixtures_dir):
+        model = magnetic_model_from_wk2_struct(
+            str(fixtures_dir / "synthetic_single_atom.struct")
+        )
+        assert model.site_properties["magnetic_species"] == ["Cu"]
 
     def test_dispatch_default_includes_cu_for_struct(self, fixtures_dir):
         model = magnetic_model_from_file(

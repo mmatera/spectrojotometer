@@ -107,7 +107,7 @@ def offset_orientation(offset: list) -> int:
 
     """
     if len(offset) > 3:
-        return None
+        raise ValueError("offset has more than three coordinates.")
     for coord in offset[::-1]:
         if coord == 0:
             continue
@@ -198,10 +198,10 @@ def pack_offset(r_list: list) -> str:
     # es su complemento a 10. Por ejemplo,
     # la celda en la posición 1,-1,1 tiene
     # una clave 1_191
-    r_list = np.array(r_list)
-    if all(r_list == 0):
+    r_list_ndarray = np.array(r_list)
+    if all(r_list_ndarray == 0):
         return "."
-    offset_key = "1_" + "".join(str(int(coord + 10) % 10) for coord in r_list)
+    offset_key = "1_" + "".join(str(int(coord + 10) % 10) for coord in r_list_ndarray)
     return offset_key
 
 

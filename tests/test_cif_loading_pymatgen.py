@@ -16,7 +16,7 @@ import pytest
 
 pymatgen = pytest.importorskip("pymatgen")
 
-from spectrojotometer.model_io_pymatgen import magnetic_model_from_cif_pymatgen
+from spectrojotometer.model_io.model_io_pymatgen import magnetic_model_from_cif_pymatgen
 
 from .conftest import all_bond_lengths
 

@@ -1,6 +1,25 @@
 # Tests for loading modules (CIF / struct)
 
-This battery covers `spectrojotometer/model_io.py`: the functions that read  WIEN2k `.struct` files or CIF files, and build a `MagneticModel`.
+This battery covers `spectrojotometer/model_io/`: the functions that read  WIEN2k `.struct` files or CIF files, and build a `MagneticModel`.
+
+As of the "split model_io.py into submodules" change, this used to be
+a single ~1400-line file and is now a small package:
+
+- `model_io/common.py` — things shared by both readers (Bravais-vector
+  construction from cell parameters, spin-configuration files) plus
+  the default set of magnetic species. `read_bravais_vectors` used to
+  be duplicated almost verbatim inside `magnetic_model_from_wk2_struct`;
+  it's now a single function both readers call.
+- `model_io/cif.py` — everything CIF-specific.
+- `model_io/struct.py` — the `.struct` reader.
+- `model_io/dispatch.py` — `magnetic_model_from_file`.
+- `model_io/__init__.py` — re-exports the full previous public
+  surface, so `from spectrojotometer.model_io import X` keeps working
+  exactly as before for every name tests, `bin/`, and `gui/` use.
+
+None of the tests below needed to change for the split — they all
+import from `spectrojotometer.model_io` the same way they did before,
+which is the point of keeping `__init__.py` a faithful re-export.
 
 ## How to run
 

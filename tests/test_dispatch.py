@@ -66,14 +66,13 @@ def test_struct_extension_is_case_insensitive(fixtures_dir, tmp_path, suffix):
 
 def test_unknown_extension_returns_sentinel_without_raising(tmp_path):
     """
-    Comportamiento actual documentado: una extensión desconocida no
-    levanta una excepción, sólo loguea un error y devuelve -1.
+    If the format of the model is not known, raise a ValueError exception:
     """
     dst = tmp_path / "model.xyz"
     dst.write_text("not a real structure file")
+    with pytest.raises(ValueError):
+        result = magnetic_model_from_file(str(dst))
 
-    result = magnetic_model_from_file(str(dst))
-    assert result == -1
 
 
 def test_primitive_cell_true_is_ignored_with_warning_for_struct(

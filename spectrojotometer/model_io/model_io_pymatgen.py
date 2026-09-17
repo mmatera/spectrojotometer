@@ -23,9 +23,9 @@ from typing import Optional
 import numpy as np
 from pymatgen.io.cif import CifFile, CifParser
 
-from .magnetic_model import MagneticModel
-from .model_io import (
-    DEFAULT_MAGNETIC_ATOMS,
+from spectrojotometer.magnetic_model import MagneticModel
+from .common import DEFAULT_MAGNETIC_ATOMS
+from .cif import (
     cif_read_loop_atoms,
     cif_read_loop_bonds,
     cif_read_loop_bonds_compact,
@@ -70,7 +70,10 @@ def magnetic_model_from_cif_pymatgen(
     _, block = next(iter(cif_file.data.items()))
     parser = CifParser(filename)
 
-    conventional_vectors = np.array(parser.get_lattice(block).matrix)
+    lattice_block = parser.get_lattice(block)
+    if lattice_block is None:
+        raise ValueError(f"{block} could not produce a lattice_block")
+    conventional_vectors = np.array(lattice_block.matrix)
     symmetries = [
         (np.array(op.rotation_matrix), np.array(op.translation_vector))
         for op in parser.get_symops(block)

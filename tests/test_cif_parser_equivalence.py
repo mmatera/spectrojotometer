@@ -8,13 +8,12 @@ de los átomos pueda diferir.
 
 Requiere pymatgen instalado; si no está, estos tests se saltean.
 """
-import numpy as np
 import pytest
 
 pymatgen = pytest.importorskip("pymatgen")
 
 from spectrojotometer.model_io import magnetic_model_from_cif
-from spectrojotometer.model_io_pymatgen import magnetic_model_from_cif_pymatgen
+from spectrojotometer.model_io.model_io_pymatgen import magnetic_model_from_cif_pymatgen
 
 from .conftest import assert_models_equivalent
 

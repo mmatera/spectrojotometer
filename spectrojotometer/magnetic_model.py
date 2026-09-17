@@ -2,7 +2,7 @@
 """
 Magnetic Model class
 """
-
+from typing import Optional
 import logging
 import numpy as np
 import numpy.linalg as la
@@ -104,6 +104,12 @@ class MagneticModel:
     MagneticModel represents a set of magnetic atoms
     bound by pairwise Heisenberg-like interactions.
     """
+    cell_size:int
+    model_label:str
+    onfly:bool
+    site_properties: dict
+    lattice_properties:dict
+    bonds: dict
 
     def __init__(
         self,
@@ -114,21 +120,21 @@ class MagneticModel:
         bond_distances=None,
         ranges=None,
         supercell_size=1,
-        discretization=0.02,
+        discretization:float=0.02,
         magnetic_species=None,
-        onfly=True,
+        onfly:bool=True,
         model_label="default",
-        g_lande_factors=None,
-        spin_repr=None,
+        g_lande_factors:Optional[float]=None,
+        spin_repr:Optional[float]=None,
         symmetries=None,
         space_group_symbol=None,
     ):
         self.model_label = model_label
         self.onfly = onfly
-
+        self.cell_size = 0
         print("supercell size:", supercell_size)
         # Normalise: accept int or [sx, sy, sz]; clamp each axis to 1–4
-        if np.isscalar(supercell_size):
+        if isinstance(supercell_size, int) and np.isscalar(supercell_size):
             supercell_size = min(4, max(1, int(supercell_size)))
         else:
             supercell_size = [min(4, max(1, int(s))) for s in supercell_size]
@@ -142,6 +148,8 @@ class MagneticModel:
         if g_lande_factors is None:
             g_lande_factors = [2.0] * len(magnetic_species)
         else:
+            g_str:str
+            indx:int
             for indx, g_str in enumerate(g_lande_factors):
                 g_lande_factors[indx] = 2.0 if g_str == "." else float(g_str)
 

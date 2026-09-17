@@ -2,7 +2,6 @@
 Tests para spectrojotometer.model_io.magnetic_model_from_wk2_struct.
 """
 import numpy as np
-import pytest
 
 from spectrojotometer.model_io import magnetic_model_from_wk2_struct
 

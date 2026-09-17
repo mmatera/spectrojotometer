@@ -820,8 +820,8 @@ class ApplicationGUI:
         energies = []
 
         conftxt = spinconfigs.get(1.0, END)
-        for linnum, l in enumerate(conftxt.split(sep="\n")):
-            ls = l.strip()
+        for linnum, line in enumerate(conftxt.split(sep="\n")):
+            ls = line.strip()
             if ls == "" or ls[0] == "#":
                 continue
             fields = ls.split(maxsplit=1)
@@ -928,7 +928,7 @@ class ApplicationGUI:
             for c in self.configurations[1]
         ]
         labels = [str(confindex(c)) for c in newconfs]
-        energs = [self.configurations[0][full_labels.index(l)] for l in labels]
+        energs = [self.configurations[0][full_labels.index(label)] for label in labels]
         # self.configs=([float("nan") for i in newconfs], newconfs, labels)
         # eq_format = self.outputformat.get()
         self.spinconfigs.insert(END, "\n#  Subset of optimal configurations. ")

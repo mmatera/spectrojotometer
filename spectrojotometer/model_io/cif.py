@@ -20,31 +20,44 @@ from ..tools import (
 )
 from .common import DEFAULT_MAGNETIC_ATOMS, read_bravais_vectors
 
-Symmetry_OP_Type = tuple[np.ndarray, np.ndarray]
-
 logging.basicConfig(level=logging.INFO)
 
 
 def find_atom_offset_by_symmetry(p, symop, magnetic_positions) -> tuple:
     """
-    Add atoms using symmetries
+    Apply a symmetry operator to a fractional position and identify
+    which already-known magnetic site it lands on (up to a lattice
+    translation).
+
+    Used by `generate_bonds_by_symmetries` to find the symmetry image
+    of a bond's endpoints among the atoms already expanded by
+    `generate_atoms_by_symmetries`: since every image of a magnetic
+    atom is already present in `magnetic_positions` (mod 1), the
+    symmetry-transformed point must coincide with one of them up to an
+    integer cell offset.
 
     Parameters
     ----------
-    p : TYPE
-        DESCRIPTION.
-    symop : TYPE
-        DESCRIPTION.
-    magnetic_positions : TYPE
-        DESCRIPTION.
+    p : array-like
+        The fractional position (length-3) to transform.
+    symop : tuple
+        A `(rotation_matrix, translation_vector)` pair, as returned by
+        `parse_symmetry` / `cif_read_loop_symmetries`.
+    magnetic_positions : list of array-like
+        The fractional positions of every magnetic atom currently in
+        the (already symmetry-expanded) model.
 
     Returns
     -------
-    j : TYPE
-        DESCRIPTION.
-    offset : TYPE
-        DESCRIPTION.
-
+    j : int
+        The index into `magnetic_positions` of the site closest to the
+        transformed point, using the minimum-image convention (i.e.
+        comparing positions modulo 1 along each axis).
+    offset : numpy.ndarray
+        The integer lattice offset (length-3) such that
+        `magnetic_positions[j] + offset` equals the transformed point
+        `symop[0].dot(p) + symop[1]` (assuming the nearest match found
+        is, in fact, an exact image and not just the closest one).
     """
     sp = symop[0].dot(p) + symop[1]
     j = sorted(
@@ -190,8 +203,8 @@ def centering_letter_from_symbol(symbol: Optional[str]) -> str:
     return letter if letter in _CENTERING_TRANSLATIONS else "P"
 
 def expand_symmetries_with_centering(
-    symmetries: list[Symmetry_OP_Type], space_group_symbol: Optional[str]
-) -> list[Symmetry_OP_Type]:
+    symmetries: list, space_group_symbol: Optional[str]
+) -> list:
     """
     Complete a (possibly partial) list of symmetry operators read from a
     CIF file with the lattice-centering translations implied by the
@@ -248,20 +261,32 @@ def expand_symmetries_with_centering(
 
 def cif_read_loop_symmetries(labels: list, entries: tuple) -> list:
     """
-    Read the block of symmetry specifications in a CIF file
+    Parse the symmetry-operators loop of a CIF file into
+    `(rotation, translation)` pairs.
 
     Parameters
     ----------
     labels : list
-        DESCRIPTION.
-    entries: tuple
-        DESCRIPTION.
+        The column tags of a single `loop_` block, in order, as
+        collected while reading the CIF (row-oriented format: see
+        `cif_read_loop_atoms` for the same convention). Only used
+        here to locate the column holding the symmetry-operator
+        strings, under either of its two standard CIF names:
+        `_symmetry_equiv_pos_as_xyz` or
+        `_space_group_symop_operation_xyz`.
+    entries : tuple
+        The rows of that same `loop_` block, each a list with one
+        value per label. If `labels` doesn't correspond to a
+        symmetries loop (neither expected tag is present), `entries`
+        is ignored.
 
     Returns
     -------
     list
-        DESCRIPTION.
-
+        One `(rotation_matrix, translation_vector)` pair per row, as
+        returned by `parse_symmetry` on the corresponding entry.
+        Empty if `labels` has neither of the two symmetry-operator
+        tags.
     """
     symmetries = []
     for i, t in enumerate(labels):
@@ -278,22 +303,45 @@ def cif_read_loop_symmetries(labels: list, entries: tuple) -> list:
 
 def cif_read_loop_atoms(labels: list, entries: list, magnetic_atoms: tuple) -> tuple:
     """
-    Parse the atomic positions and pick the magnetic atoms.
+    Parse the `_atom_site` loop of a CIF file and keep only the atoms
+    whose species is in `magnetic_atoms`.
 
     Parameters
     ----------
     labels : list
-        DESCRIPTION.
+        The column tags of the `_atom_site` `loop_` block, in order
+        (row-oriented format, same convention used throughout this
+        module: see `cif_read_loop_symmetries`). Expected/recognized
+        tags are `_atom_site_label`, `_atom_site_type_symbol`,
+        `_atom_site_fract_x`/`_y`/`_z`, and the non-standard
+        `_atom_site_g_factor`/`_atom_site_spin` extensions used by
+        spectrojotometer to store the Landé g-factor and spin
+        representation per site.
     entries : list
-        DESCRIPTION.
+        The rows of that loop, each a list with one value per label
+        (mutated in place: the fractional-coordinate fields of
+        entries that pass the `magnetic_atoms` filter have any
+        trailing CIF uncertainty annotation, e.g. `"1.234(5)"`,
+        stripped and replaced by the corresponding float).
     magnetic_atoms : tuple
-        DESCRIPTION.
+        The set of species symbols (e.g. `("Cu", "Mn", ...)`) to keep;
+        every other atom in the loop is silently dropped.
 
     Returns
     -------
-    tuple
-        DESCRIPTION.
-
+    atomlabels : dict
+        Maps each kept atom's `_atom_site_label` to its index in the
+        other returned lists (in the order they were kept).
+    magnetic_species : list of str
+        The species symbol of each kept atom.
+    magnetic_positions : list of numpy.ndarray
+        The fractional coordinates (length-3) of each kept atom.
+    g_factors : list
+        The `_atom_site_g_factor` value of each kept atom, or `"."`
+        if that column isn't present in `labels`.
+    spin_repr : list
+        The `_atom_site_spin` value of each kept atom, or `"."` if
+        that column isn't present in `labels`.
     """
     logging.info("atom positions found")
     magnetic_positions = []
@@ -346,26 +394,61 @@ def cif_read_loop_atoms(labels: list, entries: list, magnetic_atoms: tuple) -> t
 
 def cif_read_loop_bonds(labels: list, entries: list, atomlabels: list) -> tuple:
     """
-    Reads the block of bond specifications in a CIF file.
+    Parse the `_geom_bond` loop of a CIF file into normalized bonds,
+    grouped by magnetic coupling.
 
     Parameters
     ----------
     labels : list
-        DESCRIPTION.
+        The column tags of the `_geom_bond` `loop_` block, in order
+        (row-oriented format; see `cif_read_loop_symmetries`).
+        Expected tags: `_geom_bond_atom_site_label_1`/`_2`,
+        `_geom_bond_distance`, and optionally
+        `_geom_bond_label` (the coupling name, e.g. `"J0"`) and
+        `_geom_bond_site_symmetry_1`/`_2`.
     entries : list
-        DESCRIPTION.
-    atomlabels : list
-        DESCRIPTION.
+        The rows of that loop, each a list with one value per label
+        (mutated in place: the distance field of every processed row
+        has any trailing CIF uncertainty annotation stripped).
+    atomlabels : dict
+        Maps an atom label (as it appears in
+        `_geom_bond_atom_site_label_1`/`_2`, possibly followed by
+        `"_<symmetry index>"` when a bond's second atom is a symmetry
+        image, see below) to its index in the model, as returned/
+        extended by `cif_read_loop_atoms` and
+        `generate_atoms_by_symmetries`.
+
+    Notes
+    -----
+    When present, `_geom_bond_site_symmetry_1`/`_2` are decoded with
+    `unpack_symmetry_and_offset`; a non-identity symmetry index `sym`
+    is appended to the corresponding atom label as `"_" + str(sym)`
+    before the `atomlabels` lookup, matching the labels
+    `generate_atoms_by_symmetries` assigns to symmetry-generated
+    atoms. A bond whose (possibly suffixed) label isn't found in
+    `atomlabels` is skipped, with a message logged at INFO level
+    (this is the expected outcome for bonds to atoms that were
+    filtered out by `magnetic_atoms`, but can also hide a labeling
+    mismatch -- see the tests for a known case).
+
+    If `_geom_bond_label` is absent, bonds are grouped automatically
+    by identical declared distance instead, with generated names
+    `"J1"`, `"J2"`, etc. in order of appearance.
 
     Returns
     -------
-    bond_labels : list
-        DESCRIPTION.
-    bond_distances : list
-        DESCRIPTION.
-    bondlists : list
-        DESCRIPTION.
-
+    bond_labels : list of str
+        The coupling names, ordered to match `bond_distances` and
+        `bondlists`.
+    bond_distances : list of str
+        The declared `_geom_bond_distance` for each coupling (the
+        first one seen for that label; not recomputed from the atomic
+        positions).
+    bondlists : list of list of tuple
+        For each coupling, the list of its bonds as
+        `(src, dest, offset)` triples in `normalize_bond` form (`src`
+        and `dest` are indices into the model, `offset` is a packed
+        cell-offset string).
     """
     logging.info("Reading bonds from cif")
     jlabelcol = None
@@ -686,44 +769,67 @@ def cif_read_loop_bonds_compact(
     return bond_labels, bond_distances, bondlists
 
 def generate_atoms_by_symmetries(
-    symmetries: tuple|list,
-    atomlabels: tuple|list,
-    magnetic_species: tuple|list,
-    magnetic_positions: tuple|list,
-    g_factors: tuple|list,
-    spin_repr: tuple|list,
+    symmetries: tuple,
+    atomlabels: tuple,
+    magnetic_species: tuple,
+    magnetic_positions: tuple,
+    g_factors: tuple,
+    spin_repr: tuple,
 ):
     """
+    Expand the asymmetric-unit atoms (as read by `cif_read_loop_atoms`)
+    to the full conventional cell, by applying every symmetry operator
+    to every atom and discarding images that coincide (mod 1, within
+    1e-3) with an atom already placed.
 
+    A no-op (returns the inputs unchanged) when `symmetries` has 0 or
+    1 elements (nothing to expand with, or only the identity).
 
     Parameters
     ----------
     symmetries : tuple
-        DESCRIPTION.
-    atomlabels : tuple
-        DESCRIPTION.
-    magnetic_species : tuple
-        DESCRIPTION.
-    magnetic_positions : tuple
-        DESCRIPTION.
-    g_factors : tuple
-        DESCRIPTION.
-    spin_repr : tuple
-        DESCRIPTION.
+        `(rotation, translation)` pairs, as returned by
+        `cif_read_loop_symmetries` (optionally completed with
+        centering translations, though centering is normally only
+        added for bonds via `expand_symmetries_with_centering`, not
+        here -- see that function's docstring).
+    atomlabels : dict
+        Maps each asymmetric-unit atom's label to its index in the
+        other arguments, as returned by `cif_read_loop_atoms`.
+        Mutated in place: for every new image kept (generated by the
+        `(s + 1)`-th symmetry operator, `s > 0`), an extra entry
+        `"<original label>_<s + 1>"` is added, pointing at the new
+        atom's index. This lets `cif_read_loop_bonds` resolve a bond
+        declared via `_geom_bond_site_symmetry_2` against the right
+        symmetry image.
+    magnetic_species : list of str
+        The species of each asymmetric-unit atom.
+    magnetic_positions : list of numpy.ndarray
+        The fractional coordinates of each asymmetric-unit atom.
+    g_factors : list
+        The Landé g-factor of each asymmetric-unit atom (or `"."`).
+    spin_repr : list
+        The spin representation of each asymmetric-unit atom (or
+        `"."`).
 
     Returns
     -------
-    atomlabels : TYPE
-        DESCRIPTION.
-    magnetic_species : TYPE
-        DESCRIPTION.
-    magnetic_positions : TYPE
-        DESCRIPTION.
-    g_factors : TYPE
-        DESCRIPTION.
-    spin_repr : TYPE
-        DESCRIPTION.
-
+    atomlabels : dict
+        The (possibly mutated) input `atomlabels`, now also covering
+        the newly generated atoms.
+    magnetic_species : list of str
+        The species of every atom after expansion, in the order they
+        were generated (asymmetric unit first, then each symmetry
+        operator's new images).
+    magnetic_positions : list of numpy.ndarray
+        The fractional coordinates of every atom after expansion,
+        aligned with `magnetic_species`.
+    g_factors : list
+        The Landé g-factor of every atom after expansion (each image
+        inherits its source atom's value).
+    spin_repr : list
+        The spin representation of every atom after expansion (each
+        image inherits its source atom's value).
     """
     if len(symmetries) > 1:
         magnetic_positions2 = []
@@ -764,31 +870,58 @@ def generate_atoms_by_symmetries(
     )
 
 def generate_bonds_by_symmetries(
-    symmetries:list[Symmetry_OP_Type], bond_labels:list[str], bonddistances:list[float], bondlists, magnetic_positions
+    symmetries, bond_labels, bonddistances, bondlists, magnetic_positions
 ):
     """
-    Extend the list of bonds by adding the bond terms generated by symmetry operations.
+    Fill in, for every already-declared coupling, all its
+    symmetry-equivalent bonds -- i.e. find the images of each declared
+    bond under every symmetry operator (besides the identity) and add
+    any that aren't already present, so that all bonds related by the
+    space group end up sharing the same coupling label.
+
+    Meant to be called after the model's atoms have already been
+    expanded to the full cell (`generate_atoms_by_symmetries`), so
+    that every symmetry image of a bond's endpoints already exists in
+    `magnetic_positions` and can be located with
+    `find_atom_offset_by_symmetry`.
 
     Parameters
     ----------
-    symmetries : list[Symmetry_OP_Type]
-        DESCRIPTION.
-    bond_labels : list[str]
-        A list with the bond labels.
-    bonddistances : list[float]
-        A list with the distance between atoms of each bond.
-    bondlists : list[Tuple[int, int, Union[str, list]]]
-        A list of tuples of the form [src, dst, offset], with
-        ``src`` and ``dst`` the positions of the cell atoms in the bond,
-        and ``offset`` the specification of the offset between the cell
-        where ``dst`` is located, relative to the cell where ``src`` is.
-    magnetic_positions : list[np.ndarray]
-        List of the position of the magnetic atoms. 
+    symmetries : list
+        `(rotation, translation)` pairs. The identity (assumed to be
+        `symmetries[0]`) is skipped; every other operator is applied
+        to every existing bond of every coupling.
+    bond_labels : list
+        The coupling names, as returned by `cif_read_loop_bonds`
+        (only used here to keep `bondlists` and `bonddistances`
+        aligned with it; not otherwise read or modified).
+    bonddistances : list
+        The declared distance of each coupling, aligned with
+        `bond_labels` (read but not modified: newly found symmetry
+        images are assumed to share their coupling's distance).
+    bondlists : list of list of tuple
+        For each coupling (aligned with `bond_labels`), its bonds as
+        `(src, dest, offset)` triples in `normalize_bond` form.
+        **Mutated in place**: every newly found, not-yet-present
+        symmetry image of a bond is appended to the corresponding
+        list.
+    magnetic_positions : list of numpy.ndarray
+        The fractional coordinates of every atom in the (already
+        expanded) model, used to resolve each symmetry image to an
+        atom index via `find_atom_offset_by_symmetry`.
 
     Returns
     -------
-    None.
+    None
+        `bondlists` is extended in place; nothing is returned.
 
+    Notes
+    -----
+    A symmetry image whose resulting offset falls outside the
+    representable range (any component below -5 or above 4, the
+    supercell-offset limits of `pack_offset`/`unpack_offset`) is
+    skipped with a warning logged, rather than producing a bond with
+    an incorrect or truncated offset.
     """
     for s in range(len(symmetries) - 1):
         symop = symmetries[s + 1]

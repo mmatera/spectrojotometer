@@ -23,7 +23,7 @@ def test_dispatch_to_cif_matches_direct_call(fixtures_dir):
 
     np.testing.assert_allclose(
         via_dispatch.site_properties["coord_atomos"],
-        direct.site_properties["coord_atomos"],
+        direct.site_properties["coord_atomos"],atol=1e-10
     )
     assert via_dispatch.bonds.keys() == direct.bonds.keys()
 

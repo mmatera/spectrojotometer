@@ -462,7 +462,7 @@ class MagneticModel:
         where res is the subset of configurations that optimizes the
         cost function    sqrt(len(res))/|| coefficient_matrix(res)^+ ||
 
-        If the optional parameter l is provided, then it tries to optimize
+        If the optional parameter length is provided, then it tries to optimize
         the cost function for a fixed size length.
 
         """
@@ -484,7 +484,6 @@ class MagneticModel:
             if self.check_independence(c, forced):
                 curr.append(c)
 
-        print("curr:")
         for c in curr:
             print(c)
         idscurr = [sum(k * 2**i for i, k in enumerate(c)) for c in curr]
@@ -495,7 +494,6 @@ class MagneticModel:
         for q in a[:lenforced]:
             ared.append(q)
 
-        print("a=", a)
         u, sv = np.linalg.svd(a, full_matrices=False)[:2]
         k = len(sv)
         while sv[k - 1] < 1.0e-6:

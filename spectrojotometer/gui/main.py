@@ -850,11 +850,13 @@ class ApplicationGUI:
             confs.append(newconf)
             energies.append(energy)
         self.configurations = (energies, confs, labels)
-        with open(self.tmpconfig.name, "w"):
-            for idx, nc in enumerate(confs):
-                row = (
-                    str(energies[idx]) + "\t" + str([int(x) for x in nc]) + "\t\t # " + labels[idx] + "\n"
-                )
+        # with open(self.tmpconfig.name, "w") as f:
+        #    for idx, nc in enumerate(confs):
+        #        row = (
+        #            str(energies[idx]) + "\t" + str([int(x) for x in nc]) + "\t\t # " + labels[idx] + "\n"
+        #        )
+        #        f.write(row)
+
         self.print_full_equations()
         logging.info("updating window")
         if spinconfigs == self.spinconfigs:
@@ -917,11 +919,11 @@ class ApplicationGUI:
             return
         parms = self.parameters["page2"]
         n = int(parms["Number of configurations"].get())
-        its = int(parms["Iterations"].get())
-        us = max(int(parms["Bunch size"].get()), n)
-        known = []
+        # its = int(parms["Iterations"].get())
+        # us = max(int(parms["Bunch size"].get()), n)
+        # known = []
         self.reload_configs(src_widget=self.spinconfigs)
-        newconfs, cn = self.model.optimize_independent_set(self.configurations[1])
+        newconfs, cn = self.model.optimize_independent_set(self.configurations[1], length=n)
 
         full_labels = [
             str(sum(k * 2**i for i, k in enumerate(c)))

@@ -4,12 +4,27 @@ magnetic_model_from_file: picks the right reader (cif vs struct)
 based on the filename extension.
 """
 from typing import Optional
+import importlib
 import logging
+
 
 from ..magnetic_model import MagneticModel
 from .common import DEFAULT_MAGNETIC_ATOMS
-from .cif import magnetic_model_from_cif
 from .struct import magnetic_model_from_wk2_struct
+
+USE_PYMATGEN_CIF_READER = True
+
+if USE_PYMATGEN_CIF_READER:
+    if importlib.util.find_spec("pymatgen"):
+        from .model_io_pymatgen import magnetic_model_from_cif_pymatgen as magnetic_model_from_cif
+    else:
+        from .cif import magnetic_model_from_cif as magnetic_model_from_cif
+        print("pymatgen not available. Use internal CIF import routines.")
+        USE_PYMATGEN_CIF_READER = False
+        magnetic_model_from_cif_pymatgen = magnetic_model_from_cif
+else:
+    from .cif import magnetic_model_from_cif as magnetic_model_from_cif
+    magnetic_model_from_cif_pymatgen = magnetic_model_from_cif
 
 
 def magnetic_model_from_file(
@@ -40,6 +55,10 @@ def magnetic_model_from_file(
         a MagneticModel.
     """
     if filename[-4:] == ".cif" or filename[-4:] == ".CIF":
+
+        return magnetic_model_from_cif(
+            filename, magnetic_atoms, bond_names, primitive_cell=primitive_cell
+        )   
         return magnetic_model_from_cif(
             filename, magnetic_atoms, bond_names, primitive_cell=primitive_cell
         )

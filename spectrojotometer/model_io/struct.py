@@ -8,6 +8,7 @@ import numpy as np
 from ..magnetic_model import MagneticModel
 from .common import DEFAULT_MAGNETIC_ATOMS, read_bravais_vectors
 
+DEGREE_TO_RAD = 3.1415926 / 180
 
 def magnetic_model_from_wk2_struct(
         filename: str,
@@ -37,12 +38,12 @@ def magnetic_model_from_wk2_struct(
     bravais_params = {}
     magnetic_positions = []
     bravais_vectors = None
-    labels = None
-    entries = None
+    # labels = None
+    # entries = None
     magnetic_species:list[str] = []
-    bond_labels:list[str] = None
-    bondlists:list[tuple] = None
-    bond_distances:list[float] = []
+    # bond_labels:list[str] = None
+    # bondlists:list[tuple] = None
+    # bond_distances:list[float] = []
 
     with open(filename) as fin:
         title = fin.readline()
@@ -62,7 +63,7 @@ def magnetic_model_from_wk2_struct(
                     sl[5] = "-"
                     sl = "".join(sl)
                 fields = sl.split()
-                idxatom = fields[0][4:-1]
+                # idxatom = fields[0][4:-1]
                 positions.append(
                     [
                         float(fields[1][3:]),
@@ -88,7 +89,7 @@ def magnetic_model_from_wk2_struct(
                     atomspecies = atomlabelfield[0]
                 else:
                     atomspecies = atomlabelfield[:2]
-                atomlabel = atomspecies + idxatom
+                # atomlabel = atomspecies + idxatom
                 lrm = fin.readline()  # Rotation matrix
                 lrm = lrm + fin.readline()
                 lrm = lrm + fin.readline()
@@ -103,9 +104,9 @@ def magnetic_model_from_wk2_struct(
         bravais_params["a"] = float(bravais_fields[0])
         bravais_params["b"] = float(bravais_fields[1])
         bravais_params["c"] = float(bravais_fields[2])
-        bravais_params["alpha"] = float(bravais_fields[3]) * 3.1415926 / 180
-        bravais_params["beta"] = float(bravais_fields[4]) * 3.1415926 / 180
-        bravais_params["gamma"] = float(bravais_fields[5]) * 3.1415926 / 180
+        bravais_params["alpha"] = float(bravais_fields[3]) * DEGREE_TO_RAD
+        bravais_params["beta"] = float(bravais_fields[4]) * DEGREE_TO_RAD
+        bravais_params["gamma"] = float(bravais_fields[5]) * DEGREE_TO_RAD
 
         # Misma fórmula que en el lector de CIF (era código duplicado
         # línea por línea): construir la base de Bravais a partir de

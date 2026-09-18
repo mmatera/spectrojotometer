@@ -22,8 +22,6 @@ etc.) keeps working unchanged.
 """
 import logging
 
-logging.basicConfig(level=logging.INFO)
-
 from .common import (
     DEFAULT_MAGNETIC_ATOMS,
     confindex,
@@ -49,6 +47,8 @@ from .cif import (
 )
 from .struct import magnetic_model_from_wk2_struct
 from .dispatch import magnetic_model_from_file
+
+logging.basicConfig(level=logging.INFO)
 
 __all__ = [
     "DEFAULT_MAGNETIC_ATOMS",

@@ -64,14 +64,16 @@ def test_struct_extension_is_case_insensitive(fixtures_dir, tmp_path, suffix):
     assert model.site_properties["magnetic_species"] == ["Cu"]
 
 
-def test_unknown_extension_returns_sentinel_without_raising(tmp_path):
+def test_unknown_extension_raises_value_error(tmp_path):
     """
-    If the format of the model is not known, raise a ValueError exception:
+    Behavior changed from the earlier "log an error and return -1"
+    sentinel: an unrecognized extension now raises `ValueError`
+    instead.
     """
     dst = tmp_path / "model.xyz"
     dst.write_text("not a real structure file")
     with pytest.raises(ValueError):
-        result = magnetic_model_from_file(str(dst))
+        magnetic_model_from_file(str(dst))
 
 
 

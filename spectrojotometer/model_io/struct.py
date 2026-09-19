@@ -16,7 +16,18 @@ def magnetic_model_from_wk2_struct(
         bond_names: Optional[list] = None,
 ) -> MagneticModel:
     """
+    Build a `MagneticModel` from a WIEN2k `.struct` file: read the
+    lattice parameters and the fractional positions of every atom
+    whose species is in `magnetic_atoms`.
 
+    Unlike `cif.magnetic_model_from_cif`, this reader does not expand
+    atoms by symmetry (a `.struct` file already lists every atom in
+    the conventional cell, one block per inequivalent site plus its
+    `MULT` symmetry-equivalent replicas) and does not read or build
+    any bonds: the returned model always has an empty `bonds` dict,
+    and `bond_names` is accepted only for signature compatibility with
+    `magnetic_model_from_cif`/`magnetic_model_from_file` -- it has no
+    effect here.
 
     Parameters
     ----------
@@ -26,14 +37,14 @@ def magnetic_model_from_wk2_struct(
         The set of atoms species to be included.
         The default is ("Co", "Cr", "Cu", "Cu", "Dy", "Eu", "Fe", "Mn", "Ni", "Tb", "Ti", "V").
     bond_names : Optional[list], optional
-        Names to be used for the couplings.
-        The default is None: use automatic names .
+        Unused; accepted only for API compatibility with
+        `magnetic_model_from_cif`. The default is None.
 
     Returns
     -------
     MagneticModel
-        The model.
-
+        The model, with an empty `bonds` dict and, if no atom in the
+        file matches `magnetic_atoms`, an empty set of sites.
     """
     bravais_params = {}
     magnetic_positions = []
@@ -108,9 +119,10 @@ def magnetic_model_from_wk2_struct(
         bravais_params["beta"] = float(bravais_fields[4]) * DEGREE_TO_RAD
         bravais_params["gamma"] = float(bravais_fields[5]) * DEGREE_TO_RAD
 
-        # Misma fórmula que en el lector de CIF (era código duplicado
-        # línea por línea): construir la base de Bravais a partir de
-        # (a, b, c, alpha, beta, gamma) es idéntico para .cif y .struct.
+        # Same formula as the CIF reader's (this used to be duplicated
+        # here almost line for line): building the Bravais basis from
+        # (a, b, c, alpha, beta, gamma) is identical for .cif and
+        # .struct.
         bravais_vectors = read_bravais_vectors(bravais_params)
 
     if len(magnetic_positions)!=0:

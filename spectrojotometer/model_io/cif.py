@@ -74,25 +74,33 @@ def normalize_bond(
     src: int, dest: int, offset: Union[str, list]
 ) -> Tuple[int, int, str]:
     """
-    Brings a bond to its normalized form:
+    Bring a bond to a canonical form so that two descriptions of the
+    same bond -- one starting from each endpoint -- compare equal:
+    the endpoint with the smaller index becomes `src`, and `offset`
+    (the cell translation from `src` to `dest`) is negated along with
+    the swap, then packed into its string form.
 
     Parameters
     ----------
     src : int
-        The source atom.
+        The index of one endpoint.
     dest : int
-        the target atom.
+        The index of the other endpoint.
     offset : Union[str, list]
-        The offset of the cell where the target atom is.
+        The integer cell offset from `src` to `dest`, either already
+        packed (a string, as produced by `pack_offset`/this same
+        function) or as a length-3 list/array -- decoded with
+        `unpack_offset` if it's a string.
 
     Returns
     -------
-    src: int
-        The source atom
-    dest: int
-        The target atom
-    offset: str
-        The encoded offset of the cell where the target atom is.
+    src : int
+        `min(src, dest)`.
+    dest : int
+        `max(src, dest)`.
+    offset : str
+        The offset from `src` to `dest` (negated if the endpoints were
+        swapped), packed with `pack_offset`.
     """
     if isinstance(offset, str):
         offset = unpack_offset(offset)
@@ -103,19 +111,27 @@ def normalize_bond(
 
 def parse_symmetry(strsymm: str) -> Tuple[list, list]:
     """
-    Parse a symmetry specification.
+    Parse a CIF symmetry-operator string, such as `"x, y+1/2, -z"` or
+    `"-x, -y, z"`, into a rotation matrix and a translation vector.
+
+    Each of the (up to) three comma-separated terms is a linear
+    expression in `x`, `y`, `z` plus an optional constant (given as an
+    integer, a decimal, or a fraction like `"1/2"`); the coefficients
+    of `x`, `y`, `z` become one row of the rotation matrix, and the
+    constant becomes the matching entry of the translation vector.
 
     Parameters
     ----------
     strsymm : str
-        The symmetry specification to be parsed.
+        The symmetry specification to be parsed, e.g. `"x, y+1/2, z+1/2"`.
 
     Returns
     -------
-    w: list
-
-    offset: list
-
+    w : numpy.ndarray
+        The 3x3 rotation matrix (rows in x, y, z order).
+    offset : numpy.ndarray
+        The length-3 translation vector, in fractional coordinates
+        (e.g. `1/2` for `"y+1/2"`).
     """
     strsymm = strsymm.strip()
     strsymm.split(", ")
@@ -678,6 +694,41 @@ def cif_read_loop_bonds_compact(
     warning: they cannot be represented in a 4-atom/primitive-cell
     model and require expanding the atoms instead (the default
     behaviour of `magnetic_model_from_cif`).
+
+    Parameters
+    ----------
+    labels : list
+        The column tags of the `_geom_bond` `loop_` block, in order
+        (row-oriented format; see `cif_read_loop_bonds`).
+    entries : list
+        The rows of that loop, each a list with one value per label
+        (mutated in place, same as `cif_read_loop_bonds`).
+    atomlabels : dict
+        Maps each asymmetric-unit atom's `_atom_site_label` to its
+        index in the model, as returned by `cif_read_loop_atoms`
+        (unlike `cif_read_loop_bonds`, never extended with
+        symmetry-suffixed labels, since atoms are not expanded here).
+    symmetries : list
+        `(rotation, translation)` pairs, as returned by
+        `cif_read_loop_symmetries`; `_geom_bond_site_symmetry_1`/`_2`
+        codes are resolved as an index into this list.
+    primitive_frac_basis : array-like
+        3 primitive lattice vectors, in conventional fractional
+        coordinates, as returned by `primitive_vectors_from_symmetries`.
+        Used to express each bond's endpoint displacement as an
+        integer cell offset in the primitive basis.
+
+    Returns
+    -------
+    bond_labels : list of str
+        The coupling names, ordered to match `bond_distances` and
+        `bondlists`.
+    bond_distances : list of str
+        The declared `_geom_bond_distance` for each coupling.
+    bondlists : list of list of tuple
+        For each coupling, the list of its bonds as
+        `(src, dest, offset)` triples in `normalize_bond` form, with
+        `offset` expressed in the primitive basis.
     """
     logging.info("Reading bonds from cif (compact/primitive mode)")
     jlabelcol = None
@@ -958,6 +1009,20 @@ def magnetic_model_from_cif(
     primitive_cell: bool = False,
 ) -> MagneticModel:
     """
+    Build a `MagneticModel` from a CIF file: read the cell, the
+    symmetry operators, the atoms whose species is in `magnetic_atoms`,
+    and (if present) the declared `_geom_bond` couplings, then either
+    expand atoms and bonds to the conventional cell using the symmetry
+    operators, or reduce everything to a primitive-cell description
+    (see `primitive_cell` below).
+
+    This is the original, hand-written line-by-line CIF reader. It is
+    still exported and usable directly, but
+    `dispatch.magnetic_model_from_file` (and therefore the GUI and
+    command-line scripts) calls `model_io_pymatgen.magnetic_model_from_cif_pymatgen`
+    instead by default when pymatgen is installed -- see that module's
+    docstring.
+
     Parameters
     ----------
     filename : str
@@ -985,8 +1050,17 @@ def magnetic_model_from_cif(
     Returns
     -------
     MagneticModel
-        a MagneticModel.
+        The model. If no atom in the file matches `magnetic_atoms`,
+        this is a model with an empty set of sites rather than an
+        error.
 
+    Raises
+    ------
+    ValueError
+        If `primitive_cell=True` but a primitive basis could not be
+        built from the symmetry operators (see
+        `primitive_vectors_from_symmetries_reason` for the reason
+        included in the message).
     """
     bravais_params = {}
     magnetic_positions = None

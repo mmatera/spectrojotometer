@@ -102,3 +102,10 @@ def assert_models_equivalent(model_a, model_b, atol: float = 1e-3) -> None:
         lengths_a = sorted(all_bond_lengths(model_a, name))
         lengths_b = sorted(all_bond_lengths(model_b, name))
         np.testing.assert_allclose(lengths_a, lengths_b, atol=atol)
+
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "slow: tests that takes more than a few seconds."
+    )

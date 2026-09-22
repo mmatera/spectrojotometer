@@ -21,7 +21,8 @@ dependencies = [
     "argparse",
     "numpy",
     "matplotlib",
-    "pymatgen"
+    "pymatgen",
+    "numba>=0.57",
 ]
 
 [project.optional-dependencies]

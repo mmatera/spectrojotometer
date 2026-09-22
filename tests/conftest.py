@@ -12,10 +12,10 @@ La suite combina dos tipos de datos:
   cada enlace se puedan verificar exactamente, sin depender de que los
   datos "reales" sean físicamente consistentes.
 """
+import pytest
 from pathlib import Path
 
 import numpy as np
-import pytest
 
 from spectrojotometer.tools import unpack_offset
 
@@ -109,3 +109,13 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "slow: tests that takes more than a few seconds."
     )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _warmup_numba():
+    """Compila los kernels una vez al inicio de la sesion."""
+    try:
+        from spectrojotometer.monte_carlo._jit_kernels import warmup
+        warmup()
+    except ImportError:
+        pass

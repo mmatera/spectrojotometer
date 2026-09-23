@@ -16,16 +16,20 @@ def run_ising_mc(spins, bonds, J_vals, E0,
                  algorithm="auto",
                  n_restarts=1,
                  seed=None,
-                 swap_every=10):
-    """Ejecuta MC Ising sobre (spins, bonds, J_vals, E0).
-
-    Los J ya estan en convencion Ising (vienen del fit de Spectrojotometer).
-    No se aplica ningun factor S^2.
-    """
+                 swap_every=10,
+                 progress_callback=None):
+    """... (docstring igual) ..."""
     spins = np.asarray(spins, dtype=np.int8)
     bonds = np.asarray(bonds, dtype=np.int64)
     J_vals = np.asarray(J_vals, dtype=np.float64)
     N = int(spins.size)
+
+    def notify(done, total, msg):
+        if progress_callback is not None:
+            try:
+                progress_callback(done, total, msg)
+            except Exception:
+                pass
 
     frustrated, gauge, cycle = detect_frustration(bonds, J_vals, N)
 
@@ -45,17 +49,20 @@ def run_ising_mc(spins, bonds, J_vals, E0,
         )
 
     T_grid = np.geomspace(T_min, T_max, n_temps)
+    notify(0, n_temps, f"Algoritmo: {algorithm}")
 
     if algorithm == "pt":
         sim = ParallelTempering(spins, bonds, J_vals, E0, T_grid, seed=seed)
         results = sim.run(n_equil, n_sweeps, swap_every=swap_every)
+        notify(n_temps, n_temps, "PT completado")
     elif algorithm == "wolff":
         sim = WolffCluster(spins, bonds, J_vals, E0, seed=seed, gauge=gauge)
-        results = sim.sweep_temperatures(T_grid, n_equil, n_sweeps)
+        results = _sweep_with_progress(sim, T_grid, n_equil, n_sweeps, notify)
     elif algorithm == "metropolis":
         results = _run_metropolis_with_restarts(
             spins, bonds, J_vals, E0, T_grid,
             n_equil, n_sweeps, n_restarts, seed,
+            progress_callback=notify,
         )
     else:
         raise ValueError(f"Algoritmo desconocido: {algorithm}")
@@ -66,9 +73,10 @@ def run_ising_mc(spins, bonds, J_vals, E0,
     results["N"] = N
 
     if len(results["T"]) >= 3:
-        results["Tc_peak"] = estimate_tc(results["T"], results["chi"])
+        results["Tc_peak"] = estimate_tc(results["T"], results["chi_connected"])
         results["curie_weiss"] = fit_curie_weiss(
-            results["T"], results["chi"], T_cut=1.2 * results["Tc_peak"],
+            results["T"], results["chi_connected"],
+            T_cut=1.2 * results["Tc_peak"],
         )
         results["frustration_factor"] = frustration_factor(
             results["Tc_peak"], J_vals, N,
@@ -81,14 +89,34 @@ def run_ising_mc(spins, bonds, J_vals, E0,
     return results
 
 
+def _sweep_with_progress(sim, T_grid, n_equil, n_sweeps, notify):
+    """Como sim.sweep_temperatures pero emitiendo progreso."""
+    keys = ["T", "M", "M2", "M4", "E", "chi", "chi_connected", "C", "U4"]
+    results = {k: [] for k in keys}
+    total = len(T_grid)
+    for i, T in enumerate(T_grid):
+        sim.set_temperature(T)
+        sim.equilibrate(n_equil)
+        obs = sim.sample(n_sweeps)
+        results["T"].append(float(T))
+        for k in keys[1:]:
+            if k in obs:
+                results[k].append(obs[k])
+        notify(i + 1, total, f"T = {T:.3f}")
+    return results
+
+
 def _run_metropolis_with_restarts(spins, bonds, J_vals, E0, T_grid,
-                                  n_equil, n_sweeps, n_restarts, seed):
-    """Corre Metropolis desde varias condiciones iniciales y promedia."""
-    keys = ["M", "M2", "M4", "E", "chi", "C", "U4"]
+                                  n_equil, n_sweeps, n_restarts, seed,
+                                  progress_callback=None):
+    keys = ["M", "M2", "M4", "E", "chi", "chi_connected", "C", "U4"]
     rng = np.random.default_rng(seed)
 
     accum = {k: np.zeros(len(T_grid)) for k in keys}
     accum["T"] = list(T_grid)
+
+    total_steps = n_restarts * len(T_grid)
+    step = 0
 
     for _ in range(n_restarts):
         init = 2 * rng.integers(0, 2, size=spins.size).astype(np.int8) - 1
@@ -100,6 +128,9 @@ def _run_metropolis_with_restarts(spins, bonds, J_vals, E0, T_grid,
             obs = sim.sample(n_sweeps)
             for k in keys:
                 accum[k][t_idx] += obs[k]
+            step += 1
+            if progress_callback is not None:
+                progress_callback(step, total_steps, f"T = {T:.3f}")
 
     for k in keys:
         accum[k] = (accum[k] / n_restarts).tolist()
@@ -115,3 +146,4 @@ def _run_metropolis_with_restarts(spins, bonds, J_vals, E0, T_grid,
                 UserWarning,
             )
     return accum
+

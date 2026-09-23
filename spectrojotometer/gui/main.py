@@ -151,7 +151,7 @@ class ApplicationGUI:
         self.build_page1()
         self.build_page2()
         self.build_page3()
-        # self.build_page4()
+        self.build_page4()
         # self.nb.pack(fill=BOTH)
 
         # Status region
@@ -193,6 +193,8 @@ class ApplicationGUI:
         sys.stdout = old_stdout
         logging.info("bye bye!")
 
+
+        
     def buildmenus(self):
         self.root.bind_all("<Control-q>", self.close_app)
         self.root.bind_all("<Control-y>", self.call_redo)
@@ -572,13 +574,21 @@ class ApplicationGUI:
         self.nb.tab(self.pages["page3"], state="disabled")
 
     def build_page4(self):
-        self.pages["page4"] = Frame(self.nb)
-        self.nb.add(self.pages["page4"], text="4. Evaluate parameters")
-        self.parameters["page4"] = {}
+        from spectrojotometer.gui import MonteCarloPanel
+
+        self.pages["page4"] = MonteCarloPanel(self.nb, get_model=lambda: self.model)
+        state = "disabled" if self.model is None else "normal"
+        self.nb.add(self.pages["page4"], text="4. Montecarlo Simulation", state=state)
+        
+        
+    def build_page5(self):
+        self.pages["page5"] = Frame(self.nb)
+        self.nb.add(self.pages["page5"], text="5. Evaluate parameters")
+        self.parameters["page5"] = {}
         self.outputformat = StringVar()
         self.outputformat.set("Plain")
         ctrl = LabelFrame(
-            self.pages["page4"],
+            self.pages["page5"],
             text="Evaluate and Show parameters",
             padx=5,
             pady=5,
@@ -590,7 +600,7 @@ class ApplicationGUI:
         btn.pack(side=TOP)
         ctrl.pack(side=RIGHT, fill=X)
         leftpanel = LabelFrame(
-            self.pages["page4"],
+            self.pages["page5"],
             relief=SUNKEN,
             text="Configurations",
             padx=5,
@@ -599,7 +609,7 @@ class ApplicationGUI:
         ScrolledText(leftpanel).pack(side=LEFT, fill=Y)
         leftpanel.pack(side=LEFT, fill=Y)
         rightpanel = LabelFrame(
-            self.pages["page4"], relief=SUNKEN, text="Results", padx=5, pady=5
+            self.pages["page5"], relief=SUNKEN, text="Results", padx=5, pady=5
         )
         respanel = LabelFrame(
             rightpanel,
@@ -680,6 +690,8 @@ class ApplicationGUI:
         self.nb.select(0)
         self.nb.tab(self.pages["page2"], state="normal")
         self.nb.tab(self.pages["page3"], state="normal")
+        # self.nb.add(self.pages["page5"], text="Other", state="normal")
+        
 
     def import_configs(self, clean=True):
         if self.model is None:
@@ -1231,6 +1243,7 @@ class ApplicationGUI:
         self.chis.insert(END, chitext)
         self.chis.config(state=DISABLED)
         self.plotbutton.config(state=NORMAL)
+        self.nb.tab(self.pages["page4"], state="normal")
 
     def flush(self):
         pass

@@ -214,7 +214,7 @@ class MagneticModel:
         lattice_properties["space_group_symbol"] = space_group_symbol
 
         self.bonds = {
-            b_name: {"distance": b_distance, "bonds": b_list}
+            b_name: {"distance": b_distance, "bonds": b_list, "value":np.nan}
             for b_name, b_distance, b_list in zip(
                 bond_names, bond_distances, bond_lists
             )
@@ -697,7 +697,7 @@ class MagneticModel:
         those evaluated with the model with couplings js.
 
         """
-
+        print("Efind jssss")
         if printeqs:
             coeffs = self.coefficient_matrix(confs, normalizar=False)
             logging.info("\n# Configurations:\n=================\n\n")
@@ -714,7 +714,7 @@ class MagneticModel:
         # equations.
         rcoeffs = coeffs[:, 0:-1]
         singularvalues = np.linalg.svd(rcoeffs, compute_uv=False)
-        print(singularvalues)
+        print("singular values:", singularvalues)
         cond_number = np.sqrt(len(rcoeffs)) / max(min(singularvalues), 1.0e-9)
         if printeqs:
             msg = "\nInverse of the minimum singular value: " f"{cond_number}\n\n"
@@ -738,6 +738,12 @@ class MagneticModel:
         else:
             rr = np.sqrt(rr) * err_energs
             deltaJ = box_ellipse(coeffs, rr)
+        # Update values of the coupling constants:
+        print("store values", js, "in", self.bonds.keys())
+        for j_label ,j_val in zip(self.bonds, js):
+            print(j_label,"->", j_val)
+            self.bonds[j_label]["value"]=j_val
+
         return (js, deltaJ, model_chi, 1.0)
 
     def bound_inequalities(self, confs, energs, err_energs=0.01):
@@ -875,6 +881,12 @@ class MagneticModel:
                     j0s[i] = 0
 
         e0s = coeffs.dot(j0s)
+
+        print("store values", j0s, "in", self.bonds.keys())
+        for j_label ,j_val in zip(self.bonds, j0s):
+            print(j_label,"->", j_val)
+            self.bonds[j_label]["value"]=j_val
+        
         return (
             j0s,
             d_js,

@@ -101,6 +101,19 @@ def test_expand_with_centering_deduplicates():
 def test_normalize_bond_keeps_order_when_already_sorted():
     assert normalize_bond(0, 1, np.array([0, 0, 0])) == (0, 1, ".")
 
+def test_check_unpack_offsets():
+    for coding, expect in [
+            (".",[0,0,0],),
+            ("1_000",[0,0,0],),
+            ("1_100",[1,0,0],),
+            ("1_900",[-1,0,0],),
+            ("1_919",[-1,1,-1],),
+    ]:
+        result = unpack_offset(coding)
+        assert(len(result)==3)
+        for a, b in zip(result ,expect):
+            assert a==b, f"{result}!={expect} for {coding}"
+
 
 def test_normalize_bond_swaps_and_negates_offset_when_reversed():
     src, dest, offset = normalize_bond(2, 1, np.array([1, -1, 0]))

@@ -14,6 +14,16 @@ To install the package, just run
 python3 setup.py install
 
 
+Loading models: conventional vs. primitive cell
+=================================================
+
+`magnetic_model_from_file` / `magnetic_model_from_cif` accept an optional
+`primitive_cell` parameter (default `False`). See the main README for
+details; in short, `primitive_cell=True` keeps only the atoms declared
+in the CIF's asymmetric unit (e.g. 4 instead of 16 for ZnCr2O4) and
+switches the model's Bravais vectors to a primitive basis, instead of
+expanding atoms to fill the conventional cell.
+
 
 
 Visual Bond

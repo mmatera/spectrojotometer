@@ -2,13 +2,13 @@
 """
 Magnetic Model class
 """
-
+from typing import Optional
 import logging
 import numpy as np
 import numpy.linalg as la
 import numpy.random as rnd
 
-from .tools import box_ellipse, offset_orientation, pack_offset
+from .tools import box_ellipse, format_symmetry_operator, offset_orientation, pack_offset
 
 # import matplotlib.pyplot as plt
 # from mpl_toolkits.mplot3d import Axes3
@@ -104,6 +104,12 @@ class MagneticModel:
     MagneticModel represents a set of magnetic atoms
     bound by pairwise Heisenberg-like interactions.
     """
+    cell_size:int
+    model_label:str
+    onfly:bool
+    site_properties: dict
+    lattice_properties:dict
+    bonds: dict
 
     def __init__(
         self,
@@ -114,19 +120,21 @@ class MagneticModel:
         bond_distances=None,
         ranges=None,
         supercell_size=1,
-        discretization=0.02,
+        discretization:float=0.02,
         magnetic_species=None,
-        onfly=True,
+        onfly:bool=True,
         model_label="default",
-        g_lande_factors=None,
-        spin_repr=None,
+        g_lande_factors:Optional[float]=None,
+        spin_repr:Optional[float]=None,
+        symmetries=None,
+        space_group_symbol=None,
     ):
         self.model_label = model_label
         self.onfly = onfly
-
+        self.cell_size = 0
         print("supercell size:", supercell_size)
         # Normalise: accept int or [sx, sy, sz]; clamp each axis to 1–4
-        if np.isscalar(supercell_size):
+        if isinstance(supercell_size, int) and np.isscalar(supercell_size):
             supercell_size = min(4, max(1, int(supercell_size)))
         else:
             supercell_size = [min(4, max(1, int(s))) for s in supercell_size]
@@ -140,6 +148,8 @@ class MagneticModel:
         if g_lande_factors is None:
             g_lande_factors = [2.0] * len(magnetic_species)
         else:
+            g_str:str
+            indx:int
             for indx, g_str in enumerate(g_lande_factors):
                 g_lande_factors[indx] = 2.0 if g_str == "." else float(g_str)
 
@@ -151,19 +161,22 @@ class MagneticModel:
 
         if ranges is None:
             maxdist = 0
+            dist = 0
             for p_vec in atomic_pos:
                 for q_vec in atomic_pos:
                     dist = np.linalg.norm(p_vec - q_vec)
                     if dist > maxdist:
                         maxdist = dist
-            ranges = [[0, dist]]
+            if maxdist == 0:
+                maxdist = 1
+            ranges = [[0, maxdist]]
         elif isinstance(ranges, float):
             ranges = [[0, ranges]]
         elif isinstance(ranges, list) and isinstance(ranges[0], float):
             ranges = [ranges]
 
         if bond_lists is not None:
-            print("recibí", len(bond_lists), "couplings")
+            print("Got", len(bond_lists), "couplings")
             if bond_distances is None:
                 bond_distances = [0] * len(bond_lists)
             elif len(bond_distances) != len(bond_lists):
@@ -190,6 +203,15 @@ class MagneticModel:
         lattice_properties["bravais_vectors"] = bravais_lat
         lattice_properties["cell_size"] = len(atomic_pos)
         lattice_properties["supercell_size"] = supercell_size
+        # Symmetry operators actually used to build this model (empty for a
+        # plain P1 description). Kept mainly so `save_cif` can write a
+        # faithful CIF back out instead of always collapsing to P1, and so
+        # downstream tools (e.g. the web interface) can tell how the model
+        # was built.
+        lattice_properties["symmetries"] = (
+            list(symmetries) if symmetries is not None else []
+        )
+        lattice_properties["space_group_symbol"] = space_group_symbol
 
         self.bonds = {
             b_name: {"distance": b_distance, "bonds": b_list}
@@ -440,7 +462,7 @@ class MagneticModel:
         where res is the subset of configurations that optimizes the
         cost function    sqrt(len(res))/|| coefficient_matrix(res)^+ ||
 
-        If the optional parameter l is provided, then it tries to optimize
+        If the optional parameter length is provided, then it tries to optimize
         the cost function for a fixed size length.
 
         """
@@ -462,7 +484,6 @@ class MagneticModel:
             if self.check_independence(c, forced):
                 curr.append(c)
 
-        print("curr:")
         for c in curr:
             print(c)
         idscurr = [sum(k * 2**i for i, k in enumerate(c)) for c in curr]
@@ -473,7 +494,6 @@ class MagneticModel:
         for q in a[:lenforced]:
             ared.append(q)
 
-        print("a=", a)
         u, sv = np.linalg.svd(a, full_matrices=False)[:2]
         k = len(sv)
         while sv[k - 1] < 1.0e-6:
@@ -871,6 +891,16 @@ class MagneticModel:
         logging.info(msg)
         model_name = "data_magnetic_model_1"
 
+        symmetries = self.lattice_properties.get("symmetries") or []
+        n_dim = len(bravais_vectors)
+        var_names = ["z"] if n_dim == 1 else (["x", "y"] if n_dim == 2 else ["x", "y", "z"])
+        if symmetries:
+            symop_lines = "\n".join(
+                f"'{format_symmetry_operator(rot, trans)}'" for rot, trans in symmetries
+            )
+        else:
+            symop_lines = f"'{', '.join(var_names)}'"
+
         with open(filename, "w") as fileout:
             head = (
                 f"""
@@ -897,7 +927,7 @@ _chemical_name_common                  """
                     + "\n\n\n"
                 )
                 fileout.write(
-                    "loop_\n _space_group_symop_operation_xyz" + "\t\t\t\n'z'\n"
+                    "loop_\n _space_group_symop_operation_xyz" + "\t\t\t\n" + symop_lines + "\n"
                 )
             elif len(bravais_vectors) == 2:
                 a_norm = np.linalg.norm(bravais_vectors[0])
@@ -912,7 +942,7 @@ _chemical_name_common                  """
                 fileout.write("_cell_length_b \t\t\t" + str(b_norm) + "\n")
                 fileout.write("_cell_length_gamma \t\t\t" + str(gamma) + "\n\n")
                 fileout.write(
-                    "loop_\n _space_group_symop_operation_xyz" + "\n'x, y'\n\n"
+                    "loop_\n _space_group_symop_operation_xyz" + "\n" + symop_lines + "\n\n"
                 )
 
             elif len(bravais_vectors) == 3:
@@ -947,7 +977,7 @@ _chemical_name_common                  """
                 fileout.write("_cell_angle_beta \t\t\t" + str(beta) + "\n")
                 fileout.write("_cell_angle_gamma \t\t\t" + str(gamma) + "\n\n")
                 fileout.write(
-                    "loop_\n _space_group_symop_operation_xyz" + "\t\t\t\n'x, y, z'\n\n"
+                    "loop_\n _space_group_symop_operation_xyz" + "\t\t\t\n" + symop_lines + "\n\n"
                 )
 
             fileout.write("# Atom positions \n\n")
@@ -964,9 +994,13 @@ _chemical_name_common                  """
                 + "_atom_site_type_symbol\n"
             )
 
-            bravais_coords = self.site_properties["coord_atomos"].dot(
-                np.linalg.inv(np.array(bravais_vectors))
-            )
+            coord_atoms =  self.site_properties["coord_atomos"]
+            if len(coord_atoms)!=0:
+                bravais_coords = coord_atoms.dot(
+                    np.linalg.inv(np.array(bravais_vectors))
+                )
+            else:
+                bravais_coords = np.array([])
 
             magnetic_species = self.site_properties["magnetic_species"]
             print("magnetic species", magnetic_species)

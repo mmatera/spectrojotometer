@@ -1,7 +1,55 @@
 """
 Tools used along the code.
 """
+import re
+
 import numpy as np
+
+# Matches a single-quoted field, a double-quoted field, or a run of
+# non-whitespace characters. Used to tokenize a CIF ``loop_`` data
+# line while keeping quoted fields (which may contain spaces, as in
+# symmetry operators like 'x, y, z') together as a single token.
+_CIF_TOKEN_RE = re.compile(r"'[^']*'|\"[^\"]*\"|\S+")
+
+
+def split_cif_loop_line(line: str) -> list:
+    """
+    Split a single ``loop_`` data line of a CIF file into its fields,
+    the way a real CIF parser would: whitespace-separated, except
+    that a field enclosed in single or double quotes is kept as one
+    token even if it contains spaces (surrounding quotes are
+    stripped from the returned token).
+
+    This matters for files (e.g. produced by pymatgen) where the
+    symmetry-operators loop has an extra numeric id column before the
+    quoted operator, such as::
+
+        1  'x, y, z'
+
+    A naive ``line.split()`` would break the quoted operator into
+    three separate tokens (``"'x,"``, ``"y,"``, ``"z'"``); this
+    function returns ``["1", "x, y, z"]`` instead.
+
+    Parameters
+    ----------
+    line : str
+        One data line of a CIF ``loop_`` block (already stripped of
+        the trailing newline is not required).
+
+    Returns
+    -------
+    list of str
+        The fields of the line, with any enclosing quotes removed.
+    """
+    tokens = _CIF_TOKEN_RE.findall(line.strip())
+    fields = []
+    for token in tokens:
+        if len(token) >= 2 and token[0] == token[-1] and token[0] in ("'", '"'):
+            fields.append(token[1:-1])
+        else:
+            fields.append(token)
+    return fields
+
 
 
 def box_ellipse(coeff_matrix, radius):
@@ -59,12 +107,75 @@ def offset_orientation(offset: list) -> int:
 
     """
     if len(offset) > 3:
-        return None
+        raise ValueError("offset has more than three coordinates.")
     for coord in offset[::-1]:
         if coord == 0:
             continue
         return 1 if coord > 0 else -1
     return 0
+
+
+def format_symmetry_operator(rot, trans, tol: float = 1e-6) -> str:
+    """
+    Format a (rotation, translation) symmetry operator as a CIF-style
+    string such as "x, y+1/2, z+1/2". This is the inverse of
+    `model_io.parse_symmetry`.
+
+    Parameters
+    ----------
+    rot : array-like
+        3x3 rotation/point-group matrix (entries expected to be 0, 1 or
+        -1, as for any crystallographic operator).
+    trans : array-like
+        Length-3 translation vector, in fractional coordinates.
+    tol : float, optional
+        Numerical tolerance. The default is 1e-6.
+
+    Returns
+    -------
+    str
+        The CIF-style symmetry operator string.
+    """
+    var_names = ("x", "y", "z")
+    rot = np.array(rot, dtype=float)
+    trans = np.array(trans, dtype=float)
+
+    def format_frac(val: float) -> str:
+        for denom in (1, 2, 3, 4, 6):
+            num = val * denom
+            if abs(num - round(num)) < 1e-4:
+                num = int(round(num))
+                return str(num) if denom == 1 else f"{num}/{denom}"
+        return f"{val:.6f}"
+
+    rows = []
+    for i in range(3):
+        terms = []
+        for j in range(3):
+            coeff = rot[i][j]
+            if abs(coeff) < tol:
+                continue
+            sign = "+" if coeff > 0 else "-"
+            mag = abs(coeff)
+            term = (
+                var_names[j]
+                if abs(mag - 1) < tol
+                else f"{format_frac(mag)}{var_names[j]}"
+            )
+            terms.append((sign, term))
+        shift = trans[i] % 1.0
+        if shift > 0.5 + tol:
+            shift -= 1.0
+        if abs(shift) > tol:
+            terms.append(("+" if shift > 0 else "-", format_frac(abs(shift))))
+        if not terms:
+            rows.append("0")
+            continue
+        row_str = ""
+        for k, (sign, term) in enumerate(terms):
+            row_str += (sign if (k > 0 or sign == "-") else "") + term
+        rows.append(row_str)
+    return ", ".join(rows)
 
 
 def pack_offset(r_list: list) -> str:
@@ -87,10 +198,10 @@ def pack_offset(r_list: list) -> str:
     # es su complemento a 10. Por ejemplo,
     # la celda en la posición 1,-1,1 tiene
     # una clave 1_191
-    r_list = np.array(r_list)
-    if all(r_list == 0):
+    r_list_ndarray = np.array(r_list)
+    if all(r_list_ndarray == 0):
         return "."
-    offset_key = "1_" + "".join(str(int(coord + 10) % 10) for coord in r_list)
+    offset_key = "1_" + "".join(str(int(coord + 10) % 10) for coord in r_list_ndarray)
     return offset_key
 
 
@@ -112,7 +223,7 @@ def unpack_offset(encoded_offset: str) -> np.ndarray:
     if len(encoded_offset_parts) == 1:
         return np.array([0, 0, 0])
     encoded_offset = encoded_offset_parts[1]
-    result = np.array([int(c) - 5 for c in encoded_offset], dtype=int)
+    result = np.array([(int(c)+5)% 10 - 5 for c in encoded_offset], dtype=int)
     return result
 
 

@@ -19,6 +19,47 @@ To install the package, just run
 python3 setup.py install
 
 
+Loading models: conventional vs. primitive cell
+=================================================
+
+`magnetic_model_from_file` / `magnetic_model_from_cif` accept an optional
+`primitive_cell` parameter (default `False`):
+
+* `primitive_cell=False` (default, historical behaviour): if the CIF's
+  symmetry loop lists extra operators (e.g. the centering translations of
+  an F, I, C, A or B centered lattice), the atoms of the asymmetric unit
+  are expanded to fill the conventional cell before building the model.
+
+* `primitive_cell=True`: atoms are kept exactly as declared in the CIF's
+  `_atom_site` loop (never expanded), and the model's Bravais vectors are
+  switched to a primitive basis built from the symmetry operators, which
+  must all be pure translations (a centered lattice, not a general
+  point-group symmetry). Bonds to symmetry images must use the standard
+  CIF `_geom_bond_site_symmetry_2` code (e.g. `2_555` for the second
+  listed symmetry operator), not extra invented atom labels. This gives
+  a much smaller model (e.g. 4 atoms instead of 16 for an F-centered
+  spinel lattice like ZnCr2O4), which is useful when enumerating spin
+  configurations.
+
+Example:
+
+    from spectrojotometer.model_io import magnetic_model_from_file
+    model = magnetic_model_from_file(
+        "zncr2o4.cif", magnetic_atoms=("Cr",), primitive_cell=True
+    )
+
+This is also available in the Tkinter GUI (the "Use primitive cell
+(centering symmetries)" checkbox in the File menu) and in the
+visualbondweb API (the `primitive_cell` field on `POST /model/upload`,
+and `POST /model/{session_id}/primitive_cell` to toggle it mid-session).
+
+Important: this setting only stays in effect if every reload of the
+model keeps using it. Saving a compact (primitive-cell) model with
+`save_cif` and then re-loading it with `primitive_cell=False` (or with
+a version of the tool that predates this parameter) silently and
+permanently expands it back to the conventional cell — there is no way
+to recover the compact form afterwards other than starting again from
+the original CIF with the symmetry operators still declared.
 
 
 Tools in the package and workflow:

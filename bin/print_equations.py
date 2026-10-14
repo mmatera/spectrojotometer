@@ -2,8 +2,6 @@
 
 import argparse
 
-import numpy as np
-from spectrojotometer.magnetic_model import MagneticModel
 from spectrojotometer.model_io import (magnetic_model_from_file,
                                        read_spin_configurations_file)
 

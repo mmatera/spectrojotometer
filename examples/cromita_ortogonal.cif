@@ -1,0 +1,41 @@
+# ======================================================================
+
+# CRYSTAL DATA
+
+# ----------------------------------------------------------------------
+
+data_magnetic_model_1
+
+_chemical_name_common                  ZnCr2O4
+_cell_length_a                   8.3035
+_cell_length_b                   8.3195
+_cell_length_c                   8.3422
+_cell_angle_alpha                90.0000
+_cell_angle_beta                 90.0000
+_cell_angle_gamma                90.0000
+
+_space_group_name_H-M_alt        'P 1'
+_space_group_IT_number           1
+
+# Operadores de centrado en las caras (FCC)
+loop_
+ _space_group_symop_operation_xyz
+ 'x, y, z'
+ 'x, y+1/2, z+1/2'
+ 'x+1/2, y, z+1/2'
+ 'x+1/2, y+1/2, z'
+
+# Posiciones atomicas (Unidad Asimetrica)
+loop_
+ _atom_site_label
+ _atom_site_occupancy
+ _atom_site_fract_x
+ _atom_site_fract_y
+ _atom_site_fract_z
+ _atom_site_adp_type
+ _atom_site_B_iso_or_equiv
+ _atom_site_type_symbol
+Cr1  1.0  0.50  0.50  0.50  Biso  1.0  Cr
+Cr2  1.0  0.25  0.25  0.50  Biso  1.0  Cr
+Cr3  1.0  0.50  0.25  0.25  Biso  1.0  Cr
+Cr4  1.0  0.25  0.50  0.25  Biso  1.0  Cr

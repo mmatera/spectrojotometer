@@ -73,7 +73,7 @@ def box_ellipse(coeff_matrix, radius):
             gamma = a_perpinv.dot(right_sv)
             gamma = gamma.dot(right_sv)
             widths.append(radius / np.sqrt(a_matrix[i, i] - gamma))
-        except np.linalg.linalg.LinAlgError:
+        except np.linalg.LinAlgError:
             widths.append(1.0e300)
     return widths
 

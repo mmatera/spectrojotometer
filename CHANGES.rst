@@ -6,6 +6,21 @@ Changes
 Unreleased
 ----------
 
+* The library reports through ``logging`` (one logger per module, under
+  ``spectrojotometer``) instead of printing, and no longer calls
+  ``logging.basicConfig`` on import, which configured logging for any
+  program importing it. Diagnostic dumps are at the ``DEBUG`` level.
+* visualbond shows the log messages in its panel through a thread-safe
+  handler, instead of redirecting ``sys.stdout``/``sys.stderr``.
+  Messages that were lost before now reach the panel: warnings from the
+  library and the GUI (e.g. incompatible or undetermined couplings), and
+  messages from worker threads. *Edit → Detailed log messages* shows the
+  diagnostics. Errors in callbacks are shown in the panel and in the
+  terminal.
+* Fixed "Send to application" and "Import configs from file" in the
+  configuration import window, which failed calling the nonexistent
+  ``logging.message``.
+* The command line tools accept ``-v`` / ``-vv``.
 * **Fixed** the Monte Carlo error bars (``montecarlo_box``), which
   depended on the energy units: the sampling radius scaled as the square
   of the tolerance. With energies in eV they were underestimated by

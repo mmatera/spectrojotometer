@@ -20,6 +20,8 @@ from ..magnetic_model import MagneticModel
 from .common import DEFAULT_MAGNETIC_ATOMS
 from .struct import magnetic_model_from_wk2_struct
 
+logger = logging.getLogger(__name__)
+
 # Prefer the pymatgen-based CIF reader over the hand-written one in
 # `cif.py`. Set this to False to force `cif.magnetic_model_from_cif`
 # even when pymatgen is installed.
@@ -32,7 +34,7 @@ if USE_PYMATGEN_CIF_READER and importlib.util.find_spec("pymatgen"):
     from .model_io_pymatgen import magnetic_model_from_cif_pymatgen
 else:
     if USE_PYMATGEN_CIF_READER:
-        logging.warning(
+        logger.warning(
             "pymatgen is not available; falling back to the internal "
             "(non-pymatgen) CIF reader in model_io.cif."
         )
@@ -89,10 +91,9 @@ def magnetic_model_from_file(
         )
     if filename[-7:] == ".struct" or filename[-7:] == ".STRUCT":
         if primitive_cell:
-            logging.warning(
+            logger.warning(
                 "primitive_cell=True is not supported for .struct files; "
                 "ignoring it."
             )
         return magnetic_model_from_wk2_struct(filename, magnetic_atoms, bond_names)
-    logging.error("unknown file format")
     raise ValueError(f"Unknown file format for {filename}.")

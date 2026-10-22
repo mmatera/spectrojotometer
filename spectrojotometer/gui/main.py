@@ -7,6 +7,7 @@ import logging
 import os
 import sys
 import tempfile
+import traceback
 
 #  from visualbond.dialogs.finddialog import FindDialog
 import webbrowser
@@ -59,8 +60,11 @@ from spectrojotometer.model_io import confindex, magnetic_model_from_file
 
 from .dialogs import FindDialog
 from .importconfig import ImportConfigWindow
+from .log_panel import LogPanel
 from .markers import textmarkers
 from .validators import show_number, validate_float, validate_pinteger
+
+logger = logging.getLogger(__name__)
 
 #logofilename = resource_filename(spectrojotometer_name, "logo.gif")
 #print(logofilename)
@@ -88,7 +92,7 @@ class ApplicationGUI:
         screen_width = root.winfo_screenwidth()
         screen_height = root.winfo_screenheight()
         self.root.geometry(f"{screen_width}x{screen_height}")
-        logging.info(ttk.Style().theme_use("classic"))
+        logger.debug("Tk theme: %s", ttk.Style().theme_use("classic"))
         # Creating a Font object of "TkDefaultFont"
         self.defaultFont = font.nametofont("TkDefaultFont")
         self.textFont = font.nametofont("TkTextFont")
@@ -190,13 +194,11 @@ class ApplicationGUI:
         )
         self.statusbar.pack(side=BOTTOM, fill=X)
 
-        old_stdout = sys.stdout
-        sys.stdout = self
-        sys.stderr = self
-        logging.info("Hola!")
+        # Messages from the library and the GUI go to the status panel.
+        self.log_panel = LogPanel(self.root, self.status)
+        self.root.report_callback_exception = self.report_callback_exception
         self.root.mainloop()
-        sys.stdout = old_stdout
-        logging.info("bye bye!")
+        self.log_panel.close()
 
     def buildmenus(self):
         self.root.bind_all("<Control-q>", self.close_app)
@@ -264,6 +266,12 @@ class ApplicationGUI:
             label="Clean log",
             command=lambda: self.status.delete("1.0", END),
             accelerator="<Control+b>",
+        )
+        self.verbose_log = BooleanVar(value=False)
+        editmenu.add_checkbutton(
+            label="Detailed log messages",
+            variable=self.verbose_log,
+            command=self.toggle_verbose_log,
         )
 
         helpmenu = Menu(self.menu)
@@ -626,8 +634,20 @@ class ApplicationGUI:
         aboutmsg += "See condmat-ph/... "
         messagebox.showinfo("About", aboutmsg)
 
-    def print_status(self, msg):
-        logging.info(msg)
+    def print_status(self, msg, level=logging.INFO):
+        """Show a message in the status panel."""
+        logger.log(level, msg)
+
+    def report_callback_exception(self, exc, val, tb):
+        """Errors in Tk callbacks: show them in the panel and the terminal."""
+        logger.error("%s: %s", exc.__name__, val, exc_info=(exc, val, tb))
+        traceback.print_exception(exc, val, tb, file=sys.stderr)
+
+    def toggle_verbose_log(self):
+        """Switch the status panel between normal and detailed messages."""
+        self.log_panel.set_level(
+            logging.DEBUG if self.verbose_log.get() else logging.INFO
+        )
 
     def open_model(self, *_):
         filename = fdlg.askopenfilename(
@@ -692,7 +712,7 @@ class ApplicationGUI:
             filetypes=(("spin list", "*.spin"), ("all files", "*.*")),
         )
         if len(filename) == 0:
-            logging.info("opening cancelled.")
+            logger.info("opening cancelled.")
             return
 
         self.datafolder = str(Path(filename).parent)
@@ -707,7 +727,7 @@ class ApplicationGUI:
         self.reload_configs(src_widget=self.spinconfigs)
         self.statusbar.config(text="config loaded")
         self.nb.select(1)
-        logging.info("... done")
+        logger.info("Configurations loaded from %s", filename)
 
     def save_model(self):
         datafolder = self.datafolder
@@ -718,7 +738,7 @@ class ApplicationGUI:
         )
         if filename == "":
             return
-        logging.info(filename.__repr__())
+        logger.info("Saving model to %s", filename)
         if filename == "":
             return
 
@@ -751,9 +771,9 @@ class ApplicationGUI:
     def print_full_equations(self, ev=None):
         eqformat = self.outputformat.get()
         if ev is None or isinstance(ev, str):
-            logging.info("print_full_equation called without event")
+            logger.debug("print_full_equation called without event")
         else:
-            logging.info(ev.widget)
+            logger.debug("print_full_equation: %s", ev.widget)
             self.reload_configs(ev)
 
         confs = self.configurations[1]
@@ -859,14 +879,14 @@ class ApplicationGUI:
         #        f.write(row)
 
         self.print_full_equations()
-        logging.info("updating window")
+        logger.debug("updating window")
         if spinconfigs == self.spinconfigs:
             self.spinconfigsenerg.delete(1.0, END)
             self.spinconfigsenerg.insert(END, conftxt)
         else:
             self.spinconfigs.delete(1.0, END)
             self.spinconfigs.insert(END, conftxt)
-        logging.info("listo...")
+        logger.debug("configurations reloaded")
 
     def reload_model(self, ev):
         self.print_status("reload model")
@@ -1038,7 +1058,7 @@ class ApplicationGUI:
         confs = []
         energs = []
         fmt = self.outputformat.get()
-        logging.info("\n**Evaluating couplings")
+        logger.info("Evaluating couplings")
         for it, c in enumerate(self.configurations[1]):
             en = self.configurations[0][it]
             if en == en:
@@ -1072,9 +1092,10 @@ class ApplicationGUI:
         undetermined = np.isnan(jerr)
         if np.any(undetermined):
             self.print_status(
-                "Warning: the couplings "
+                "The couplings "
                 + ", ".join(n for n, u in zip(bond_names, undetermined) if u)
-                + " are not determined by the known energies."
+                + " are not determined by the known energies.",
+                level=logging.WARNING,
             )
         determined_js = np.abs(js[~undetermined])
         jmax = np.max(determined_js) if len(determined_js) else 1.0
@@ -1091,9 +1112,10 @@ class ApplicationGUI:
         )
         if np.any(jerr < 0):
             self.print_status(
-                "Warning: error bounds suggest that the "
+                "Error bounds suggest that the "
                 + "model is not compatible with the data. "
-                + "Try increasing the energy tolerance."
+                + "Try increasing the energy tolerance.",
+                level=logging.WARNING,
             )
             incopatibletxt = (
                 textmarkers["open_comment"][fmt]
@@ -1252,12 +1274,6 @@ class ApplicationGUI:
         self.chis.config(state=DISABLED)
         self.plotbutton.config(state=NORMAL)
 
-    def flush(self):
-        pass
-
-    def write(self, txt):
-        self.status.insert(END, txt)
-
     def curr_edit(self):
         page = self.nb.tab(self.nb.select())["text"]
 
@@ -1302,7 +1318,7 @@ class ApplicationGUI:
         countVar = StringVar()
         pos = edt.search("J1", "1.0", stopindex=END, count=countVar)
         if pos == "":
-            logging.info("Not found")
+            logger.info("Not found")
             return
         edt.tag_configure("search", background="green")
         edt.tag_add("search", pos, "%s + %sc" % (pos, countVar.get()))

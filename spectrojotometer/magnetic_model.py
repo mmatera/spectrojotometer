@@ -9,6 +9,8 @@ import numpy.linalg as la
 
 from .tools import box_ellipse, compatibility_box, format_symmetry_operator, offset_orientation, pack_offset
 
+logger = logging.getLogger(__name__)
+
 # import matplotlib.pyplot as plt
 # from mpl_toolkits.mplot3d import Axes3
 # from matplotlib.lines import Line2D
@@ -131,18 +133,18 @@ class MagneticModel:
         self.model_label = model_label
         self.onfly = onfly
         self.cell_size = 0
-        print("supercell size:", supercell_size)
+        logger.debug("supercell size: %s", supercell_size)
         # Normalise: accept int or [sx, sy, sz]; clamp each axis to 1–4
         if np.isscalar(supercell_size):
             supercell_size = min(4, max(1, int(supercell_size)))
         else:
             supercell_size = [min(4, max(1, int(s))) for s in supercell_size]
 
-        print("atomic_pos", atomic_pos)
+        logger.debug("atomic positions: %s", atomic_pos)
         if magnetic_species is None:
             magnetic_species = ["X"] * len(atomic_pos)
 
-        print("magnetic_species", magnetic_species)
+        logger.debug("magnetic species: %s", magnetic_species)
 
         if g_lande_factors is None:
             g_lande_factors = [2.0] * len(magnetic_species)
@@ -175,7 +177,7 @@ class MagneticModel:
             ranges = [list(ranges)]
 
         if bond_lists is not None:
-            print("Got", len(bond_lists), "couplings")
+            logger.debug("got %d couplings", len(bond_lists))
             if bond_distances is None:
                 bond_distances = [0] * len(bond_lists)
             elif len(bond_distances) != len(bond_lists):
@@ -225,7 +227,7 @@ class MagneticModel:
             self.bonds.pop(name)
         except KeyError:
             msg = "bond " + name + " not found"
-            logging.error(msg)
+            logger.warning(msg)
             return
 
     remove_bond_by_name = remover_bond_by_name
@@ -265,17 +267,17 @@ class MagneticModel:
         ):
             for i, pos_i in enumerate(coord_atomos):
                 for j, pos_j in enumerate(sites_sc):
-                    logging.debug("pair %s, supercell %s", [i, j], supercell_idx)
+                    logger.debug("pair %s, supercell %s", [i, j], supercell_idx)
                     rel_pos = pos_j - pos_i
                     orientation = offset_orientation(rel_pos)
                     if orientation < 0:
                         continue
                     distance = np.linalg.norm(rel_pos)
-                    logging.debug("   distance %s", distance)
+                    logger.debug("   distance %s", distance)
                     if not is_in_range(distance):
                         continue
 
-                    logging.debug("bond between %s and %s (%s)", i, j, supercell_idx)
+                    logger.debug("bond between %s and %s (%s)", i, j, supercell_idx)
                     bound_type = tuple(sorted({atom_type[i], atom_type[j]}))
                     key = (normalize_key(distance), bound_type)
                     offset_key = pack_offset(supercell_idx)
@@ -285,12 +287,12 @@ class MagneticModel:
         while len(new_bonds) > len(bond_names):
             while "J" + str(bn_index + 1) in bond_names:
                 bn_index = bn_index + 1
-            print("adding ", "J" + str(bn_index + 1))
+            logger.debug("adding %s", "J" + str(bn_index + 1))
             bond_names.append("J" + str(bn_index + 1))
 
         # Update the bonds dict.
-        print("current bonds:", bonds)
-        print("new bond names:", bond_names)
+        logger.debug("current bonds: %s", bonds)
+        logger.debug("new bond names: %s", bond_names)
 
         for name, dist_type in zip(bond_names, sorted(new_bonds)):
             dist = dist_type[0]
@@ -365,7 +367,7 @@ class MagneticModel:
         connecting coupling constants with simulated energies
         for a given set of configurations configs.
         """
-        logging.info("compute the coefficient matrix")
+        logger.debug("compute the coefficient matrix")
 
         rawcm = [
             np.array(
@@ -376,7 +378,8 @@ class MagneticModel:
             )
             for bondfamily in (bd["bonds"] for bd in self.bonds.values())
         ]
-        print("raw cm\n", "  \n".join(str(row) for row in rawcm))
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("raw coefficient matrix:\n%s", "\n".join(str(row) for row in rawcm))
         if normalizar:
             coeff_matrix = [v - np.average(v) for v in rawcm]
         else:
@@ -445,7 +448,7 @@ class MagneticModel:
         for c in confs:
             if self.check_independence(c, res):
                 res.append(c)
-        logging.debug("independent confs: %s", res)
+        logger.debug("independent confs: %s", res)
         return res
 
     def cost(self, confs):
@@ -493,7 +496,7 @@ class MagneticModel:
         u, sv, _ = np.linalg.svd(a, full_matrices=False)
         k = int(np.sum(sv > tol))  # numerical rank
         if k == 0:
-            logging.info(
+            logger.info(
                 "optimize_independent_set: the set of configurations"
                 " does not provide any information."
             )
@@ -502,7 +505,7 @@ class MagneticModel:
         # Compare with the number of unknowns (bonds + base energy).
         partialinfo = k < a.shape[1]
         if partialinfo:
-            logging.info(
+            logger.info(
                 "optimize_independent_set: the set of configurations just"
                 " provides partial information. "
                 "Optimizing the set for this information."
@@ -539,7 +542,7 @@ class MagneticModel:
             s = smin(ared)
 
         if s <= tol or partialinfo:
-            logging.info(
+            logger.info(
                 "Information is not complete. "
                 "Picking the subset that provides the maximal information."
             )
@@ -547,7 +550,7 @@ class MagneticModel:
 
         if length is not None:
             cost = np.sqrt(lp + lenforced) / s
-            logging.info("optimize_independent_set for fixed length. cost=%s", cost)
+            logger.info("optimize_independent_set for fixed length. cost=%s", cost)
             return result(lp), cost
 
         # No length provided and complete information: enlarge the set
@@ -590,7 +593,7 @@ class MagneticModel:
         if known is None:
             known = []
 
-        logging.info("--------------find_optimal_set ----------------")
+        logger.info("--------------find_optimal_set ----------------")
 
         if start is None:
             repres = self.generate_random_configurations(max(update_size, lmax))
@@ -606,7 +609,7 @@ class MagneticModel:
                 break
 
         if len(last_better) < lmax:
-            logging.info(
+            logger.info(
                 "not enough configurations. Trying to optimize "
                 + "the subset and return it."
             )
@@ -692,7 +695,7 @@ class MagneticModel:
 
         if printeqs:
             coeffs = self.coefficient_matrix(confs, normalizar=False)
-            logging.info("\n# Configurations:\n=================\n\n")
+            print("\n# Configurations:\n=================\n")
             for c in confs:
                 print(c)
             self.print_equations(coeffs)
@@ -706,11 +709,10 @@ class MagneticModel:
         # equations.
         rcoeffs = coeffs[:, 0:-1]
         singularvalues = np.linalg.svd(rcoeffs, compute_uv=False)
-        print(singularvalues)
+        logger.debug("singular values of the coupling columns: %s", singularvalues)
         cond_number = np.sqrt(len(rcoeffs)) / max(min(singularvalues), 1.0e-9)
         if printeqs:
-            msg = "\nInverse of the minimum singular value: " f"{cond_number}\n\n"
-            logging.info(msg)
+            print(f"\nInverse of the minimum singular value: {cond_number}\n")
 
         if method is None:
             method = (
@@ -814,7 +816,7 @@ class MagneticModel:
         model_chi = (coeffs.dot(j_ls) - energs) / tol
         box = compatibility_box(coeffs, energs, tol)
         if box is None:
-            logging.warning("The model is incompatible with the energies.")
+            logger.warning("The model is incompatible with the energies.")
             return j_ls, -np.ones(len(j_ls)), model_chi, 0.0
         lower, upper = box
         determined = np.isfinite(lower) & np.isfinite(upper)
@@ -888,7 +890,7 @@ class MagneticModel:
         radius2 = numcalc * tol**2 - residual.dot(residual)
 
         def incompatible(msg):
-            logging.warning(msg)
+            logger.warning(msg)
             return j_ls, -np.ones(numparm), model_chi, 0.0
 
         if radius2 <= 0 or k == 0:
@@ -907,7 +909,7 @@ class MagneticModel:
             np.max(np.abs(samples.dot(coeffs.T) - energs), axis=1) <= tol
         ]
         rate = len(accepted) / (numtry + 1.0)
-        logging.info("Monte Carlo acceptance rate=%s", rate)
+        logger.info("Monte Carlo acceptance rate=%s", rate)
 
         if len(accepted) == 0:
             return incompatible(
@@ -916,7 +918,7 @@ class MagneticModel:
             )
 
         if len(accepted) == 1:
-            logging.info("errors estimated by boxing the ellipse")
+            logger.info("errors estimated by boxing the ellipse")
             js = j_ls.copy()
             d_js = np.array(box_ellipse(coeffs, np.sqrt(radius2)))
         else:
@@ -937,7 +939,7 @@ class MagneticModel:
         if bond_names is None:
             bond_names = tuple(self.bonds)
         msg = "save cif" + filename
-        logging.info(msg)
+        logger.info(msg)
         model_name = "data_magnetic_model_1"
 
         symmetries = self.lattice_properties.get("symmetries") or []
@@ -1061,7 +1063,7 @@ _chemical_name_common                  """
                 bravais_coords = np.zeros((len(coord_atoms), 3))
 
             magnetic_species = self.site_properties["magnetic_species"]
-            logging.debug("magnetic species %s", magnetic_species)
+            logger.debug("magnetic species %s", magnetic_species)
             g_lande_factors = self.site_properties["g_lande_factors"]
             spin_repr = self.site_properties["spin_repr"]
             for i, pos in enumerate(bravais_coords):
@@ -1089,7 +1091,7 @@ _chemical_name_common                  """
                 for k, bond_name in enumerate(self.bonds):
                     bond_list = self.bonds[bond_name]["bonds"]
                     distance = self.bonds[bond_name]["distance"]
-                    print(k, " bondlist: ", bond_list)
+                    logger.debug("%s bond list: %s", k, bond_list)
                     for src, dest, offset in bond_list:
                         line = (
                             f"{magnetic_species[src]}{src+1}\t"

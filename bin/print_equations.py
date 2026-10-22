@@ -4,6 +4,7 @@ import argparse
 
 from spectrojotometer.model_io import (magnetic_model_from_file,
                                        read_spin_configurations_file)
+from spectrojotometer.tools import add_verbosity_argument, setup_cli_logging
 
 
 def main():
@@ -34,7 +35,9 @@ the list of equations for the coupling constants
         default="plain",
     )
 
+    add_verbosity_argument(parser)
     args = vars(parser.parse_args())
+    setup_cli_logging(args["verbose"])
 
     if args["model"] is None:
         print(

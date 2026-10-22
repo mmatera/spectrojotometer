@@ -180,6 +180,34 @@ constraints come from the same ellipsoid that contains ``P``, so they are
 satisfied by every compatible set of couplings.
 
 
+Logging
+========
+
+spectrojotometer reports progress and diagnostics through the standard
+``logging`` module, under the ``spectrojotometer`` logger (with one child
+logger per module, e.g. ``spectrojotometer.magnetic_model``). It never
+prints diagnostics nor configures logging by itself: the application
+decides what to show and where. In a script, for instance:
+
+.. code:: python
+
+   import logging
+
+   logging.basicConfig(level=logging.WARNING)
+   logging.getLogger("spectrojotometer").setLevel(logging.INFO)  # or DEBUG
+
+Warnings report problems (e.g. a model incompatible with the energies,
+or bonds skipped while reading a CIF file), info messages report
+progress, and debug messages dump internal details (coefficient
+matrices, positions, bond lists).
+
+The command line tools print their results to stdout and show warnings
+on stderr; ``-v`` adds the progress messages and ``-vv`` the detailed
+diagnostics. In visualbond, the messages appear in the panel at the
+bottom of the window, and *Edit → Detailed log messages* shows the
+diagnostics too.
+
+
 Tools in the package and workflow:
 ==================================
 

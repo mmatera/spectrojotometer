@@ -20,7 +20,8 @@ from ..tools import (
 )
 from .common import DEFAULT_MAGNETIC_ATOMS, read_bravais_vectors
 
-logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 
 
 def find_atom_offset_by_symmetry(p, symop, magnetic_positions) -> tuple:
@@ -359,7 +360,7 @@ def cif_read_loop_atoms(labels: list, entries: list, magnetic_atoms: tuple) -> t
         The `_atom_site_spin` value of each kept atom, or `"."` if
         that column isn't present in `labels`.
     """
-    logging.info("atom positions found")
+    logger.debug("atom positions found")
     magnetic_positions = []
     magnetic_species = []
     atomlabels = {}
@@ -466,7 +467,7 @@ def cif_read_loop_bonds(labels: list, entries: list, atomlabels: list) -> tuple:
         and `dest` are indices into the model, `offset` is a packed
         cell-offset string).
     """
-    logging.info("Reading bonds from cif")
+    logger.debug("reading bonds from cif")
     jlabelcol = None
     bondlists = []
     bond_distances = []
@@ -487,7 +488,7 @@ def cif_read_loop_bonds(labels: list, entries: list, atomlabels: list) -> tuple:
         if t == "_geom_bond_site_symmetry_2":
             sym2col = i
 
-    logging.info(
+    logger.debug(
         {
             "at1col": at1col,
             "at2col": at2col,
@@ -510,7 +511,7 @@ def cif_read_loop_bonds(labels: list, entries: list, atomlabels: list) -> tuple:
                 label2 = label2 + "_" + str(sym)
         if not (label1 in atomlabels and label2 in atomlabels):
             msg = f"{[label1, label2]} not in atomlabels"
-            logging.info(msg)
+            logger.info(msg)
             continue
         outbond = np.array(outbond2) - np.array(outbond1)
         newbond = normalize_bond(atomlabels[label1], atomlabels[label2], outbond)
@@ -730,7 +731,7 @@ def cif_read_loop_bonds_compact(
         `(src, dest, offset)` triples in `normalize_bond` form, with
         `offset` expressed in the primitive basis.
     """
-    logging.info("Reading bonds from cif (compact/primitive mode)")
+    logger.debug("reading bonds from cif (compact/primitive mode)")
     jlabelcol = None
     bondlists = []
     bond_distances = []
@@ -755,7 +756,7 @@ def cif_read_loop_bonds_compact(
         sym, conv_offset = unpack_symmetry_and_offset(code)
         if sym < 0 or sym >= len(symmetries):
             msg = f"symmetry index {sym + 1} in '{code}' is out of range"
-            logging.warning(msg)
+            logger.warning(msg)
             return None
         rot, trans = symmetries[sym]
         if not np.allclose(rot, np.eye(3), atol=1e-6):
@@ -764,7 +765,7 @@ def cif_read_loop_bonds_compact(
                 "translation; bonds related by point-group rotations cannot "
                 "be folded into a compact/primitive-cell model"
             )
-            logging.warning(msg)
+            logger.warning(msg)
             return None
         return np.array(trans) + np.array(conv_offset)
 
@@ -783,7 +784,7 @@ def cif_read_loop_bonds_compact(
                 continue
         if not (label1 in atomlabels and label2 in atomlabels):
             msg = f"{[label1, label2]} not in atomlabels"
-            logging.info(msg)
+            logger.info(msg)
             continue
         offset = frac_offset_to_primitive_int(delta2 - delta1, primitive_frac_basis)
         if offset is None:
@@ -792,7 +793,7 @@ def cif_read_loop_bonds_compact(
                 f"({delta2 - delta1}) is not an integer combination of the "
                 "primitive lattice vectors; skipping this bond"
             )
-            logging.warning(msg)
+            logger.warning(msg)
             continue
 
         newbond = normalize_bond(atomlabels[label1], atomlabels[label2], offset)
@@ -995,7 +996,7 @@ def generate_bonds_by_symmetries(
                 offset = offsetj - offseti
                 if any(offset < -5) or any(offset > 4):
                     msg = f"the bond is too long. offset= {offset}"
-                    logging.warning(msg)
+                    logger.warning(msg)
                     continue
 
                 newbond = normalize_bond(i, j, offset)
@@ -1086,8 +1087,8 @@ def magnetic_model_from_cif(
         "_space_group_name_h-m_ref",
     )
 
-    msg = f"loaading model from{filename}"
-    logging.info(msg)
+    msg = f"loading model from {filename}"
+    logger.info(msg)
     with open(filename, "r") as src:
         # `pending_line` lets an inner block (below) hand back a line it
         # read ahead but did not consume, so the next outer iteration can
@@ -1266,7 +1267,7 @@ def magnetic_model_from_cif(
         f"    bondlabels: {bond_labels}",
         f"   bondlists: {bondlists}",
     ):
-        logging.info(msg)
+        logger.debug(msg)
 
     model = MagneticModel(
         magnetic_positions,

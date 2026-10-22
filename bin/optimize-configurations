@@ -5,7 +5,7 @@ import argparse
 from spectrojotometer.magnetic_model import MagneticModel
 from spectrojotometer.model_io import (confindex, magnetic_model_from_file,
                                        read_spin_configurations_file)
-from spectrojotometer.tools import eprint
+from spectrojotometer.tools import add_verbosity_argument, eprint, setup_cli_logging
 
 
 def main():
@@ -58,7 +58,9 @@ def main():
         help='Name of the outputfile. If "-" is provided, the output is printed to the standard output.',
     )
 
+    add_verbosity_argument(parser)
     args = vars(parser.parse_args())
+    setup_cli_logging(args["verbose"])
 
     if args["modelfile"] is None:
         print(

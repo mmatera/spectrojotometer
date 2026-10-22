@@ -1,6 +1,7 @@
 """
 Tools used along the code.
 """
+import logging
 import re
 import sys
 
@@ -57,6 +58,31 @@ def split_cif_loop_line(line: str) -> list:
 def eprint(*args, **kwargs):
     """print to stderr (used by the command line tools)."""
     print(*args, file=sys.stderr, **kwargs)
+
+
+def add_verbosity_argument(parser):
+    """Add -v / --verbose (repeatable) to a command line parser."""
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Show progress messages (-v) or detailed diagnostics (-vv).",
+    )
+
+
+def setup_cli_logging(verbosity=0):
+    """
+    Configure logging for a command line tool.
+
+    Messages go to stderr, so they do not mix with the results printed
+    to stdout. Warnings are always shown; -v adds the progress messages
+    of spectrojotometer, and -vv its detailed diagnostics. Other
+    libraries stay at the warning level.
+    """
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
+    level = {0: logging.WARNING, 1: logging.INFO}.get(verbosity, logging.DEBUG)
+    logging.getLogger("spectrojotometer").setLevel(level)
 
 
 def box_ellipse(coeff_matrix, radius):

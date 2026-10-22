@@ -441,31 +441,27 @@ class ApplicationGUI:
 
         row = LabelFrame(controls1, text="Error bound method", width=8, padx=5, pady=5)
         framemethod = Frame(row)
-        bemode = BooleanVar()
-        self.parameters["page3"]["usemc"] = bemode
+        bemode = StringVar(value="exact")
+        self.parameters["page3"]["method"] = bemode
 
-        def enable_mcparams_inputs():
-            self.nummcsteps.config(state="normal")
-            self.mcsizefactor.config(state="normal")
+        def update_mcparams_inputs():
+            state = "normal" if bemode.get() == "montecarlo" else "disabled"
+            self.nummcsteps.config(state=state)
+            self.mcsizefactor.config(state=state)
 
-        def disable_mcparams_inputs():
-            self.nummcsteps.config(state="disabled")
-            self.mcsizefactor.config(state="disabled")
-
-        Radiobutton(
-            framemethod,
-            text="Quadratic bound",
-            variable=bemode,
-            value=False,
-            command=disable_mcparams_inputs,
-        ).pack(side=TOP)
-        Radiobutton(
-            framemethod,
-            text="Monte Carlo",
-            variable=bemode,
-            value=True,
-            command=enable_mcparams_inputs,
-        ).pack(side=TOP)
+        for text, value in (
+            ("Exact box (linear programming)", "exact"),
+            ("Monte Carlo (inner estimate)", "montecarlo"),
+            ("Quadratic bound (outer estimate)", "ellipse"),
+        ):
+            Radiobutton(
+                framemethod,
+                text=text,
+                variable=bemode,
+                value=value,
+                command=update_mcparams_inputs,
+                anchor="w",
+            ).pack(side=TOP, fill=X)
         self.mcparams = Frame(framemethod)
         rowmc = Frame(self.mcparams)
         Label(rowmc, text="Num Samples:").pack(side=LEFT)
@@ -482,7 +478,7 @@ class ApplicationGUI:
         self.mcsizefactor.pack(side=LEFT)
         rowmc.pack(side=TOP)
         self.mcparams.pack(side=TOP)
-        bemode.set(True)
+        update_mcparams_inputs()
         self.parameters["page3"]["mcsteps"] = self.nummcsteps
         self.parameters["page3"]["mcsizefactor"] = self.mcsizefactor
         framemethod.pack(side=TOP, fill=X)
@@ -1027,15 +1023,16 @@ class ApplicationGUI:
 
     def evaluate_couplings(self):
         """Evaluate the couplings"""
-        bond_names = list(self.model.bonds)
         if self.model is None:
             messagebox.showerror("Error", "Model was not loaded.\n")
             return
+        bond_names = list(self.model.bonds)
 
         self.reload_configs(src_widget=self.spinconfigsenerg)
 
         tolerance = float(self.parameters["page3"]["Energy tolerance"].get())
-        usemc = self.parameters["page3"]["usemc"].get()
+        method = self.parameters["page3"]["method"].get()
+        usemc = method == "montecarlo"
         mcsteps = int(self.parameters["page3"]["mcsteps"].get())
         mcsizefactor = float(self.parameters["page3"]["mcsizefactor"].get())
         confs = []
@@ -1057,26 +1054,32 @@ class ApplicationGUI:
                 "Number of known energies is "
                 + "not enough to determine all the couplings.",
             )
-            resparmtxt = ""
+            return
 
-        if usemc:
-            js, jerr, chis, ar = self.model.compute_couplings(
-                confs,
-                energs,
-                err_energs=tolerance,
-                montecarlo=True,
-                mcsteps=mcsteps,
-                mcsizefactor=mcsizefactor,
-            )
-        else:
-            js, jerr, chis, ar = self.model.compute_couplings(
-                confs, energs, err_energs=tolerance, montecarlo=False
-            )
+        js, jerr, chis, ar = self.model.compute_couplings(
+            confs,
+            energs,
+            err_energs=tolerance,
+            method=method,
+            mcsteps=mcsteps,
+            mcsizefactor=mcsizefactor,
+        )
 
         self.chisvals = chis
         offset_energy = js[-1]
-        js.resize(js.size - 1)
-        jmax = max(abs(js))
+        js = np.asarray(js[:-1])
+        jerr = np.asarray(jerr[:-1], dtype=float)
+        undetermined = np.isnan(jerr)
+        if np.any(undetermined):
+            self.print_status(
+                "Warning: the couplings "
+                + ", ".join(n for n, u in zip(bond_names, undetermined) if u)
+                + " are not determined by the known energies."
+            )
+        determined_js = np.abs(js[~undetermined])
+        jmax = np.max(determined_js) if len(determined_js) else 1.0
+        if jmax == 0:
+            jmax = 1.0
 
         resparmtxt = (
             "E"
@@ -1086,12 +1089,11 @@ class ApplicationGUI:
             + str(offset_energy)
             + "\n\n"
         )
-        if min(jerr) < 0:
+        if np.any(jerr < 0):
             self.print_status(
                 "Warning: error bounds suggest that the "
                 + "model is not compatible with the data. "
-                + "Try increasing the tolerance by means "
-                + "of the parameter --tolerance [tol]."
+                + "Try increasing the energy tolerance."
             )
             incopatibletxt = (
                 textmarkers["open_comment"][fmt]
@@ -1134,6 +1136,19 @@ class ApplicationGUI:
                     )
         else:
             for i, val in enumerate(js):
+                if undetermined[i]:
+                    resparmtxt = (
+                        resparmtxt
+                        + bond_names[i]
+                        + " "
+                        + textmarkers["equal_symbol"][fmt]
+                        + " ? "
+                        + textmarkers["open_comment"][fmt]
+                        + " undetermined "
+                        + textmarkers["close_comment"][fmt]
+                        + "\n"
+                    )
+                    continue
                 resparmtxt = (
                     resparmtxt
                     + bond_names[i]

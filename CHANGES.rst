@@ -5,7 +5,8 @@ Changes
 
 Unreleased
 ----------
-
+* Add method for computing the exact compatibility region with linear
+  programming.
 * Added ``primitive_cell`` parameter to ``magnetic_model_from_file`` /
   ``magnetic_model_from_cif``: when the CIF's symmetry loop lists pure
   translations (a centered Bravais lattice: F, I, C, A or B), atoms can

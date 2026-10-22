@@ -769,7 +769,7 @@ class ApplicationGUI:
         self.statusbar.config(text="configurations saved.")
 
     def print_full_equations(self, ev=None):
-        eqformat = self.outputformat.get()
+        eqformat = self.outputformat.get().lower()
         if ev is None or isinstance(ev, str):
             logger.debug("print_full_equation called without event")
         else:

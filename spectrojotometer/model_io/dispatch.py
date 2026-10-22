@@ -12,7 +12,7 @@ for direct use and comparison, but it is no longer what
 command-line scripts -- actually calls for a `.cif` file.
 """
 from typing import Optional
-import importlib
+import importlib.util
 import logging
 
 

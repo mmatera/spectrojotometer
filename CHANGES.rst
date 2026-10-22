@@ -6,6 +6,11 @@ Changes
 Unreleased
 ----------
 
+* **Fixed** ``import spectrojotometer.model_io`` failing with
+  ``AttributeError: module 'importlib' has no attribute 'util'`` in a
+  regular (non-editable) installation, which made the library, the
+  command line tools and visualbond unusable after ``pip install``.
+  ``tests/test_imports.py`` imports every module in a fresh interpreter.
 * The library reports through ``logging`` (one logger per module, under
   ``spectrojotometer``) instead of printing, and no longer calls
   ``logging.basicConfig`` on import, which configured logging for any

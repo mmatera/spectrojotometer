@@ -1,4 +1,4 @@
-"""Motor Metropolis para Ising clasico con kernels Numba."""
+"""Metropolis engine for the classical Ising model, with numba kernels."""
 
 import numpy as np
 
@@ -9,9 +9,9 @@ from ._jit_kernels import (
 
 
 class IsingMonteCarlo:
-    """Simulacion Metropolis single-flip para Ising.
+    """Single-flip Metropolis simulation of the Ising model.
 
-    Convencion: sigma_i in {-1, +1}, H = E0 - sum J_ij sigma_i sigma_j.
+    Convention: sigma_i in {-1, +1}, H = E0 - sum J_ij sigma_i sigma_j.
     """
 
     def __init__(self, spins, bonds, J_vals, E0=0.0, seed=None):
@@ -21,7 +21,7 @@ class IsingMonteCarlo:
         self.E0 = float(E0)
         self.N = int(self.spins.size)
 
-        # RNG Python (para inicializacion) y RNG Numba (para la dinamica)
+        # Python RNG (for the initialization) and numba RNG (for the dynamics)
         self.rng = np.random.default_rng(seed)
         seed_jit = int(self.rng.integers(1, 2**63 - 1))
         self._jit_state = np.array([np.uint64(seed_jit)], dtype=np.uint64)
@@ -37,10 +37,10 @@ class IsingMonteCarlo:
         self._energy = None
         self._energy_dirty = True
 
-    # ---------- construccion ----------
+    # ---------- construction ----------
 
     def _build_neighbor_lists(self):
-        """Construye la representacion CSR plana de vecinos."""
+        """Build the flat CSR representation of the neighbours."""
         nbrs = [[] for _ in range(self.N)]
         Js = [[] for _ in range(self.N)]
         for (i, j), J in zip(self.bonds, self.J_vals):
@@ -65,11 +65,11 @@ class IsingMonteCarlo:
         self._nbr_J_flat = nbr_J_flat
         self._nbr_start = starts
 
-    # ---------- energia ----------
+    # ---------- energy ----------
 
     @property
     def energy(self):
-        """Energia total, recalculada si es necesario."""
+        """Total energy, recomputed if needed."""
         if self._energy_dirty:
             self._energy = self._compute_energy()
             self._energy_dirty = False
@@ -82,11 +82,11 @@ class IsingMonteCarlo:
             self.spins, self.bonds, self.J_vals
         )
 
-    # ---------- dinamica ----------
+    # ---------- dynamics ----------
 
     def set_temperature(self, T):
         if T <= 0:
-            raise ValueError("La temperatura debe ser positiva.")
+            raise ValueError("The temperature must be positive.")
         self.T = float(T)
         self.beta = 1.0 / self.T
 
@@ -105,7 +105,7 @@ class IsingMonteCarlo:
         for _ in range(n_sweeps):
             self.metropolis_sweep()
 
-    # ---------- medicion ----------
+    # ---------- measurement ----------
 
     def sample(self, n_sweeps, measure_every=1):
         M_sum = 0.0

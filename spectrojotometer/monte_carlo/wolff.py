@@ -1,4 +1,4 @@
-"""Algoritmo de cluster de Wolff para Ising unfrustrated, con kernels Numba."""
+"""Wolff cluster algorithm for the unfrustrated Ising model, with numba kernels."""
 
 import numpy as np
 
@@ -7,37 +7,37 @@ from .ising_engine import IsingMonteCarlo
 
 
 class WolffCluster(IsingMonteCarlo):
-    """Wolff cluster con gauge transform.
+    """Wolff cluster algorithm, with a gauge transformation.
 
-    El gauge (tau) debe provenir de detect_frustration(); si el modelo
-    esta frustrado este algoritmo NO es ergodico y no debe usarse.
+    The gauge (tau) must come from detect_frustration(): for a frustrated
+    model this algorithm is NOT ergodic and must not be used.
 
-    Notas sobre el estado inicial
-    -----------------------------
-    A temperaturas bajas (T << Tc) el cluster de Wolff cubre
-    practicamente todo el reticulo, por lo que cada paso invierte el
-    sistema completo. Si se parte de un estado de alta energia en la
-    base gauge (p.ej. un estado Neel para un AFM bipartito), el
-    algoritmo queda atascado. El constructor arranca por defecto desde
-    el estado "ordered" en base gauge (todos los spines = +1), que
-    corresponde al Neel fisico para AFM bipartito.
+    The initial state
+    -----------------
+    At low temperatures (T << Tc) the Wolff cluster covers almost the
+    whole lattice, so each step flips the whole system. Starting from a
+    high-energy state in the gauge basis (e.g. a Neel state of a
+    bipartite antiferromagnet), the algorithm gets stuck. By default, the
+    constructor starts from the "ordered" state in the gauge basis (every
+    spin = +1), which is the physical Neel state of a bipartite
+    antiferromagnet.
     """
 
     def __init__(self, spins, bonds, J_vals, E0=0.0, seed=None,
                  gauge=None, initial_state="ordered"):
         if gauge is None:
             raise ValueError(
-                "WolffCluster requiere el gauge calculado por "
-                "detect_frustration(). Si el modelo esta frustrado, "
-                "usar Metropolis o ParallelTempering."
+                "WolffCluster needs the gauge computed by "
+                "detect_frustration(). If the model is frustrated, "
+                "use Metropolis or ParallelTempering."
             )
         super().__init__(spins, bonds, J_vals, E0, seed)
 
         self.gauge = np.asarray(gauge, dtype=np.int8)
         if self.gauge.shape != (self.N,):
-            raise ValueError("gauge debe tener shape (N,)")
+            raise ValueError("gauge must have shape (N,)")
 
-        # Pasar a base gauge
+        # To the gauge basis
         self.spins = (self.spins * self.gauge).astype(np.int8)
 
         if initial_state == "ordered":
@@ -49,20 +49,20 @@ class WolffCluster(IsingMonteCarlo):
             pass
         else:
             raise ValueError(
-                f"initial_state desconocido: {initial_state!r}. "
-                "Usar 'ordered', 'random' o 'user'."
+                f"unknown initial_state: {initial_state!r}. "
+                "Use 'ordered', 'random' or 'user'."
             )
 
-        # Todos los J efectivos son |J| tras el gauge
+        # After the gauge transformation, every effective J is |J|
         self.J_vals = np.abs(self.J_vals)
         self._build_neighbor_lists()
         self._energy_dirty = True
 
-        # Buffers preallocados para el kernel de Wolff
+        # Preallocated buffers for the Wolff kernel
         self._cluster_mask = np.zeros(self.N, dtype=np.bool_)
         self._cluster_stack = np.zeros(self.N, dtype=np.int64)
 
-    # ---------- dinamica ----------
+    # ---------- dynamics ----------
 
     def wolff_step(self):
         size = _wolff_step_kernel(
@@ -79,13 +79,13 @@ class WolffCluster(IsingMonteCarlo):
         return size
 
     def metropolis_sweep(self, n_clusters=None):
-        """Un sweep de Wolff = N intentos de cluster."""
+        """A Wolff sweep: N cluster attempts."""
         if n_clusters is None:
             n_clusters = self.N
         for _ in range(n_clusters):
             self.wolff_step()
 
-    # ---------- medicion ----------
+    # ---------- measurement ----------
     def sample(self, n_sweeps, measure_every=1):
         M_sum = 0.0
         M_abs_sum = 0.0

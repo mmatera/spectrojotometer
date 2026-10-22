@@ -77,7 +77,8 @@ The Monte Carlo simulation (`spectrojotometer/monte_carlo/`):
   convention as the fit (energies equal for every configuration), the
   values stored by `compute_couplings`, Wolff and Metropolis against the
   exact energy of a small antiferromagnetic ring, the warning about
-  disagreeing replicas; the couplings editor and the panel.
+  disagreeing replicas; the couplings editor and the panel, including
+  the scrolling of its controls in a short window.
 - `test_mc_gui.py` — the adapter and the Monte Carlo panel.
 
 Interfaces and packaging:

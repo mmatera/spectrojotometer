@@ -258,3 +258,48 @@ def test_algorithms_agree_with_the_exact_energy():
         res = run_ising_mc(spins.copy(), bonds, j_vals, 0.0, 0.5, 4.0, 3,
                            n_equil=1000, n_sweeps=10000, algorithm=algorithm, seed=1)
         np.testing.assert_allclose(res["E"], exact, atol=0.02, err_msg=algorithm)
+
+
+def visible_in(widget, container):
+    """Whether widget is entirely within the visible area of container."""
+    top = widget.winfo_rooty() - container.winfo_rooty()
+    return 0 <= top and top + widget.winfo_height() <= container.winfo_height()
+
+
+def test_panel_controls_scroll_in_a_short_window(tk_root):
+    """In a short window, the last controls (Run, Save) are reachable by
+    scrolling; in a tall one, there is no scrollbar."""
+    from spectrojotometer.gui.monte_carlo_panel import MonteCarloPanel
+
+    tk_root.deiconify()
+    panel = MonteCarloPanel(tk_root)
+    panel.pack(fill="both", expand=True)
+    panel.refresh_couplings(ring(6, (1, 2, 3)))  # a few rows in the editor
+    tk_root.geometry("1000x300")
+    tk_root.update()
+    controls = panel.controls
+    assert controls.needs_scrolling()
+    assert controls.scrollbar.winfo_ismapped()
+    assert not visible_in(panel.btn_run, controls.canvas)
+
+    controls.canvas.yview_moveto(1.0)
+    tk_root.update()
+    assert visible_in(panel.btn_run, controls.canvas)
+    assert visible_in(panel.btn_save, controls.canvas)
+
+    # The mouse wheel scrolls up and down (X11 and Windows/macOS events).
+    class Wheel:
+        def __init__(self, num=None, delta=0):
+            self.num, self.delta = num, delta
+
+    top_before = controls.canvas.yview()[0]
+    controls._on_wheel(Wheel(num=4))
+    controls._on_wheel(Wheel(delta=120))
+    tk_root.update()
+    assert controls.canvas.yview()[0] < top_before
+
+    tk_root.geometry("1000x1400")
+    tk_root.update()
+    assert not controls.needs_scrolling()
+    assert not controls.scrollbar.winfo_ismapped()
+    assert visible_in(panel.btn_run, controls.canvas)

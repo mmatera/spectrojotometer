@@ -266,7 +266,7 @@ class TestRunner:
 
     def test_runner_warns_on_frustrated(self):
         spins, bonds, J, E0 = build_triangular_lattice_2d(L=6, J=-1.0)
-        with pytest.warns(UserWarning, match="frustrado"):
+        with pytest.warns(UserWarning, match="[Ff]rustrated"):
             results = run_ising_mc(
                 spins, bonds, J, E0,
                 T_min=1.0, T_max=4.0, n_temps=8,
@@ -290,7 +290,7 @@ class TestRunner:
 
     def test_runner_rejects_wolff_on_frustrated(self):
         spins, bonds, J, E0 = build_triangular_lattice_2d(L=4, J=-1.0)
-        with pytest.raises(ValueError, match="frustrado"):
+        with pytest.raises(ValueError, match="[Ff]rustrated"):
             run_ising_mc(
                 spins, bonds, J, E0,
                 T_min=1.0, T_max=4.0, n_temps=4,

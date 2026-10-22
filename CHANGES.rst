@@ -53,6 +53,13 @@ Changes
   * With several Metropolis replicas, the warning about disagreeing
     replicas was always issued (it compared different temperatures).
   * ``run_ising_mc`` documented.
+  * The Monte Carlo tab, its messages and the docstrings of the module
+    in English, like the rest of the package. The docstring of the
+    adapter described the wrong encoding of the offsets ('100' for +1
+    along a, instead of '1_100'), the one that caused the bug above.
+  * The controls of the Monte Carlo tab scroll (``gui/scrollable.py``):
+    in a short window, the last ones (the couplings, Run, Save) were out
+    of reach.
 
 * visualbond with Tk 9: the import window and the search dialog failed
   (``trace`` replaced by ``trace_add``). Python 3.14 added to the CI.

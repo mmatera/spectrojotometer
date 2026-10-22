@@ -79,7 +79,7 @@ class TestAdapter:
             n_sites = 2
             bonds = {"nn": {"distance": 1.0, "value": 1.0,
                             "bonds": [(0, 1)]}}  # falta el tag
-        with pytest.raises(ValueError, match="formato inesperado"):
+        with pytest.raises(ValueError, match="Unexpected bond format"):
             _extract_bond_arrays(BadMock())
 
     def test_adapter_infer_n_sites(self):

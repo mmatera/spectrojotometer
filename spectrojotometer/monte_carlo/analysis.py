@@ -1,4 +1,4 @@
-"""Analisis de resultados de Monte Carlo Ising."""
+"""Analysis of the results of the Monte Carlo simulations."""
 
 import numpy as np
 from scipy.interpolate import interp1d
@@ -6,7 +6,7 @@ from scipy.optimize import brentq, curve_fit
 
 
 def estimate_tc(T, chi):
-    """Estima Tc como el maximo de chi con interpolacion parabolica."""
+    """Estimate Tc as the maximum of chi, with a parabolic interpolation."""
     T = np.asarray(T, dtype=np.float64)
     chi = np.asarray(chi, dtype=np.float64)
     if T.size == 0:
@@ -20,9 +20,9 @@ def estimate_tc(T, chi):
 
 
 def fit_curie_weiss(T, chi, T_cut):
-    """Ajusta chi = C / (T - Theta_CW) para T > T_cut.
+    """Fit chi = C / (T - Theta_CW) for T > T_cut.
 
-    Returns None si no hay suficientes puntos validos o el fit falla.
+    Returns None if there are not enough valid points or the fit fails.
     """
     T = np.asarray(T, dtype=np.float64)
     chi = np.asarray(chi, dtype=np.float64)
@@ -33,7 +33,7 @@ def fit_curie_weiss(T, chi, T_cut):
     T_m = T[mask]
     chi_m = chi[mask]
 
-    # Semilla por ajuste lineal de 1/chi vs T
+    # Initial guess from a linear fit of 1/chi vs T
     inv_chi = 1.0 / chi_m
     slope, intercept = np.polyfit(T_m, inv_chi, 1)
     if slope == 0:
@@ -61,9 +61,10 @@ def fit_curie_weiss(T, chi, T_cut):
 
 
 def binder_crossing(T_list, U4_list, L_list):
-    """Estima Tc por cruce de cumulantes de Binder entre los dos L mayores.
+    """Estimate Tc from the crossing of the Binder cumulants of the two
+    largest sizes L.
 
-    Devuelve None si las curvas no se cruzan en el rango solapado.
+    Returns None if the curves do not cross in their common range.
     """
     order = np.argsort(L_list)
     i1, i2 = int(order[-2]), int(order[-1])
@@ -81,7 +82,7 @@ def binder_crossing(T_list, U4_list, L_list):
     def diff(T):
         return float(f1(T) - f2(T))
 
-    # Buscar cambio de signo en el rango de solapamiento
+    # Look for a change of sign in the common range
     grid = np.linspace(T_lo, T_hi, 200)
     vals = np.array([diff(t) for t in grid])
     sign = np.sign(vals)
@@ -96,7 +97,7 @@ def binder_crossing(T_list, U4_list, L_list):
 
 
 def frustration_factor(Tc, J_vals, N):
-    """f = Tc / (<sum_bonds |J|>/N). Bajo si hay frustration."""
+    """f = Tc / (<sum_bonds |J|>/N). Low if there is frustration."""
     J_vals = np.asarray(J_vals, dtype=np.float64)
     if J_vals.size == 0 or N == 0:
         return None

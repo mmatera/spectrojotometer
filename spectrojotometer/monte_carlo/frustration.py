@@ -1,4 +1,4 @@
-"""Deteccion de frustration magnetica mediante balance de signos (Harary)."""
+"""Detection of magnetic frustration from the balance of signs (Harary)."""
 
 from collections import deque
 
@@ -6,32 +6,32 @@ import numpy as np
 
 
 def detect_frustration(bonds, J_vals, N):
-    """Determina si el grafo con signos esta frustrado.
+    """Determine whether the signed graph of the couplings is frustrated.
 
-    Un grafo con aristas etiquetadas +-1 es *balanceado* si existe una
-    asignacion tau_i in {+1,-1} tal que tau_i * tau_j * sign(J_ij) = +1
-    para toda arista. Equivalente: todo ciclo contiene un numero par de
-    aristas negativas.
+    A graph whose edges are labelled +-1 is *balanced* if there is an
+    assignment tau_i in {+1, -1} such that tau_i * tau_j * sign(J_ij) = +1
+    for every edge. Equivalently: every cycle contains an even number of
+    negative edges.
 
     Parameters
     ----------
     bonds : array (M, 2)
     J_vals : array (M,)
     N : int
-        Numero de sitios.
+        Number of sites.
 
     Returns
     -------
     frustrated : bool
-    gauge : np.ndarray (N,) int8 o None
-        Si no frustrado, tau tal que tau_i * tau_j * sign(J_ij) = +1.
-    odd_cycle : list[int] o None
-        Si frustrado, un ciclo con numero impar de aristas negativas.
+    gauge : np.ndarray (N,) int8 or None
+        If not frustrated, tau such that tau_i * tau_j * sign(J_ij) = +1.
+    odd_cycle : list[int] or None
+        If frustrated, a cycle with an odd number of negative edges.
     """
     bonds = np.asarray(bonds, dtype=np.int64)
     J_vals = np.asarray(J_vals, dtype=np.float64)
     if bonds.ndim != 2 or bonds.shape[1] != 2:
-        raise ValueError("bonds debe tener forma (M, 2)")
+        raise ValueError("bonds must have shape (M, 2)")
 
     adj = [[] for _ in range(N)]
     for (i, j), J in zip(bonds, J_vals):
@@ -63,7 +63,7 @@ def detect_frustration(bonds, J_vals, N):
 
 
 def _reconstruct_cycle(u, v, parent):
-    """Reconstruye el ciclo u -> ... -> LCA <- ... <- v -> u."""
+    """Rebuild the cycle u -> ... -> LCA <- ... <- v -> u."""
     path_u = []
     x = u
     while x != -1:

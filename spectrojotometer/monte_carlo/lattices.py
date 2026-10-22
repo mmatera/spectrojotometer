@@ -1,4 +1,4 @@
-"""Constructores de redes para tests y ejemplos."""
+"""Lattices for tests and examples."""
 
 import numpy as np
 
@@ -23,7 +23,7 @@ def build_square_lattice_2d(L, J=1.0):
 
 
 def build_triangular_lattice_2d(L, J=-1.0):
-    """Triangular (frustrada si J < 0)."""
+    """Triangular lattice (frustrated if J < 0)."""
     N = L * L
     spins = np.ones(N, dtype=np.int8)
 

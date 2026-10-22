@@ -1,4 +1,4 @@
-"""Parallel tempering para Ising clasico."""
+"""Parallel tempering for the classical Ising model."""
 
 import numpy as np
 
@@ -8,14 +8,14 @@ from .ising_engine import IsingMonteCarlo
 class ParallelTempering:
     """Replica exchange Monte Carlo.
 
-    Correcto para sistemas frustrados y no frustrados. Es el algoritmo
-    recomendado cuando se necesita Tc preciso en presencia de frustration.
+    Correct for frustrated and unfrustrated systems. It is the recommended
+    algorithm when an accurate Tc is needed in the presence of frustration.
     """
 
     def __init__(self, spins, bonds, J_vals, E0, T_grid, seed=None):
         self.T_grid = np.asarray(T_grid, dtype=np.float64)
         if np.any(self.T_grid <= 0):
-            raise ValueError("Todas las temperaturas deben ser positivas.")
+            raise ValueError("All the temperatures must be positive.")
         self.R = int(self.T_grid.size)
 
         rng_master = np.random.default_rng(seed)

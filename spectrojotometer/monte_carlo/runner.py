@@ -1,4 +1,4 @@
-"""Orquestador de alto nivel para Monte Carlo Ising."""
+"""High-level driver of the Monte Carlo simulations of the Ising model."""
 
 import warnings
 
@@ -34,7 +34,9 @@ def run_ising_mc(spins, bonds, J_vals, E0,
         "metropolis", "pt" (parallel tempering), or "auto": Wolff if the
         model is not frustrated, Metropolis otherwise (with a warning).
     n_restarts: Metropolis only, independent runs from random states;
-        a warning is issued if their energies differ by more than 5%.
+        a warning is issued if, at some temperature, their energies
+        differ by more than 5% of the energy scale of the model
+        (sum |J| / N).
     seed: for reproducible results.
     swap_every: parallel tempering only, sweeps between swaps.
     progress_callback: called as progress_callback(done, total, message).
@@ -66,15 +68,15 @@ def run_ising_mc(spins, bonds, J_vals, E0,
         algorithm = "metropolis" if frustrated else "wolff"
         if frustrated:
             warnings.warn(
-                "Modelo frustrado detectado "
-                f"(ciclo impar: {cycle[:6]}{'...' if cycle and len(cycle) > 6 else ''}). "
-                "Usando Metropolis. Para Tc preciso considerar algorithm='pt'.",
+                "Frustrated model detected "
+                f"(odd cycle: {cycle[:6]}{'...' if cycle and len(cycle) > 6 else ''}). "
+                "Using Metropolis. For an accurate Tc, consider algorithm='pt'.",
                 UserWarning,
             )
     elif algorithm == "wolff" and frustrated:
         raise ValueError(
-            "Wolff no es ergodico en sistemas frustrados. "
-            "Usar 'metropolis' o 'pt'."
+            "Wolff is not ergodic for frustrated models. "
+            "Use 'metropolis' or 'pt'."
         )
 
     T_grid = np.geomspace(T_min, T_max, n_temps)
@@ -119,7 +121,7 @@ def run_ising_mc(spins, bonds, J_vals, E0,
 
 
 def _sweep_with_progress(sim, T_grid, n_equil, n_sweeps, notify):
-    """Como sim.sweep_temperatures pero emitiendo progreso."""
+    """Like sim.sweep_temperatures, but reporting the progress."""
     keys = ["T", "M", "M2", "M4", "E", "chi", "chi_connected", "C", "U4"]
     results = {k: [] for k in keys}
     total = len(T_grid)
@@ -177,8 +179,9 @@ def _run_metropolis_with_restarts(spins, bonds, J_vals, E0, T_grid,
         spread = np.max(energies.max(axis=0) - energies.min(axis=0)) / scale
         if spread > 0.05:
             warnings.warn(
-                f"Dispersion entre replicas ({spread:.1%}) sugiere "
-                "no-ergodicidad. Aumentar n_equil/n_sweeps o usar 'pt'.",
+                f"The energies of the replicas differ by {spread:.1%} of the "
+                "energy scale of the model: the sampling may not be ergodic. "
+                "Increase n_equil / n_sweeps, or use algorithm='pt'.",
                 UserWarning,
             )
     return accum

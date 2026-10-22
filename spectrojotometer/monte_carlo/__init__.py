@@ -1,13 +1,13 @@
-"""Monte Carlo Ising module for Spectrojotometer.
+"""Monte Carlo simulation of the Ising model, for spectrojotometer.
 
-El fit de Spectrojotometer proyecta el Hamiltoniano de Heisenberg sobre
-la base de configuraciones colineales y ajusta la parte diagonal, que es
-exactamente un Hamiltoniano de Ising:
+The fit of spectrojotometer projects the Heisenberg Hamiltonian onto the
+basis of collinear configurations and fits its diagonal part, which is
+exactly an Ising Hamiltonian:
 
     H = E0 - sum_{<i,j>} J_ij sigma_i sigma_j
 
-Por lo tanto los J del modelo ya estan en convencion Ising. Este modulo
-consume esos J sin reescalar.
+So the couplings of the model are already in the Ising convention, and
+this module uses them without rescaling.
 """
 from ._jit_kernels import HAS_NUMBA, warmup
 from .analysis import (

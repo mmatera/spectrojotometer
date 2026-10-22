@@ -1,12 +1,13 @@
-"""Kernels Numba para Monte Carlo Ising.
+"""Numba kernels for the Monte Carlo simulation of the Ising model.
 
-Todos los kernels operan sobre arrays planos (formato CSR para las
-listas de vecinos). El RNG es SplitMix64 propio, con estado en un
-array np.uint64 de longitud 1, para que cada instancia tenga su
-propio stream independiente del RNG global de Numba o NumPy.
+Every kernel works on flat arrays (CSR format for the lists of
+neighbours). The random number generator is a SplitMix64 of its own,
+with its state in an np.uint64 array of length 1, so that each instance
+has its own stream, independent of the global generators of numba and
+NumPy.
 
-Si Numba no esta instalado, se usa un decorador no-op y los kernels
-funcionan igual en Python puro (mucho mas lentos).
+Without numba, a no-op decorator is used and the kernels work the same
+in pure Python (much more slowly).
 """
 
 import numpy as np
@@ -39,7 +40,7 @@ _TWO53 = 1.0 / 9007199254740992.0  # 2**-53
 
 @njit(cache=True, inline="always")
 def _splitmix64(state):
-    """Avanza el estado y devuelve un uint64 pseudoaleatorio."""
+    """Advance the state and return a pseudo-random uint64."""
     state[0] = state[0] + _GOLDEN
     z = state[0]
     z = (z ^ (z >> np.uint64(30))) * _MIX1
@@ -49,23 +50,23 @@ def _splitmix64(state):
 
 @njit(cache=True, inline="always")
 def _rand_double(state):
-    """Uniforme en [0, 1) usando los 53 bits altos."""
+    """Uniform in [0, 1), from the 53 highest bits."""
     return float(_splitmix64(state) >> np.uint64(11)) * _TWO53
 
 
 @njit(cache=True, inline="always")
 def _rand_int(state, n):
-    """Entero uniforme en [0, n)."""
+    """Uniform integer in [0, n)."""
     return int(_splitmix64(state) % np.uint64(n))
 
 
 # ---------------------------------------------------------------------------
-# Energia y campo local
+# Energy and local field
 # ---------------------------------------------------------------------------
 
 @njit(cache=True, fastmath=True)
 def _interaction_energy_kernel(spins, bonds, J_vals):
-    """Devuelve sum_{<i,j>} J_ij s_i s_j (sin E0)."""
+    """Return sum_{<i,j>} J_ij s_i s_j (without E0)."""
     e = 0.0
     for k in range(bonds.shape[0]):
         i = bonds[k, 0]
@@ -76,7 +77,7 @@ def _interaction_energy_kernel(spins, bonds, J_vals):
 
 @njit(cache=True, fastmath=True, inline="always")
 def _local_field(spins, nbr_idx, nbr_J, nbr_start, i):
-    """Campo molecular h_i = sum_j J_ij s_j."""
+    """Molecular field h_i = sum_j J_ij s_j."""
     h = 0.0
     a = nbr_start[i]
     b = nbr_start[i + 1]
@@ -91,7 +92,7 @@ def _local_field(spins, nbr_idx, nbr_J, nbr_start, i):
 
 @njit(cache=True)
 def _metropolis_sweep_kernel(spins, nbr_idx, nbr_J, nbr_start, beta, state):
-    """Un barrido completo: N intentos de flip con sitio aleatorio."""
+    """A full sweep: N flip attempts at random sites."""
     N = spins.shape[0]
     for _ in range(N):
         i = _rand_int(state, N)
@@ -112,11 +113,12 @@ def _metropolis_sweep_kernel(spins, nbr_idx, nbr_J, nbr_start, beta, state):
 @njit(cache=True)
 def _wolff_step_kernel(spins, nbr_idx, nbr_J, nbr_start, beta, state,
                        cluster_mask, stack):
-    """Un paso de Wolff: crecer cluster desde una semilla aleatoria y voltearlo.
+    """A Wolff step: grow a cluster from a random seed and flip it.
 
-    Importante: la arista (u, v) solo se activa si spins[u] == spins[v].
-    Esta es la condicion de alineacion del algoritmo de Wolff: sin ella
-    el cluster atraviesa paredes de dominio y desordena el sistema.
+    The edge (u, v) is only activated if spins[u] == spins[v]: this is the
+    alignment condition of the Wolff algorithm, without which the cluster
+    crosses domain walls and disorders the system. (The couplings are
+    those of the gauge basis, all of them ferromagnetic; see WolffCluster.)
     """
     N = spins.shape[0]
     for k in range(N):
@@ -138,9 +140,9 @@ def _wolff_step_kernel(spins, nbr_idx, nbr_J, nbr_start, beta, state,
             v = nbr_idx[k]
             if cluster_mask[v]:
                 continue
-            # Condicion de alineacion: solo agregar vecinos del mismo signo
-            # que el spin del cluster (equivalente a spins[u] porque todo
-            # el cluster comparte el signo pre-flip).
+            # Alignment condition: only add neighbours with the same sign as
+            # the spin of the cluster (equivalent to spins[u], since the
+            # whole cluster shares the sign before the flip).
             if spins[v] != cluster_spin:
                 continue
             J = nbr_J[k]
@@ -158,11 +160,11 @@ def _wolff_step_kernel(spins, nbr_idx, nbr_J, nbr_start, beta, state,
     return size
 
 # ---------------------------------------------------------------------------
-# Warmup (opcional, llamar antes de benchmarks)
+# Warmup (optional: call it before benchmarks)
 # ---------------------------------------------------------------------------
 
 def warmup():
-    """Fuerza la compilacion de todos los kernels con datos triviales."""
+    """Force the compilation of every kernel, with trivial data."""
     if not HAS_NUMBA:
         return
     spins = np.ones(4, dtype=np.int8)

@@ -953,7 +953,7 @@ class ApplicationGUI:
         labels = [str(confindex(c)) for c in newconfs]
         energs = [self.configurations[0][full_labels.index(label)] for label in labels]
         # self.configs=([float("nan") for i in newconfs], newconfs, labels)
-        # eq_format = self.outputformat.get()
+        # eq_format = self.outputformat.get().lower()
         self.spinconfigs.insert(END, "\n#  Subset of optimal configurations. ")
         self.spinconfigs.insert(END, "sqrt(l)/||A^-1|| " + str(cn) + ": \n")
         for idx, nc in enumerate(newconfs):
@@ -993,7 +993,7 @@ class ApplicationGUI:
         )
         labels = [str(confindex(c)) for c in newconfs]
         # self.configs=([float("nan") for i in newconfs], newconfs, labels)
-        eqformat = self.outputformat.get()
+        eqformat = self.outputformat.get().lower()
         self.spinconfigs.insert(END, "\n#  New configurations. ")
         self.spinconfigs.insert(
             END,
@@ -1057,7 +1057,7 @@ class ApplicationGUI:
         mcsizefactor = float(self.parameters["page3"]["mcsizefactor"].get())
         confs = []
         energs = []
-        fmt = self.outputformat.get()
+        fmt = self.outputformat.get().lower()
         logger.info("Evaluating couplings")
         for it, c in enumerate(self.configurations[1]):
             en = self.configurations[0][it]

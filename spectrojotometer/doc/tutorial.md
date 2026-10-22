@@ -41,12 +41,46 @@ Visual Bond is a graphic interfase for the tools in the spectrojotometer package
 ![First step: load the magnetic model](img/img-06.png)
 
 
-Estimating parameter uncertanties
-===================================
+Estimating parameter uncertainties
+==================================
 
+The DFT energies are only known within a tolerance δE (the *Energy
+tolerance* field). The couplings compatible with the data are those that
+reproduce **every** computed energy within that tolerance. They form a
+convex polytope in the space of parameters, the *compatibility polytope*
+(green in the figure). The value reported for each coupling is the
+center of the smallest box that contains the polytope, and its error bar
+is the half width of the box (dashed green: *uncertainty in parameters*).
 
+![Estimation of compatibility regions and parameter uncertainties](img/regions.svg)
 
-![Estimation of compatibility regions and parameter uncertancies](img/regions.svg)
+The polytope always lies between two ellipses centered at the
+least-squares solution: a lower bound (blue), contained in it, and an
+upper bound (red), which contains it. The *Error bound method* selector
+chooses how the box is obtained:
+
+* **Exact box (linear programming)**, the default: the exact box of the
+  polytope, obtained by minimizing and maximizing each coupling over it.
+* **Monte Carlo (inner estimate)**: points are drawn uniformly inside the
+  upper-bound ellipse, and only those inside the polytope are kept. The
+  box of the kept points is always inside the exact box, and it
+  underestimates it more as the number of couplings grows. The
+  acceptance rate (the fraction of points kept) is printed with the
+  results. *Num. samples* sets the number of points; leave *Size factor*
+  at 1.
+* **Quadratic bound (outer estimate)**: the box of the upper-bound
+  ellipse (dashed red). It always contains the exact box.
+
+The results also list *region constraints*: inequalities on
+combinations of couplings, `|v·J − c| < δ`, which are often much tighter
+than the individual error bars, because the polytope is usually
+elongated.
+
+If no set of couplings reproduces all the energies within the tolerance
+(the polytope is empty), the couplings are marked as *incompatible*:
+either the tolerance is too small, or the model lacks some relevant
+coupling. A coupling that the configurations with known energies do not
+fix is shown as *undetermined*: add configurations that involve it.
 
 
 
@@ -145,77 +179,77 @@ As an example, by run
    We can ask for an specific amount of new configurations throw the parameter -n.
 
 
-*) evaluate_cc 
+*) evaluate_cc
+
+    From a set of energies and magnetic configurations, estimates the
+    coupling constants of a model, with error bars given by a box around
+    the compatibility region (see "Estimating parameter uncertainties"
+    above).
+
+    usage: evaluate_cc [-h] [-t [value]] [-m {exact,montecarlo,ellipse}]
+                       [--mcsteps [value]] [-e] [-x]
+                       modelfile [input file]
 
     From a set of energies and magnetic configurations, estimates the coupling
     constants of a model.
-    
-    
-    
-    usage: evaluate_cc.py [-h] [--tolerance [value]] [--showequations]
-                          ciffile [input file]
-    
-    
-    positional arguments:
-      ciffile              load atomic positions from a cif file.
-      [input file]         file containing evaluated energies and magnetic
-                           configurations.
-    
-    optional arguments:
-      -h, --help           show this help message and exit
-      --tolerance [value]  Provides the estimated error for the energies.
-      --showequations      Prints the resulting equations.
 
-    Notice that in the input file, each line consists on the energy
-    of a magnetic configuration, followed by the correspondent magnetic
-    configuration as a list [0,1,0,...]. Anything after a # is considerer
-    as a comment.
-    For example, a possible input file would be
-    
+    positional arguments:
+      modelfile             load atomic positions from a model file.
+      [input file]          file containing evaluated energies and magnetic
+                            configurations.
+
+    options:
+      -h, --help            show this help message and exit
+      -t [value], --tolerance [value]
+                            Provides the estimated error for the energies.
+      -m {exact,montecarlo,ellipse}, --method {exact,montecarlo,ellipse}
+                            How to bound the compatibility region: exact box by
+                            linear programming (default), Monte Carlo sampling
+                            (inner estimate) or the bounding box of an ellipsoid
+                            containing it (outer estimate).
+      --mcsteps [value]     Number of Monte Carlo samples (only with --method
+                            montecarlo).
+      -e, --equations       Prints the resulting equations.
+      -x, --showchi         Prints the list of errors in the predicted
+                            configuration energy.
+
+    In the input file, each line consists of the energy of a magnetic
+    configuration, followed by the configuration as a list [0,1,0,...].
+    Anything after a # is considered a comment. Configurations whose
+    energy is nan are ignored. For example:
+
     # Energy  Configuration  Label
     143121.12   [0,0,0,0,0,0,0]  # Ferro up
     143121.02   [1,1,0,0,1,1,1]  # Disorder1
     143121.24   [1,0,1,1,1,1,0]  # Disorder2
     143121.12   [1,1,1,1,1,1,1]  # Ferro down
 
- 
+    Running, with the files in the examples folder,
 
-As an example, by run
+    evaluate_cc examples/example1.cif examples/example1.spin
 
-   evaluate_cc  example1-nnn.cif optconfs2-en.in 
+    prints (after some diagnostic messages)
 
-   we obtain
+    # Results (method: exact):
+    ===========
+    <E> =  49022.002225000004  (average energy of the configurations)
+    J0  = ( -1.0  +/- 2.2222222168326238 ) *  0.00022499999977299012
+    max relative error: 0.03333334461785853  in configuration  1
 
+    Each coupling is shown as (value +/- error) * scale, where the scale
+    is the largest coupling in absolute value. <E> is the average energy
+    of the configurations. Here the three
+    configurations do not determine J0 beyond the tolerance (the error
+    bar is larger than the value): more configurations, or a smaller
+    tolerance, are needed.
 
- Results:
-==========
-
-
-E_0 =  1022.8  +/-  0.001 
-
-J3  =  0.000307570720896 * 1022.8  +/- 0.00592942475367
-J2  =  -0.00107262742797 * 1022.8  +/- 0.00592942475367
-J4  =  0.00102985269196 * 1022.8  +/- 0.00592942475367
-J1  =  0.000721874592622 * 1022.8  +/- 0.00592942475367
-
-
- Error in Modeled Energy: 
-==========================
-
-
-34.1666666667
-170.833333333
-68.3333333335
-68.3333333329
-34.1666666666
-34.1666666666
-
-
-   an estimation of the coupling constants printed, according to the configurations and energies provided in the file optconfs2.in.
-   The program also prints the list of differences between the input energies and the energies evaluated by the magnetic model
-   for each configuration, relative to the tolerance. This is useful once we have a large enough number of evaluated configurations 
-   to check the validity of the effective magnetic model. If some differences result larger than 1, it implies that the proposed 
-   magnetic model is unable to reproduce the input spectrum.
+    With -x, the program also prints, for each configuration, the
+    difference between the input energy and the one predicted by the
+    model, relative to the tolerance. Once enough configurations have
+    been evaluated, this checks the validity of the effective model:
+    differences larger than 1 mean that the model cannot reproduce the
+    input spectrum. If no set of couplings reproduces all the energies
+    within the tolerance, the couplings are marked as (incompatible).
 
 
 

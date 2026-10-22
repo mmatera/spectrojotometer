@@ -2,6 +2,7 @@
 Tools used along the code.
 """
 import re
+import sys
 
 import numpy as np
 
@@ -50,6 +51,12 @@ def split_cif_loop_line(line: str) -> list:
             fields.append(token)
     return fields
 
+
+
+
+def eprint(*args, **kwargs):
+    """print to stderr (used by the command line tools)."""
+    print(*args, file=sys.stderr, **kwargs)
 
 
 def box_ellipse(coeff_matrix, radius):

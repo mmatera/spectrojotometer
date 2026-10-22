@@ -6,9 +6,8 @@ from typing import Optional
 import logging
 import numpy as np
 import numpy.linalg as la
-import numpy.random as rnd
 
-from .tools import box_ellipse, format_symmetry_operator, offset_orientation, pack_offset
+from .tools import box_ellipse, compatibility_box, format_symmetry_operator, offset_orientation, pack_offset
 
 # import matplotlib.pyplot as plt
 # from mpl_toolkits.mplot3d import Axes3
@@ -636,9 +635,11 @@ class MagneticModel:
         energs,
         err_energs=0.01,
         printeqs=False,
-        montecarlo=True,
+        montecarlo=None,
         mcsteps=None,
         mcsizefactor=1.0,
+        rng=None,
+        method=None,
     ):
         """
         compute_couplings
@@ -652,21 +653,41 @@ class MagneticModel:
         err_energs: estimation of the maximum convergence error in energies
         printeqs: print the corresponding equations.
 
+        method: how to estimate the box containing the compatibility
+            region:
+            "exact": exact bounding box, by linear programming
+                (see tools.compatibility_box). Default.
+            "montecarlo": Monte Carlo sampling (see montecarlo_box). Its
+                box is always inside the exact one, and underestimates it
+                as the number of couplings grows.
+            "ellipse": bounding box of the ellipsoid that contains the
+                region. Always contains the exact box.
+        montecarlo: kept for backward compatibility. If given (and method
+            is None), True means "montecarlo" and False means "ellipse".
+        mcsteps, mcsizefactor, rng: passed to montecarlo_box.
+
         Return values:
         --------------
-        js, deltaJ, model_chi
+        js, deltaJ, model_chi, acceptance_rate
 
-        js: the estimated values of the js, according to the least square
-            rule
+        js: the estimated values of the couplings. The last entry is
+            the average energy over the configurations (the columns of
+            the coupling constants are centered, which decouples them
+            from the base energy).
 
-        deltaJ: a list with the sizes of a box centered at js,
-        that contains the compatibility region. This is chosen as the
-        bounding box of the ellipsoid
-        |A.(j-js)|^2 + (chi^2-len(energies)) = 0.
+        deltaJ: half widths of a box centered at js that contains the
+            compatibility region
+            {j : max_i |(A.j - energs)_i| <= err_energs}.
 
-        model_chi: the difference between the input energies, and
-        those evaluated with the model with couplings js.
+        model_chi: (A.js_ls - energs) / err_energs, with js_ls the least
+            squares solution.
 
+        acceptance_rate: Monte Carlo acceptance rate (1.0 for the other
+            methods, 0.0 if the model is incompatible).
+
+        Undetermined couplings are returned with js = 0 and deltaJ = nan.
+        If the model is incompatible with the energies, all the entries
+        of deltaJ are -1.
         """
 
         if printeqs:
@@ -691,15 +712,24 @@ class MagneticModel:
             msg = "\nInverse of the minimum singular value: " f"{cond_number}\n\n"
             logging.info(msg)
 
-        # If Montecarlo, uses the montecarlo routine to estimate the box.
-        if montecarlo:
+        if method is None:
+            method = (
+                "exact" if montecarlo is None
+                else ("montecarlo" if montecarlo else "ellipse")
+            )
+        if method == "montecarlo":
             return self.montecarlo_box(
                 coeffs,
                 energs,
                 err_energs,
                 1000 if mcsteps is None else mcsteps,
                 mcsizefactor,
+                rng=rng,
             )
+        if method == "exact":
+            return self.exact_box(coeffs, energs, err_energs)
+        if method != "ellipse":
+            raise ValueError(f"unknown method {method!r}")
         # Otherwise, it gives an estimation in terms of the bigger ellipse.
         # js = (A^t A )^{-1} A^t En, i.e. least squares solution
         resolvent = np.linalg.pinv(coeffs.transpose().dot(coeffs), rcond=1.0e-6).dot(
@@ -715,147 +745,189 @@ class MagneticModel:
             deltaJ = box_ellipse(coeffs, rr)
         return (js, deltaJ, model_chi, 1.0)
 
-    def bound_inequalities(self, confs, energs, err_energs=0.01):
+    def bound_inequalities(self, confs, energs, err_energs=0.01, rtol=1.0e-3):
         """
-        Compute the compatibility regions for the coupling constants
+        Compute the compatibility regions for the coupling constants.
+
+        Returns a list of tuples (v, offset, delta), one for each direction
+        in the space of couplings that is determined by the equations, such
+        that the compatibility region satisfies
+
+            |v . J - offset| <= delta.
+
+        v is normalized so that its largest component is 1 in absolute
+        value. Directions associated to singular values smaller than
+        rtol times the largest one are considered undetermined and
+        skipped. Returns [] if the model is incompatible.
+
+        The constraints follow from projecting the ellipsoid
+        |A.(J - J_ls)|^2 <= N err^2 - |r|^2, which contains the
+        compatibility region, onto the right singular vectors of A.
         """
-        print("confs: ", confs)
-        print("energs: ", energs)
-        print("err: ", err_energs)
         coeffs = self.coefficient_matrix(confs, normalizar=True)
-        u, singularvalues, vh = np.linalg.svd(coeffs)
-        s0 = singularvalues[0]
-        resolvent = []
-        vhr = []
-        for i, si in enumerate(singularvalues):
-            if si / s0 < 1e-3:
-                break
-            resolvent.append(u[:, i] / si)
-            vhr.append(vh[i])
-        vh = np.array(vhr)
-        vhr = None
-        j0s = np.array(vh).transpose().dot(np.array(resolvent).dot(energs))
-        err = (
-            len(energs) * err_energs**2
-            - np.linalg.norm(energs - coeffs.dot(j0s)) ** 2
-        )
+        energs = np.asarray(energs, dtype=float)
+        # The columns of the couplings are centered, so they are orthogonal
+        # to the (constant) column of the base energy: the base energy
+        # decouples exactly, and we can work only with the couplings.
+        rcoeffs = coeffs[:, :-1]
+        if rcoeffs.shape[1] == 0:
+            return []
+        u, singularvalues, vh = np.linalg.svd(rcoeffs, full_matrices=False)
+        if singularvalues[0] <= 0:
+            return []
+        k = int(np.sum(singularvalues > rtol * singularvalues[0]))
+        u, singularvalues, vh = u[:, :k], singularvalues[:k], vh[:k]
+        # Least squares solution for the couplings, and residual of the
+        # full system (the base energy is fitted by the mean energy).
+        j0s = vh.T.dot(u.T.dot(energs) / singularvalues)
+        residual = rcoeffs.dot(j0s) - (energs - np.mean(energs))
+        err = len(energs) * err_energs**2 - residual.dot(residual)
         if err < 0:
             return []
-
         err = np.sqrt(err)
+
         ineqs = []
-        for i, v in enumerate(vh):
-            # singular vector associated to the energy must be skipped
-            if abs(v[-1] - 1) < 1.0e-9:
-                continue
-            offset = v.dot(j0s)
-            delta = err / singularvalues[i]
-            v = v[:-1]
-            maxcoeff = max(abs(v))
-            ineq = (v / maxcoeff, offset / maxcoeff, delta / maxcoeff)
-            ineqs.append(ineq)
+        for v, s_val in zip(vh, singularvalues):
+            maxcoeff = v[np.argmax(np.abs(v))]  # keeps a canonical sign
+            ineqs.append(
+                (v / maxcoeff, v.dot(j0s) / maxcoeff, err / s_val / abs(maxcoeff))
+            )
         return ineqs
 
-    def montecarlo_box(self, coeffs, energs, tol, numtry=1000, sizefactor=1.0):
+    def exact_box(self, coeffs, energs, tol):
         """
-        Build an error box by Monte Carlo sampling parameters.
+        Exact bounding box of the compatibility region
+
+            P = {j : max_i |(coeffs . j - energs)_i| <= tol},
+
+        computed by linear programming (see tools.compatibility_box).
+
+        Returns (js, d_js, model_chi, 1.0) with the same conventions as
+        montecarlo_box: js is the center of the box, d_js its half widths
+        (nan for undetermined parameters, -1 for all of them if the model
+        is incompatible), and model_chi the normalized residual of the
+        least squares solution.
         """
-        numcalc = len(energs)
-        numparm = len(coeffs[0])
-        issingular = False
-        # Check that the number of equations is equal or large than the
-        # number of parameters to be determined. Otherwise, add trivial
-        # equations.
-        if numparm > numcalc:
-            coeffs = np.array(list(coeffs) + [np.zeros(numparm)] * (numparm - numcalc))
-            energs = np.array(list(energs) + [0.0] * (numparm - numcalc))
+        coeffs = np.asarray(coeffs, dtype=float)
+        energs = np.asarray(energs, dtype=float)
+        j_ls = np.linalg.lstsq(coeffs, energs, rcond=None)[0]
+        model_chi = (coeffs.dot(j_ls) - energs) / tol
+        box = compatibility_box(coeffs, energs, tol)
+        if box is None:
+            logging.warning("The model is incompatible with the energies.")
+            return j_ls, -np.ones(len(j_ls)), model_chi, 0.0
+        lower, upper = box
+        determined = np.isfinite(lower) & np.isfinite(upper)
+        js = np.zeros(len(lower))
+        d_js = np.full(len(lower), np.nan)
+        js[determined] = 0.5 * (upper[determined] + lower[determined])
+        d_js[determined] = 0.5 * (upper[determined] - lower[determined])
+        return js, d_js, model_chi, 1.0
 
-        # Look for the singular value decomposition
-        u, sv, v = la.svd(coeffs, full_matrices=True, compute_uv=True)
-        # Check if the system is determined and discard vanishing
-        # singular values/vectors.
-        k = len(sv)
-        svr = np.array(list(sv))
-        if k > 0 and svr[-1] < 1.0e-6:
-            issingular = True
-            while k > 0 and svr[-1] < 1.0e-6:
-                svr = svr[:-1]
-                k = k - 1
+    def montecarlo_box(
+        self, coeffs, energs, tol, numtry=1000, sizefactor=1.0, rng=None
+    ):
+        """
+        Estimate the bounding box of the compatibility region
 
-        ur = u[:, :k]
-        vr = v[:k]
-        # center of the elliptical region
-        j0s = vr.transpose().dot((1.0 / svr) * (ur.transpose().dot(energs)))
-        e0s = coeffs.dot(j0s)
-        esqerr = la.norm(e0s - energs)
-        scale = sizefactor * (numcalc * tol**2 - esqerr**2) / np.sqrt(4.0 * numparm)
-        if scale <= 0:
-            print("scale < 0. Model is incompatible")
-            return (
-                j0s,
-                np.array([-1 for j in j0s]),
-                (e0s - energs)[:numcalc] / tol,
-                0.0,
+            P = {j : max_i |(coeffs . j - energs)_i| <= tol}
+
+        by rejection sampling.
+
+        Since |v|_2^2 <= N |v|_inf^2, P is contained in the ellipsoid
+
+            |coeffs . (j - j_ls)|^2 <= N tol^2 - |r|^2 = R^2,
+
+        where j_ls is the least-squares solution and r its residual
+        (r is orthogonal to the image of coeffs). Points are drawn
+        uniformly inside that ellipsoid and kept if they belong to P, so
+        the accepted points are uniformly distributed in P. Everything
+        scales linearly with (energs, tol): the result does not depend on
+        the energy units, and the acceptance rate is the volume ratio
+        vol(P) / vol(ellipsoid).
+
+        Parameters
+        ----------
+        coeffs : (N, p) array, coefficient matrix.
+        energs : (N,) array, energies.
+        tol : float, maximum admissible error in each energy.
+        numtry : int, number of sampled points.
+        sizefactor : float, scale of the sampling ellipsoid relative to the
+            one that is guaranteed to contain P. Values < 1 may miss parts
+            of P; values > 1 only lower the acceptance rate.
+        rng : None, int or numpy.random.Generator, source of randomness.
+
+        Returns
+        -------
+        (js, d_js, model_chi, acceptance_rate)
+
+        js : center of the box. Undetermined parameters are set to 0.
+        d_js : half widths of the box (np.nan for undetermined
+               parameters, -1 for all of them if the model is incompatible).
+        model_chi : (coeffs . js_ls - energs) / tol, with js_ls the least
+               squares solution.
+        acceptance_rate : fraction of accepted points.
+        """
+        rng = np.random.default_rng(rng)
+        coeffs = np.asarray(coeffs, dtype=float)
+        energs = np.asarray(energs, dtype=float)
+        numcalc, numparm = coeffs.shape
+
+        # Work in the row space of coeffs: directions in its kernel are not
+        # determined by the equations.
+        u, sv, vh = la.svd(coeffs, full_matrices=False)
+        k = int(np.sum(sv > 1.0e-6))
+        u, sv, vh = u[:, :k], sv[:k], vh[:k]
+        # A parameter is determined iff its axis lies in the row space.
+        determined = np.linalg.norm(vh, axis=0) > 1.0 - 1.0e-6
+
+        # Least squares solution (minimal norm) and its residual.
+        j_ls = vh.T.dot(u.T.dot(energs) / sv)
+        residual = coeffs.dot(j_ls) - energs
+        model_chi = residual / tol
+        radius2 = numcalc * tol**2 - residual.dot(residual)
+
+        def incompatible(msg):
+            logging.warning(msg)
+            return j_ls, -np.ones(numparm), model_chi, 0.0
+
+        if radius2 <= 0 or k == 0:
+            return incompatible("The model is incompatible with the energies.")
+
+        # Uniform samples in the unit k-ball: Gaussian direction, radius
+        # distributed as U^(1/k). Then map them onto the ellipsoid.
+        z = rng.normal(size=(numtry, k))
+        z /= np.linalg.norm(z, axis=1, keepdims=True)
+        z *= rng.random(numtry)[:, None] ** (1.0 / k)
+        radius = sizefactor * np.sqrt(radius2)
+        samples = j_ls + (radius * z / sv).dot(vh)
+        samples = np.vstack([samples, j_ls])
+
+        accepted = samples[
+            np.max(np.abs(samples.dot(coeffs.T) - energs), axis=1) <= tol
+        ]
+        rate = len(accepted) / (numtry + 1.0)
+        logging.info("Monte Carlo acceptance rate=%s", rate)
+
+        if len(accepted) == 0:
+            return incompatible(
+                "No compatible point was found: the model seems "
+                "incompatible. Try with a larger number of points."
             )
-        v = v.transpose()
-        k = len(sv)
-        ur = None
-        vr = None
-        svr = None
 
-        # Generate the random set on the elliptic upper bound
-        jtrys = np.array(
-            [rnd.normal(0, 1, numtry) / max(s / scale, 1.0e-9) for s in sv]
-        )
-        jtrys = v.dot(jtrys).transpose()
-        # If the Minumum Square point is compatible,
-        # we add it to the random set
-        if max(abs(energs - e0s)) < tol:
-            jtrys = np.array([j0s + j for j in jtrys] + [j0s])
+        if len(accepted) == 1:
+            logging.info("errors estimated by boxing the ellipse")
+            js = j_ls.copy()
+            d_js = np.array(box_ellipse(coeffs, np.sqrt(radius2)))
         else:
-            jtrys = np.array([j0s + j for j in jtrys])
-        # We keep just the compatible points
-        jtrys = jtrys[np.array([max(abs(coeffs.dot(j) - energs)) < tol for j in jtrys])]
+            lower = accepted.min(axis=0)
+            upper = accepted.max(axis=0)
+            js = 0.5 * (upper + lower)
+            d_js = 0.5 * (upper - lower)
 
-        # It it resuls incompatible, show a warning.
-        if len(jtrys) == 0:
-            print(
-                "model seems incompatible. Try with a larger "
-                + "number of points or a different sizefactor."
-            )
-            return (
-                j0s,
-                np.array([-1 for j in j0s]),
-                (e0s - energs)[:numcalc] / tol,
-                0.0,
-            )
-
-        if len(jtrys) == 1:
-            print("errors  estimated by boxing the  ellipse")
-            rr = np.sqrt(numcalc * tol**2 - esqerr**2)
-            djs = box_ellipse(coeffs, rr)
-            return j0s, djs, (e0s - energs) / tol, 1.0 / (numtry + 1.0)
-        print(len(jtrys))
-        print("Accepted rate=", len(jtrys) / (numtry + 1.0))
-
-        j0s = np.average(jtrys, 0)
-        jtrys = [abs(js - j0s) for js in jtrys]
-        d_js = np.max(np.array(jtrys), 0)
-        # If the model is singular, discard the coefficients that
-        # couldn't be determined, setting them to 0.
-        if issingular:
-            for i, d_j in enumerate(d_js):
-                if d_j > 100:
-                    d_js[i] = np.nan
-                    j0s[i] = 0
-
-        e0s = coeffs.dot(j0s)
-        return (
-            j0s,
-            d_js,
-            (e0s - energs)[:numcalc] / tol,
-            len(jtrys) / (numtry + 1.0),
-        )
+        js[~determined] = 0.0
+        d_js = np.where(determined, d_js, np.nan)
+        return js, d_js, model_chi, rate
 
     def save_cif(self, filename, bond_names=None):
         """Save the model in a CIF file"""

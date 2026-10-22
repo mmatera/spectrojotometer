@@ -4,6 +4,7 @@ Magnetic Model class
 """
 from typing import Optional
 import logging
+import warnings
 import numpy as np
 import numpy.linalg as la
 
@@ -100,6 +101,46 @@ def build_supercell(supercell_size, coord_atomos, bravais_vectors):
     )
 
 
+
+def _clamp_supercell_size(supercell_size):
+    """An int, or one value per axis; each clamped to 1..4."""
+    logger.debug("supercell size: %s", supercell_size)
+    if np.isscalar(supercell_size):
+        return min(4, max(1, int(supercell_size)))
+    return [min(4, max(1, int(size))) for size in supercell_size]
+
+
+def _per_site_values(values, num_sites, default):
+    """
+    A new list of floats with one value per site. ``None`` gives the
+    default for every site; a "." entry (CIF for "not given") gives the
+    default for that site.
+    """
+    if values is None:
+        return [default] * num_sites
+    return [default if value == "." else float(value) for value in values]
+
+
+def _bonds_dict(bond_lists, bond_names, bond_distances):
+    """The ``bonds`` dict: name -> {"distance": ..., "bonds": [...]}."""
+    if bond_lists is None:
+        return {}
+    logger.debug("got %d couplings", len(bond_lists))
+    if bond_distances is None:
+        bond_distances = [0] * len(bond_lists)
+    elif len(bond_distances) != len(bond_lists):
+        raise ValueError(
+            "bond_distances must have the same length as bond_lists "
+            f"({len(bond_distances)} != {len(bond_lists)})"
+        )
+    if bond_names is None:
+        bond_names = ["J" + str(i) for i in range(len(bond_lists))]
+    return {
+        name: {"distance": distance, "bonds": bonds}
+        for name, distance, bonds in zip(bond_names, bond_distances, bond_lists)
+    }
+
+
 class MagneticModel:
     """
     MagneticModel represents a set of magnetic atoms
@@ -121,103 +162,68 @@ class MagneticModel:
         bond_distances=None,
         ranges=None,
         supercell_size=1,
-        discretization:float=0.02,
+        discretization=None,
         magnetic_species=None,
-        onfly:bool=True,
+        onfly: bool = True,
         model_label="default",
-        g_lande_factors:Optional[float]=None,
-        spin_repr:Optional[float]=None,
+        g_lande_factors: Optional[list] = None,
+        spin_repr: Optional[list] = None,
         symmetries=None,
         space_group_symbol=None,
     ):
+        """
+        Parameters
+        ----------
+        atomic_pos : list of arrays, positions of the magnetic sites.
+        bravais_lat : list of arrays, Bravais vectors.
+        bond_lists, bond_names, bond_distances : the couplings, as lists of
+            bonds ``(src, dest, offset)``, with their names (default
+            ``J0, J1, ...``) and distances (default 0).
+        supercell_size : int or [sx, sy, sz], each value clamped to 1..4.
+        magnetic_species : names of the species (default "X").
+        g_lande_factors, spin_repr : per site values (default 2.0 and 1/2);
+            strings are accepted, with "." meaning "not given". The given
+            lists are not modified.
+        symmetries, space_group_symbol : how the model was built, kept for
+            save_cif and for information.
+        ranges, discretization : deprecated, ignored. Use generate_bonds.
+        """
+        if ranges is not None or discretization is not None:
+            warnings.warn(
+                "The ranges and discretization arguments of MagneticModel "
+                "have no effect; call generate_bonds(ranges, discretization) "
+                "to generate the bonds.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self.model_label = model_label
         self.onfly = onfly
         self.cell_size = 0
-        logger.debug("supercell size: %s", supercell_size)
-        # Normalise: accept int or [sx, sy, sz]; clamp each axis to 1–4
-        if np.isscalar(supercell_size):
-            supercell_size = min(4, max(1, int(supercell_size)))
-        else:
-            supercell_size = [min(4, max(1, int(s))) for s in supercell_size]
-
+        num_sites = len(atomic_pos)
         logger.debug("atomic positions: %s", atomic_pos)
+
         if magnetic_species is None:
-            magnetic_species = ["X"] * len(atomic_pos)
-
+            magnetic_species = ["X"] * num_sites
         logger.debug("magnetic species: %s", magnetic_species)
+        num_species = len(magnetic_species)
 
-        if g_lande_factors is None:
-            g_lande_factors = [2.0] * len(magnetic_species)
-        else:
-            g_str:str
-            indx:int
-            for indx, g_str in enumerate(g_lande_factors):
-                g_lande_factors[indx] = 2.0 if g_str == "." else float(g_str)
-
-        if spin_repr is None:
-            spin_repr = [0.5 for i in magnetic_species]
-        else:
-            for indx, s_max in enumerate(spin_repr):
-                spin_repr[indx] = 0.5 if s_max == "." else float(s_max)
-
-        if ranges is None:
-            maxdist = 0
-            dist = 0
-            for p_vec in atomic_pos:
-                for q_vec in atomic_pos:
-                    dist = np.linalg.norm(p_vec - q_vec)
-                    if dist > maxdist:
-                        maxdist = dist
-            if maxdist == 0:
-                maxdist = 1
-            ranges = [[0, maxdist]]
-        elif np.isscalar(ranges):
-            ranges = [[0, float(ranges)]]
-        elif len(ranges) > 0 and np.isscalar(ranges[0]):
-            ranges = [list(ranges)]
-
-        if bond_lists is not None:
-            logger.debug("got %d couplings", len(bond_lists))
-            if bond_distances is None:
-                bond_distances = [0] * len(bond_lists)
-            elif len(bond_distances) != len(bond_lists):
-                raise ValueError(
-                    "bond_distances must have the same length as bond_lists "
-                    f"({len(bond_distances)} != {len(bond_lists)})"
-                )
-            if bond_names is None:
-                bond_names = ["J" + str(i) for i in range(len(bond_lists))]
-        else:
-            bond_names = []
-            bond_lists = []
-            bond_distances = []
-
-        self.site_properties = site_properties = {}
-        site_properties["coord_atomos"] = atomic_pos
-        site_properties["g_lande_factors"] = g_lande_factors
-        site_properties["spin_repr"] = spin_repr
-        site_properties["magnetic_species"] = magnetic_species
-
-        self.lattice_properties = lattice_properties = {}
-        lattice_properties["bravais_vectors"] = bravais_lat
-        lattice_properties["cell_size"] = len(atomic_pos)
-        lattice_properties["supercell_size"] = supercell_size
-        # Symmetry operators actually used to build this model (empty for a
-        # plain P1 description). Kept mainly so `save_cif` can write a
-        # faithful CIF back out instead of always collapsing to P1, and so
-        # downstream tools (e.g. the web interface) can tell how the model
-        # was built.
-        lattice_properties["symmetries"] = (
-            list(symmetries) if symmetries is not None else []
-        )
-        lattice_properties["space_group_symbol"] = space_group_symbol
-
-        self.bonds = {
-            b_name: {"distance": b_distance, "bonds": b_list}
-            for b_name, b_distance, b_list in zip(
-                bond_names, bond_distances, bond_lists
-            )
+        self.site_properties = {
+            "coord_atomos": atomic_pos,
+            "g_lande_factors": _per_site_values(g_lande_factors, num_species, 2.0),
+            "spin_repr": _per_site_values(spin_repr, num_species, 0.5),
+            "magnetic_species": magnetic_species,
         }
+        self.lattice_properties = {
+            "bravais_vectors": bravais_lat,
+            "cell_size": num_sites,
+            "supercell_size": _clamp_supercell_size(supercell_size),
+            # Symmetry operators used to build this model (empty for a plain
+            # P1 description). Kept so that save_cif can write a faithful
+            # CIF, and so that other tools can tell how it was built.
+            "symmetries": list(symmetries) if symmetries is not None else [],
+            "space_group_symbol": space_group_symbol,
+        }
+        self.bonds = _bonds_dict(bond_lists, bond_names, bond_distances)
 
     def remover_bond_by_name(self, name):
         """

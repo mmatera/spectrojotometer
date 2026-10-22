@@ -199,8 +199,13 @@ class ApplicationGUI:
         # Messages from the library and the GUI go to the status panel.
         self.log_panel = LogPanel(self.root, self.status)
         self.root.report_callback_exception = self.report_callback_exception
-        self.root.mainloop()
-        self.log_panel.close()
+
+    def run(self):
+        """Run the Tk event loop until the window is closed."""
+        try:
+            self.root.mainloop()
+        finally:
+            self.log_panel.close()
 
     def buildmenus(self):
         self.root.bind_all("<Control-q>", self.close_app)
@@ -1363,4 +1368,4 @@ class ApplicationGUI:
 
 
 if __name__ == "__main__":
-    ApplicationGUI()
+    ApplicationGUI().run()

@@ -28,6 +28,15 @@ Changes
     environment and runs the installed commands.
 
 * Importing ``spectrojotometer.gui`` no longer opens a Tk window.
+* ``ApplicationGUI`` no longer enters the Tk event loop from its
+  constructor: call ``ApplicationGUI().run()``. The window can now be
+  built and driven in tests (``tests/test_gui.py``).
+* ``MagneticModel``: the constructor no longer modifies the
+  ``g_lande_factors`` and ``spin_repr`` lists it receives. Its
+  ``ranges`` and ``discretization`` arguments never had an effect and
+  are deprecated (use ``generate_bonds``). The constructor was split
+  into small helpers (complexity 26 -> 5), with tests that fix its
+  behaviour.
 
 * **Fixed** ``import spectrojotometer.model_io`` failing with
   ``AttributeError: module 'importlib' has no attribute 'util'`` in a

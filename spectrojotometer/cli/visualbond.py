@@ -8,7 +8,7 @@ from spectrojotometer.gui import ApplicationGUI
 
 def main():
     """Open the main window; returns when it is closed."""
-    ApplicationGUI()
+    ApplicationGUI().run()
     return 0
 
 

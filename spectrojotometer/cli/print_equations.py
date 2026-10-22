@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
 
 import argparse
+import sys
 
 from spectrojotometer.model_io import (magnetic_model_from_file,
                                        read_spin_configurations_file)
@@ -60,4 +60,4 @@ the list of equations for the coupling constants
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

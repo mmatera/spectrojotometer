@@ -4,7 +4,7 @@ simulations, the value of the coupling constants in a Heisenberg-like
 effective magnetic model for a given magnetic system.</p>
 <h1 id="instalation">Instalation:</h1>
 <p>To install the package, just run</p>
-<p>python3 setup.py install</p>
+<p>pip install .</p>
 <h1 id="loading-models-conventional-vs.-primitive-cell">Loading models:
 conventional vs. primitive cell</h1>
 <p><code>magnetic_model_from_file</code> /
@@ -18,11 +18,6 @@ cell.</p>
 <h1 id="visual-bond">Visual Bond</h1>
 <p>Visual Bond is a graphic interfase for the tools in the
 spectrojotometer package.</p>
-<figure>
-<img src="img/img-00.png" alt="First step: load the magnetic model" />
-<figcaption aria-hidden="true">First step: load the magnetic
-model</figcaption>
-</figure>
 <figure>
 <img src="img/img-01.png" alt="First step: load the magnetic model" />
 <figcaption aria-hidden="true">First step: load the magnetic
@@ -79,42 +74,55 @@ known energies do not fix is shown as <em>undetermined</em>: add
 configurations that involve it.</p>
 <h1 id="terminal-tools-in-the-package-and-workflow">Terminal Tools in
 the package and workflow:</h1>
-<p>The package consists of these three command line programs:</p>
+<p>Installing the package provides these commands:</p>
+<ul>
+<li>bond_generator, optimize-configurations and evaluate_cc, described
+below, which form the basic workflow;</li>
+<li>map_configs, which maps spin configurations between two models;</li>
+<li>print_equations, which prints the equations of a set of
+configurations in plain text, LaTeX or Wolfram format;</li>
+<li>visualbond, the graphical interface.</li>
+</ul>
+<p>Each command accepts –help, and -v / -vv to show progress and
+diagnostic messages. They can also be run as python -m
+spectrojotometer.cli.<command> (with underscores).</p>
 <p>*) bond_generator:</p>
+<p>usage: bond_generator [-h] [-d [value]] [–rmin [value]] [–rmax
+[value]] [-v] modelfile outfile</p>
 <p>From an standard cif file, produces a new cif file containing
 information about the bonds that defines a Heisenberg magnetic effective
 model. If the input file has already information about bonds, the output
 file contains both the bonds in the input as well as the new generated
 bonds.</p>
-<p>usage: bond_generator [-h] [–discretization [value]] [–rmin [value]]
-[–rmax [value]] ciffile outfile</p>
-<p>positional arguments: ciffile load atomic positions from a cif file
-outfile Name of the outputfile. If it is not provided, the output is
-printed to the standard output.</p>
-<p>optional arguments: -h, –help show this help message and exit
+<p>positional arguments: modelfile load atomic positions from a model
+file. It can be specified by a cif or a Wien2k struct file outfile Name
+of the outputfile.</p>
+<p>options: -h, –help show this help message and exit -d [value],
 –discretization [value] the tolerance in considering two distances as
 the same. –rmin [value] the minimal distance between atoms of the bond
-–rmax [value] the maximal distance between atoms of the bond</p>
+–rmax [value] the maximal distance between atoms of the bond -v,
+–verbose Show progress messages (-v) or detailed diagnostics (-vv).</p>
 <p>As an example, by run</p>
-<p>bond_generator.py –rmin 0 –rmax 4.9 –discretization .02 example1.cif
+<p>bond_generator –rmin 0 –rmax 4.9 –discretization .02 example1.cif
 example1-nnn.cif</p>
 <p>for the example1.cif file in the examples folder, example1-nnn.cif
 file is created. The model can be modified by hand by means of a plain
 text editor.</p>
-<p>*) optconfs Generate spin configurations to determine the coupling
-constants of a model with minimal condition number</p>
-<pre><code>usage: optconfs.py [-h] [--known [known configuration file]]
-                   [--start [start file]] [-n numconfs] [-u updatesize]
-                   [--it iterations]
-                   ciffile outfile
+<p>*) optimize-configurations</p>
+<pre><code>usage: optimize-configurations [-h] [--known [known configuration file]]
+                               [--start [start file]] [-n numconfs]
+                               [-u updatesize] [--it iterations] [-v]
+                               modelfile outfile
 
+Generate spin configurations to determine the coupling constants of a model
+with minimal condition number
 
 positional arguments:
-  ciffile               load atomic positions from a cif file
-  outfile               Name of the outputfile. If it is not provided, the
-                        output is printed to the standard output.
+  modelfile             load atomic positions from a cif file
+  outfile               Name of the outputfile. If &quot;-&quot; is provided, the output
+                        is printed to the standard output.
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --known [known configuration file]
                         file with the set of configurations that we want to
@@ -124,21 +132,23 @@ optional arguments:
   -n numconfs           number of new configurations to be generated
   -u updatesize         number of random configurations to be generate on each
                         step
-  --it iterations       number of iterations</code></pre>
+  --it iterations       number of iterations
+  -v, --verbose         Show progress messages (-v) or detailed diagnostics
+                        (-vv).</code></pre>
 <p>As an example, by run</p>
-<p>optconfs example1-nnn.cif optconfs1.out</p>
+<p>optimize-configurations example1-nnn.cif optconfs1.out</p>
 <p>on the examples/example1-nnn.cif generated by bond_generator, the
 file optconfs1.out is created, containing a list of magnetic
 configurations from which energies the coefficient couplings can be
 estimated. The program also writes a recovery file
 example1-nnn-resume.tmp, which can be used to improve the magnetic
 configuration choice:</p>
-<p>optconfs –start example1-nnn-resume.tmp example1-nnn.cif
-optconfs1.out</p>
+<p>optimize-configurations –start example1-nnn-resume.tmp
+example1-nnn.cif optconfs1.out</p>
 <p>If we want to know what would be most profiteable magnetic
 configurations to be simulated once we have already simulated a given
 set of configurations, we run</p>
-<p>optconfs –known optconfs1.out example1-nnn-resume.tmp
+<p>optimize-configurations –known optconfs1.out example1-nnn-resume.tmp
 example1-nnn.cif optconfs2.out</p>
 <p>In this case, the program will try to provide the optimal
 configuration to be added to those in optconfs1.out. We can ask for an
@@ -150,7 +160,7 @@ the compatibility region (see &quot;Estimating parameter uncertainties&quot;
 above).
 
 usage: evaluate_cc [-h] [-t [value]] [-m {exact,montecarlo,ellipse}]
-                   [--mcsteps [value]] [-e] [-x]
+                   [--mcsteps [value]] [-e] [-x] [-v]
                    modelfile [input file]
 
 From a set of energies and magnetic configurations, estimates the coupling
@@ -175,6 +185,8 @@ options:
   -e, --equations       Prints the resulting equations.
   -x, --showchi         Prints the list of errors in the predicted
                         configuration energy.
+  -v, --verbose         Show progress messages (-v) or detailed diagnostics
+                        (-vv).
 
 In the input file, each line consists of the energy of a magnetic
 configuration, followed by the configuration as a list [0,1,0,...].

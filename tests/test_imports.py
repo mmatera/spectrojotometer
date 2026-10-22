@@ -5,9 +5,13 @@ Running Python with -S skips the site machinery: nothing (pytest, an
 editable install, another module of the package) has imported
 importlib.util or other modules beforehand, as in a plain installation.
 Each module is imported in its own process, so that importing one of them
-cannot hide a missing import in another.
+cannot hide a missing import in another. The GUI modules are included, and
+the display is removed from the environment: importing them must not open
+a window.
 """
 
+import importlib.util
+import os
 import pathlib
 import subprocess
 import sys
@@ -19,12 +23,16 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 PACKAGE = ROOT / "spectrojotometer"
 
 
+HAS_TKINTER = importlib.util.find_spec("tkinter") is not None
+
+
 def library_modules():
-    """Non-GUI modules (the GUI needs a display to be imported)."""
+    """All the modules of the package (the GUI ones need tkinter)."""
     for path in sorted(PACKAGE.rglob("*.py")):
         parts = path.relative_to(ROOT).with_suffix("").parts
-        if "gui" in parts:
-            continue
+        if "gui" in parts or parts[-1] == "visualbond":
+            if not HAS_TKINTER:
+                continue
         if parts[-1] == "__init__":
             parts = parts[:-1]
         yield ".".join(parts)
@@ -46,7 +54,12 @@ def test_module_imports_in_fresh_interpreter(module):
         platlib=sysconfig.get_paths()["platlib"],
         module=module,
     )
+    env = {k: v for k, v in os.environ.items() if k != "DISPLAY"}
     res = subprocess.run(
-        [sys.executable, "-S", "-c", code], capture_output=True, text=True, timeout=120
+        [sys.executable, "-S", "-c", code],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env=env,
     )
     assert res.returncode == 0, res.stderr

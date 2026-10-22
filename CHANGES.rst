@@ -3,8 +3,31 @@ Changes
 
 
 
-Unreleased
-----------
+0.3.0 (unreleased)
+------------------
+
+* Packaging:
+
+  * The command line tools work after ``pip install``: they moved from
+    ``bin/`` to ``spectrojotometer.cli`` (also runnable as
+    ``python -m spectrojotometer.cli.<tool>``); four of the six entry
+    points pointed to nonexistent modules. The command names do not
+    change. ``visualbond`` is installed as a GUI script (no console
+    window on Windows).
+  * Only the ``spectrojotometer`` package is installed; ``bin``,
+    ``tests`` and ``examples`` were installed as top-level packages.
+  * The tutorial shown by visualbond (Help -> Documentation) includes
+    its images.
+  * Metadata: version 0.3.0 (single source: ``spectrojotometer.__version__``,
+    also shown by visualbond), license GPL-2.0-or-later, Python >= 3.11
+    (required by numpy, scipy and pymatgen), project URLs, README as long
+    description. ``argparse`` is no longer listed as a dependency.
+  * ``winebuild`` uses ``pip install`` and the new location of the
+    visualbond script, and bundles the documentation.
+  * The CI builds the sdist and the wheel, installs the wheel in a clean
+    environment and runs the installed commands.
+
+* Importing ``spectrojotometer.gui`` no longer opens a Tk window.
 
 * **Fixed** ``import spectrojotometer.model_io`` failing with
   ``AttributeError: module 'importlib' has no attribute 'util'`` in a

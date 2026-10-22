@@ -2,6 +2,7 @@
 from __future__ import print_function
 
 import argparse
+import sys
 
 from spectrojotometer.magnetic_model import MagneticModel
 from spectrojotometer.model_io import magnetic_model_from_file
@@ -85,4 +86,4 @@ If the input file has already information about bonds, the output file contains 
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

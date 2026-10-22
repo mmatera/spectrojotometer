@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
 
 import argparse
+import sys
 
 from spectrojotometer.magnetic_model import MagneticModel
 from spectrojotometer.model_io import (confindex, magnetic_model_from_file,
@@ -138,4 +138,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

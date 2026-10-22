@@ -15,7 +15,7 @@ a single ~1400-line file and is now a small package:
 - `model_io/dispatch.py` — `magnetic_model_from_file`.
 - `model_io/__init__.py` — re-exports the full previous public
   surface, so `from spectrojotometer.model_io import X` keeps working
-  exactly as before for every name tests, `bin/`, and `gui/` use.
+  exactly as before for every name tests, `cli/`, and `gui/` use.
 
 None of the tests below needed to change for the split — they all
 import from `spectrojotometer.model_io` the same way they did before,

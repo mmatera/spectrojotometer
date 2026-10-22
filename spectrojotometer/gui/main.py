@@ -82,9 +82,11 @@ QUOTE = """#  BONDS GENERATOR 0.0:
 class ApplicationGUI:
     """User Interface - Main window"""
 
-    def __init__(self, root=Tk()):
+    def __init__(self, root=None):
+        if root is None:
+            root = Tk()
         self.pages = {}
-        self.application_title = "Visualbond 0.2"
+        self.application_title = "Visualbond " + spectrojotometerversion
         self.model = None
         self.configurations = ([], [], [])
         self.chisvals = None
@@ -140,7 +142,7 @@ class ApplicationGUI:
             "%V",
             "%W",
         )
-        self.root.title("Bonds generator 0.2")
+        self.root.title(self.application_title)
         self.datafolder = os.getcwd()
         self.primitive_cell_var = BooleanVar(value=False)
         self.tmpmodel = tempfile.NamedTemporaryFile(mode="w", suffix=".cif")
@@ -625,7 +627,7 @@ class ApplicationGUI:
         rightpanel.pack(side=RIGHT, fill=BOTH)
 
     def about(self):
-        aboutmsg = "Visualbond  " + "Version 0.2 - 2024\n"
+        aboutmsg = "Visualbond  " + "Version " + spectrojotometerversion + "\n"
         aboutmsg += "Python " + sys.version + "\n\n"
         aboutmsg += "spectrojotometer v. " + str(spectrojotometerversion) + "\n"
         aboutmsg += "tkinter v. " + str(TkVersion) + "\n"
@@ -1361,5 +1363,4 @@ class ApplicationGUI:
 
 
 if __name__ == "__main__":
-    ApplicationGUI()
     ApplicationGUI()

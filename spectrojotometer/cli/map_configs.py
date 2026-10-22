@@ -1,7 +1,7 @@
-#!/usr/bin/env python3
 from __future__ import print_function
 
 import argparse
+import sys
 
 import numpy as np
 from spectrojotometer.magnetic_model import MagneticModel
@@ -115,4 +115,4 @@ If the input file has already information about bonds, the output file contains 
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

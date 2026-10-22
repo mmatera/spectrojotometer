@@ -8,6 +8,6 @@ e.g. ``logging.basicConfig(level=logging.INFO)`` in a script.
 """
 import logging
 
-__version__ = "0.0"
+__version__ = "0.3.0"
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())

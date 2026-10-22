@@ -81,7 +81,13 @@ def test_setup_cli_logging(verbosity, level):
 
 def test_cli_output_is_clean():
     """Results on stdout; diagnostics only with -vv, on stderr."""
-    cmd = [sys.executable, "bin/evaluate_cc", "examples/example1.cif", "examples/example1.spin"]
+    cmd = [
+        sys.executable,
+        "-m",
+        "spectrojotometer.cli.evaluate_cc",
+        "examples/example1.cif",
+        "examples/example1.spin",
+    ]
     quiet = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
     assert quiet.returncode == 0, quiet.stderr
     assert quiet.stderr == ""

@@ -24,13 +24,12 @@ already correctly tokenized) and reconstructs the same "labels,
 entries" row-oriented format (see `cif.cif_read_loop_symmetries`) that
 those functions expect.
 """
-from typing import Optional
 
 import numpy as np
 from pymatgen.io.cif import CifFile, CifParser
 
 from spectrojotometer.magnetic_model import MagneticModel
-from .common import DEFAULT_MAGNETIC_ATOMS
+
 from .cif import (
     cif_read_loop_atoms,
     cif_read_loop_bonds,
@@ -40,6 +39,7 @@ from .cif import (
     primitive_vectors_from_symmetries,
     primitive_vectors_from_symmetries_reason,
 )
+from .common import DEFAULT_MAGNETIC_ATOMS
 
 
 def _loop_labels_entries(block, tag_hint: str) -> tuple:
@@ -80,7 +80,7 @@ def _loop_labels_entries(block, tag_hint: str) -> tuple:
 def magnetic_model_from_cif_pymatgen(
     filename: str,
     magnetic_atoms: tuple = DEFAULT_MAGNETIC_ATOMS,
-    bond_names: Optional[list] = None,
+    bond_names: list | None = None,
     primitive_cell: bool = False,
 ) -> MagneticModel:
     """

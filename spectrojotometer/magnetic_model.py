@@ -1,14 +1,19 @@
-# coding: utf-8
 """
 Magnetic Model class
 """
-from typing import Optional
 import logging
 import warnings
+
 import numpy as np
 import numpy.linalg as la
 
-from .tools import box_ellipse, compatibility_box, format_symmetry_operator, offset_orientation, pack_offset
+from .tools import (
+    box_ellipse,
+    compatibility_box,
+    format_symmetry_operator,
+    offset_orientation,
+    pack_offset,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -181,7 +186,11 @@ def _per_site_values(values, num_sites, default):
 
 
 def _bonds_dict(bond_lists, bond_names, bond_distances):
-    """The ``bonds`` dict: name -> {"distance": ..., "bonds": [...]}."""
+    """
+    The ``bonds`` dict: name -> {"distance": ..., "bonds": [...],
+    "value": ...}. The value of each coupling is np.nan until it is
+    estimated (see MagneticModel.compute_couplings).
+    """
     if bond_lists is None:
         return {}
     logger.debug("got %d couplings", len(bond_lists))
@@ -195,7 +204,7 @@ def _bonds_dict(bond_lists, bond_names, bond_distances):
     if bond_names is None:
         bond_names = ["J" + str(i) for i in range(len(bond_lists))]
     return {
-        name: {"distance": distance, "bonds": bonds}
+        name: {"distance": distance, "bonds": bonds, "value": np.nan}
         for name, distance, bonds in zip(bond_names, bond_distances, bond_lists)
     }
 
@@ -243,8 +252,8 @@ class MagneticModel:
         magnetic_species=None,
         onfly: bool = True,
         model_label="default",
-        g_lande_factors: Optional[list] = None,
-        spin_repr: Optional[list] = None,
+        g_lande_factors: list | None = None,
+        spin_repr: list | None = None,
         symmetries=None,
         space_group_symbol=None,
     ):
@@ -393,7 +402,11 @@ class MagneticModel:
                 else:
                     bonds[name]["bonds"].extend(new_bonds[dist_type])
                     continue
-            bonds[name] = {"distance": dist, "bonds": new_bonds[dist_type]}
+            bonds[name] = {
+                "distance": dist,
+                "bonds": new_bonds[dist_type],
+                "value": np.nan,
+            }
 
     def formatted_equations(
         self, coeff_matrix, ensname=None, comments=None, eq_format="plain"
@@ -499,7 +512,7 @@ class MagneticModel:
     def generate_configurations_onfly(self):
         """Generate spin configurations"""
         size = self.lattice_properties["cell_size"]
-        for c in range(2 ** ((size - 1))):
+        for c in range(2 ** (size - 1)):
             yield [c >> i & 1 for i in range(size - 1, -1, -1)]
 
     def generate_random_configurations(self, num_confs=10):
@@ -874,6 +887,10 @@ class MagneticModel:
         Undetermined couplings are returned with js = 0 and deltaJ = nan.
         If the model is incompatible with the energies, all the entries
         of deltaJ are -1.
+
+        The estimated couplings are also stored in the model, as
+        self.bonds[name]["value"] (np.nan for undetermined couplings), so
+        that, e.g., a Monte Carlo simulation can use them.
         """
 
         if printeqs:
@@ -897,16 +914,20 @@ class MagneticModel:
                 else ("montecarlo" if montecarlo else "ellipse")
             )
         if method == "montecarlo":
-            return self.montecarlo_box(
-                coeffs,
-                energs,
-                err_energs,
-                1000 if mcsteps is None else mcsteps,
-                mcsizefactor,
-                rng=rng,
+            return self._store_coupling_values(
+                self.montecarlo_box(
+                    coeffs,
+                    energs,
+                    err_energs,
+                    1000 if mcsteps is None else mcsteps,
+                    mcsizefactor,
+                    rng=rng,
+                )
             )
         if method == "exact":
-            return self.exact_box(coeffs, energs, err_energs)
+            return self._store_coupling_values(
+                self.exact_box(coeffs, energs, err_energs)
+            )
         if method != "ellipse":
             raise ValueError(f"unknown method {method!r}")
         # Otherwise, it gives an estimation in terms of the bigger ellipse.
@@ -922,7 +943,22 @@ class MagneticModel:
         else:
             rr = np.sqrt(rr) * err_energs
             deltaJ = box_ellipse(coeffs, rr)
-        return (js, deltaJ, model_chi, 1.0)
+        return self._store_coupling_values((js, deltaJ, model_chi, 1.0))
+
+    def _store_coupling_values(self, result):
+        """
+        Store the couplings estimated by compute_couplings in
+        self.bonds[name]["value"]: np.nan for the undetermined ones (nan
+        error bar). Returns result unchanged.
+        """
+        js, d_js = result[0], result[1]
+        for name, value, error in zip(self.bonds, js, d_js):
+            self.bonds[name]["value"] = float(value) if np.isfinite(error) else np.nan
+        logger.debug(
+            "stored coupling values: %s",
+            {name: bond["value"] for name, bond in self.bonds.items()},
+        )
+        return result
 
     def bound_inequalities(self, confs, energs, err_energs=0.01, rtol=1.0e-3):
         """

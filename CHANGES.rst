@@ -31,6 +31,32 @@ Changes
 * ``ApplicationGUI`` no longer enters the Tk event loop from its
   constructor: call ``ApplicationGUI().run()``. The window can now be
   built and driven in tests (``tests/test_gui.py``).
+* Monte Carlo simulation of the fitted model (``spectrojotometer.monte_carlo``,
+  and the Monte Carlo tab of visualbond): Ising Metropolis, Wolff (with a
+  gauge transformation for unfrustrated antiferromagnets) and parallel
+  tempering, detection of frustration, critical temperature. New
+  dependency: numba. Along with its integration:
+
+  * The adapter lost the lattice offsets of the bonds (it stripped the
+    prefix of the packed offset): bonds to neighbouring cells were placed
+    inside the same cell (37.5% of the bonds of a 2x2x2 supercell of
+    ``cromita_ortogonal``). It also accepts offsets as tuples, takes the
+    number of sites from the model, and rejects couplings without a value.
+  * The values of the couplings editor of the Monte Carlo tab were read
+    and ignored. The editor itself (``gui/couplings_editor.py``) was
+    missing and has been rewritten.
+  * ``compute_couplings`` stores the estimated couplings in
+    ``model.bonds[name]["value"]`` (``nan`` until estimated, or if
+    undetermined).
+  * The synchronization of the couplings when entering the Monte Carlo
+    tab never ran.
+  * With several Metropolis replicas, the warning about disagreeing
+    replicas was always issued (it compared different temperatures).
+  * ``run_ising_mc`` documented.
+
+* visualbond with Tk 9: the import window and the search dialog failed
+  (``trace`` replaced by ``trace_add``). Python 3.14 added to the CI.
+
 * Documentation:
 
   * Installation instructions (Python >= 3.11, editable install for

@@ -1,3 +1,7 @@
 from .main import ApplicationGUI
+from .mc_worker import MCWorker
+from .monte_carlo_panel import MonteCarloPanel
 
-__ALL__ = [ApplicationGUI]
+__all__ = ["ApplicationGUI", "MCWorker", "MonteCarloPanel"]
+
+

@@ -225,6 +225,60 @@ amplified, while the question here is how large the absolute error of
 each coupling is.
 
 
+Monte Carlo simulation
+======================
+
+With the coupling constants, ``spectrojotometer.monte_carlo`` simulates the
+model at finite temperature. Since the fit projects the Heisenberg model
+onto collinear configurations, the model is an Ising one, with the same
+convention as the fit:
+
+::
+
+   H = E_0 - Σ_b J_b s_i s_j,   s_i = ±1
+
+``monte_carlo.adapter.magnetic_model_to_ising(model, supercell, J_overrides)`` builds the lattice of a supercell of the model; the value of
+each coupling is the one stored by ``compute_couplings``
+(``model.bonds[name]["value"]``), unless ``J_overrides`` gives it. A coupling
+without a value is an error. ``run_ising_mc`` then samples it at a range of
+temperatures:
+
+.. code:: python
+
+   from spectrojotometer.model_io import magnetic_model_from_file
+   from spectrojotometer.monte_carlo import run_ising_mc
+   from spectrojotometer.monte_carlo.adapter import magnetic_model_to_ising
+
+   model = magnetic_model_from_file("examples/cromita_ortogonal.cif")
+   model.generate_bonds(0.02, [[0, 3.5]])
+   # The couplings: the ones estimated by compute_couplings (stored in
+   # model.bonds[name]["value"]), or given explicitly:
+   spins, bonds, couplings, e0 = magnetic_model_to_ising(
+       model, supercell=(2, 2, 2), J_overrides={"J1": -1.0}
+   )
+   results = run_ising_mc(
+       spins, bonds, couplings, e0, T_min=0.5, T_max=10.0, n_temps=12,
+       n_equil=1000, n_sweeps=5000, seed=0,
+   )
+   print(results["algorithm"], results["N"], results["Tc_peak"])
+
+It returns, for each temperature, the energy and magnetization per site,
+the susceptibility, the specific heat and the Binder cumulant, and an
+estimate of the critical temperature (``Tc_peak``, the peak of the connected
+susceptibility). Temperatures are in the units of J (Boltzmann constant 1).
+
+The algorithm (``algorithm``) can be ``"wolff"`` (cluster updates; valid only
+for unfrustrated models, which are mapped onto ferromagnetic ones by a
+gauge transformation), ``"metropolis"``, or ``"pt"`` (parallel tempering). By
+default (``"auto"``), Wolff is used unless the model is frustrated, as in this
+example: the magnetic sites of the spinel form a pyrochlore lattice, which
+an antiferromagnetic coupling frustrates.
+
+The kernels are compiled with numba. In visualbond, the Monte Carlo tab
+runs these simulations; its table of couplings starts from the values
+estimated in the main window, and they can be edited before running.
+
+
 Logging
 ========
 

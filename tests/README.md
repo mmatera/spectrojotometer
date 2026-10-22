@@ -67,6 +67,19 @@ The model (`spectrojotometer/magnetic_model.py`):
   configurations).
 - `test_model_mapping.py` — `site_map` and `map_configurations`.
 
+The Monte Carlo simulation (`spectrojotometer/monte_carlo/`):
+
+- `test_monte_carlo.py` — the engine, Wolff, parallel tempering, the
+  detection of frustration, the analysis of the results.
+- `test_monte_carlo_integration.py` — the simulation describes the fitted
+  model: the lattice built by the adapter (every bond, also across cells,
+  at the distance of its coupling, on a real model), the same sign
+  convention as the fit (energies equal for every configuration), the
+  values stored by `compute_couplings`, Wolff and Metropolis against the
+  exact energy of a small antiferromagnetic ring, the warning about
+  disagreeing replicas; the couplings editor and the panel.
+- `test_mc_gui.py` — the adapter and the Monte Carlo panel.
+
 Interfaces and packaging:
 
 - `test_cli.py` — the commands declared in `pyproject.toml` exist and

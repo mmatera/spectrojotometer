@@ -27,9 +27,9 @@ from tkinter import (
     StringVar,
     Toplevel,
     X,
+    messagebox,
 )
 from tkinter import filedialog as fdlg
-from tkinter import messagebox
 from tkinter.scrolledtext import ScrolledText
 
 
@@ -61,7 +61,7 @@ class ImportConfigWindow(Toplevel):
         row = Frame(controls1)
         Label(row, text="model file:").pack(side=LEFT)
         self.selected_model = StringVar()
-        self.selected_model.trace("w", self.onmodelselect)
+        self.selected_model.trace_add("write", self.onmodelselect)
         self.optmodels = OptionMenu(row, self.selected_model, "[other model]")
         self.optmodels.pack(side=LEFT, fill=X)
         self.sitemap = Entry(row)

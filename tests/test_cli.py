@@ -12,6 +12,8 @@ import tomllib
 
 import pytest
 
+from ._helpers import repo_env
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 PROJECT = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
 CONSOLE = PROJECT["scripts"]
@@ -33,6 +35,7 @@ def test_console_command_help(command):
     module_name = CONSOLE[command].split(":")[0]
     res = subprocess.run(
         [sys.executable, "-m", module_name, "--help"],
+        env=repo_env(),
         capture_output=True,
         text=True,
         timeout=120,
@@ -46,3 +49,34 @@ def test_version_is_consistent():
 
     metadata_version = importlib.metadata.version("spectrojotometer")
     assert spectrojotometer.__version__ == metadata_version
+
+
+EXAMPLES = ROOT / "examples"
+
+
+
+@pytest.mark.parametrize("extra", [[], ["--known", str(EXAMPLES / "example1.spin")]])
+def test_optimize_configurations_runs(extra, tmp_path):
+    # The command writes a resume file next to the model: use a copy.
+    model_file = tmp_path / "example1.cif"
+    model_file.write_text((EXAMPLES / "example1.cif").read_text())
+    res = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "spectrojotometer.cli.optimize_configurations",
+            str(model_file),
+            "-",
+            "--it",
+            "5",
+            *extra,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        cwd=tmp_path,
+        env=repo_env(),
+    )
+    assert res.returncode == 0, res.stderr
+    assert "Largest error of a coupling per unit error in the energies" in res.stdout
+    assert "inf" not in res.stdout.splitlines()[0]

@@ -145,8 +145,8 @@ As an example, by run
                                    [-u updatesize] [--it iterations] [-v]
                                    modelfile outfile
 
-    Generate spin configurations to determine the coupling constants of a model
-    with minimal condition number
+    Generate spin configurations that determine the coupling constants of a model
+    with the smallest errors
 
     positional arguments:
       modelfile             load atomic positions from a cif file
@@ -160,7 +160,10 @@ As an example, by run
                             increase
       --start [start file]  A file containing an initial guess for the target
                             configurations.
-      -n numconfs           number of new configurations to be generated
+      -n numconfs           number of new configurations to be generated. If not
+                            given, the smallest set that determines every
+                            coupling, enlarged while each extra configuration
+                            reduces the largest error of a coupling by at least 5%
       -u updatesize         number of random configurations to be generate on each
                             step
       --it iterations       number of iterations

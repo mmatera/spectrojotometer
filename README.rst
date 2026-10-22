@@ -180,6 +180,39 @@ constraints come from the same ellipsoid that contains ``P``, so they are
 satisfied by every compatible set of couplings.
 
 
+Choosing the configurations
+---------------------------
+
+Before computing any energy, the configurations can be chosen so that
+the couplings come out as precise as possible. If every energy is known
+within a tolerance ``δE``, each coupling ``J_k`` is known within
+``δE * h_k``, where
+
+::
+
+   h_k = max { |J_k| : max_i |(A·J)_i| ≤ 1 }
+
+depends only on the configurations: it is the half width of the box of
+the compatibility region for zero residual and unit tolerance.
+``model.error_bounds(confs)`` returns the ``h_k``, and ``model.cost(confs)``
+their maximum (``np.inf`` if some coupling is not determined).
+``error_bounds(confs, method="ellipse")`` gives instead the bound from the
+ellipsoid that contains the region: a closed formula, about a thousand
+times faster, and never smaller than the exact value.
+
+``optimize_independent_set`` and ``find_optimal_configurations`` look for the
+configurations with the smallest ``cost``, using the ellipse bound while
+searching. Given the number of new configurations, they return that many;
+otherwise they start from the smallest set that determines every
+coupling, and add configurations while each one reduces the bound by at
+least 5% (``min_improvement``).
+
+The ratio between the largest and the smallest singular values of ``A``
+(the condition number) is not used: it measures how relative errors are
+amplified, while the question here is how large the absolute error of
+each coupling is.
+
+
 Logging
 ========
 
@@ -274,8 +307,8 @@ optimize-configurations
                                    [-u updatesize] [--it iterations] [-v]
                                    modelfile outfile
 
-    Generate spin configurations to determine the coupling constants of a model
-    with minimal condition number
+    Generate spin configurations that determine the coupling constants of a model
+    with the smallest errors
 
     positional arguments:
       modelfile             load atomic positions from a cif file
@@ -289,7 +322,10 @@ optimize-configurations
                             increase
       --start [start file]  A file containing an initial guess for the target
                             configurations.
-      -n numconfs           number of new configurations to be generated
+      -n numconfs           number of new configurations to be generated. If not
+                            given, the smallest set that determines every
+                            coupling, enlarged while each extra configuration
+                            reduces the largest error of a coupling by at least 5%
       -u updatesize         number of random configurations to be generate on each
                             step
       --it iterations       number of iterations

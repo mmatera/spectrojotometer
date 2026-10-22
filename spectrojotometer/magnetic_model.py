@@ -102,6 +102,65 @@ def build_supercell(supercell_size, atomic_positions, bravais_vectors):
 
 
 
+def site_map(source, target, tol=0.1):
+    """
+    For each site of the target model, the index of the site of the source
+    model at the same position, up to a translation of the source lattice;
+    -1 if there is none within tol.
+
+    source, target: MagneticModel instances, with positions in the same
+    frame (Cartesian coordinates).
+    """
+    src_pos = np.asarray(source.site_properties["coord_atomos"], dtype=float)
+    tgt_pos = np.asarray(target.site_properties["coord_atomos"], dtype=float)
+    bravais = np.asarray(source.lattice_properties["bravais_vectors"], dtype=float)
+    result = []
+    for point in tgt_pos:
+        best, best_dist = -1, tol
+        for index, site in enumerate(src_pos):
+            diff = point - site
+            if bravais.size:
+                # Closest lattice vector: integer combination of the
+                # Bravais vectors (least squares, then rounded).
+                coeffs = np.linalg.lstsq(bravais.T, diff, rcond=None)[0]
+                diff = diff - bravais.T @ np.round(coeffs)
+            dist = np.linalg.norm(diff)
+            if dist < best_dist:
+                best, best_dist = index, dist
+        result.append(best)
+    return result
+
+
+def map_configurations(source, confs, target, tol=0.1, fill=None):
+    """
+    Translate spin configurations of the source model into configurations
+    of the target model, using site_map: each site of the target takes the
+    spin of the source site at the same position.
+
+    Raises ValueError if some site of the target has no counterpart in the
+    source, unless fill (0 or 1) is given: then those sites take that
+    value. Also if a configuration does not have one value per site of the
+    source model.
+    """
+    mapping = site_map(source, target, tol)
+    missing = [i for i, j in enumerate(mapping) if j < 0]
+    if missing and fill is None:
+        raise ValueError(
+            f"sites {missing} of the target model have no counterpart in the "
+            f"source model (tolerance {tol})"
+        )
+    num_sites = len(source.site_properties["coord_atomos"])
+    result = []
+    for conf in confs:
+        if len(conf) != num_sites:
+            raise ValueError(
+                f"configuration {conf} has {len(conf)} values; the source "
+                f"model has {num_sites} sites"
+            )
+        result.append([conf[j] if j >= 0 else fill for j in mapping])
+    return result
+
+
 def _clamp_supercell_size(supercell_size):
     """An int, or one value per axis; each clamped to 1..4."""
     logger.debug("supercell size: %s", supercell_size)

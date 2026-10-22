@@ -32,8 +32,8 @@ from tkinter import filedialog as fdlg
 from tkinter import messagebox
 from tkinter.scrolledtext import ScrolledText
 
-import numpy as np
 
+from spectrojotometer.magnetic_model import site_map
 from spectrojotometer.model_io import magnetic_model_from_file
 
 logger = logging.getLogger(__name__)
@@ -156,25 +156,24 @@ class ImportConfigWindow(Toplevel):
         tol = float(self.tol.get())
         model1 = self.models[self.selected_model.get()]
         model2 = self.app.model
-        size1 = len(model1.coord_atomos)
-        self.energy_scale = float(len(model2.coord_atomos)) / float(size1)
+        size1 = len(model1.site_properties["coord_atomos"])
+        size2 = len(model2.site_properties["coord_atomos"])
+        self.energy_scale = float(size2) / float(size1)
         if self.energy_scale < 1.0:
             messagebox.showinfo(
                 "Different sizes",
                 "#  alert: unit cell in model2 " + "is smaller than in model1.",
             )
-
-        for point in model2.cood_atomos:
-            logger.debug("\t%s", point)
-
-        for k, point in enumerate(model1.supercell):
-            logger.debug("\t%s -> %s", k % len(model1.coord_atomos), point)
-        dictatoms = [-1 for p in model2.coord_atomos]
-        for i, point1 in enumerate(model2.coord_atomos):
-            for j, point2 in enumerate(model1.supercell):
-                if np.linalg.norm(point1 - point2) < tol:
-                    dictatoms[i] = j % size1
-                    break
+        # For each site of the current model, the site of the other model at
+        # the same position (-1 if none: map_confs then uses spin 0).
+        dictatoms = site_map(model1, model2, tol)
+        if -1 in dictatoms:
+            logger.warning(
+                "Sites %s of the current model have no counterpart in %s; "
+                "they will get spin 0.",
+                [i for i, j in enumerate(dictatoms) if j < 0],
+                self.selected_model.get(),
+            )
         self.dictatoms = list(dictatoms)
         self.sitemap.delete(0, END)
         self.sitemap.insert(0, dictatoms.__str__()[1:-1])

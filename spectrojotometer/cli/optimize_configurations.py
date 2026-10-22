@@ -2,10 +2,9 @@
 import argparse
 import sys
 
-from spectrojotometer.magnetic_model import MagneticModel
 from spectrojotometer.model_io import (confindex, magnetic_model_from_file,
                                        read_spin_configurations_file)
-from spectrojotometer.tools import add_verbosity_argument, eprint, setup_cli_logging
+from spectrojotometer.tools import add_verbosity_argument, setup_cli_logging
 
 
 def main():

@@ -4,7 +4,6 @@ from __future__ import print_function
 import argparse
 import sys
 
-from spectrojotometer.magnetic_model import MagneticModel
 from spectrojotometer.model_io import magnetic_model_from_file
 from spectrojotometer.tools import add_verbosity_argument, eprint, setup_cli_logging
 
@@ -80,7 +79,8 @@ If the input file has already information about bonds, the output file contains 
         ranges=[[args["rmin"], args["rmax"]]], discretization=args["discretization"]
     )
 
-    print("bond names:", model.bond_names, "\nbond distances:", model.bond_distances)
+    for name, bond in model.bonds.items():
+        print(f"{name}: distance {bond['distance']}, {len(bond['bonds'])} bonds")
     model.save_cif(args["out"])
     return 0
 

@@ -31,6 +31,20 @@ Changes
 * ``ApplicationGUI`` no longer enters the Tk event loop from its
   constructor: call ``ApplicationGUI().run()``. The window can now be
   built and driven in tests (``tests/test_gui.py``).
+* Mapping configurations between models, in the library:
+  ``site_map(source, target, tol)`` and ``map_configurations(source,
+  confs, target, tol, fill=None)``. Sites match up to a translation of
+  the source lattice (before, only within the supercell). A site of the
+  target without counterpart is an error unless ``fill`` is given;
+  before, it silently took the spin of the last site. Used by
+  ``map_configs`` and by visualbond's import window.
+* The command line tools work again: ``bond_generator`` (stale
+  attributes), ``print_equations`` (wrong argument name), ``map_configs``
+  (stale attributes, and a TypeError; its output is now a configuration
+  file, with the energies scaled by the ratio of cell sizes; new
+  ``--tol`` and ``--fill``). The import window of visualbond works
+  again (stale attributes, a misspelt one). Every command is now run
+  for real in the tests and in the CI on the installed package.
 * Choosing configurations, one consistent measure: the largest error of
   each coupling per unit error in the energies.
 

@@ -14,3 +14,6 @@ dist/
 .venv/
 venv/
 .coverage
+
+# Resume files written by optimize-configurations
+*-resume.tmp

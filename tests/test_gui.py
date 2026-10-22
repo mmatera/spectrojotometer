@@ -124,3 +124,37 @@ def test_example_energies_are_consistent():
     ]
     assert len(lines) >= 2
     assert all(np.isfinite(float(line.split()[0])) for line in lines)
+
+
+def test_import_configurations_from_another_model(app, monkeypatch):
+    """The import window: choose a model, compute the site map, map the
+    configurations and send them to the main window."""
+    from spectrojotometer.gui import importconfig
+
+    load_example(app, monkeypatch)
+    files = iter([str(EXAMPLES / "example1.cif"), str(EXAMPLES / "example1.spin")])
+    monkeypatch.setattr(importconfig.fdlg, "askopenfilename", lambda **k: next(files))
+    # The window is modal: do not wait for it to be closed.
+    monkeypatch.setattr(app.root, "wait_window", lambda *a: None)
+    window = importconfig.ImportConfigWindow(app)
+    try:
+        window.selected_model.set("[other model]")
+        window.onmodelselect()
+        size = len(app.model.site_properties["coord_atomos"])
+        assert window.dictatoms == list(range(size))
+        assert window.sitemap.get() == ", ".join(str(i) for i in range(size))
+
+        window.configs_from_file()
+        window.map_confs()
+        mapped = window.outputconfs.get("1.0", tkinter.END)
+        source = (EXAMPLES / "example1.spin").read_text()
+        for line in source.splitlines():
+            if line.strip() and not line.startswith("#"):
+                energy, rest = line.split(None, 1)
+                config = rest.split("#")[0].strip()
+                assert f"{float(energy)}\t{config}" in mapped
+
+        window.send_to_application()
+        assert "From " in app.spinconfigs.get("1.0", tkinter.END)
+    finally:
+        window.close_window()

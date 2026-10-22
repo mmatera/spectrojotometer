@@ -1,116 +1,89 @@
-from __future__ import print_function
-
+"""
+map_configs: translate spin configurations from one model to another.
+"""
 import argparse
 import sys
 
 import numpy as np
-from spectrojotometer.magnetic_model import MagneticModel
-from spectrojotometer.model_io import (confindex, magnetic_model_from_file,
-                                       read_spin_configurations_file)
+
+from spectrojotometer.magnetic_model import map_configurations, site_map
+from spectrojotometer.model_io import (
+    magnetic_model_from_file,
+    read_spin_configurations_file,
+)
 from spectrojotometer.tools import add_verbosity_argument, eprint, setup_cli_logging
-
-
-def map_config_model1_model2(model1, config, model2, tol=0.1):
-    if len(model1.coord_atomos) > len(model2.coord_atomos):
-        eprint("# alert: unit cell in model2 is smaller than in model1.")
-    if len(model1.coord_atomos) != len(config[0]):
-        eprint(
-            "# size of model1 (",
-            len(model1.coord_atomos),
-            ") is different that length of the configuration",
-            len(config),
-        )
-
-    size1 = len(model1.coord_atomos)
-    dictatoms = [-1 for p in model2.coord_atomos]
-    for i, p in enumerate(model2.coord_atomos):
-        for j, q in enumerate(model1.supercell):
-            if np.linalg.norm(p - q) < tol:
-                dictatoms[i] = j % size1
-                break
-
-    if type(config[0]) is list:
-        ret = [[c[j] for j in dictatoms] for c in config]
-        return ret
-    else:
-        ret = [config[j] for j in dictatoms]
-        return ret
 
 
 def main():
     parser = argparse.ArgumentParser(
         description="""
-From an standard cif or wien2k struct file, produces a new cif file containing information about the bonds that defines a Heisenberg magnetic effective model.
-If the input file has already information about bonds, the output file contains both the bonds in the input as well as the new generated bonds.
+Translate the spin configurations of a source model into configurations of
+a target model: each site of the target takes the spin of the site of the
+source at the same position (up to a translation of the source lattice).
+The energies are scaled by the ratio between the number of sites of the
+target and of the source cells.
 """
     )
-
     parser.add_argument(
-        "modelin",
-        metavar="modelfile1",
+        "modelin", metavar="modelfile1", type=str, help="model file of the source model"
+    )
+    parser.add_argument(
+        "modelout", metavar="modelfile2", type=str, help="model file of the target model"
+    )
+    parser.add_argument(
+        "configin",
+        metavar="conffile",
         type=str,
-        help="load atomic positions from a model file for the source model",
+        help="configurations of the source model",
     )
-
-    parser.add_argument(
-        "modelout",
-        metavar="modelfile2",
-        type=str,
-        help="load atomic positions from a model file for the target model",
-    )
-
-    parser.add_argument(
-        "configin", metavar="conffile", type=str, help="configs in the src model"
-    )
-
     parser.add_argument(
         "out",
         metavar="outfile",
         type=str,
-        default=None,
-        help="Name of the outputfile. If it is not provided, the output is printed to the standard output.",
+        help='output file; "-" prints to the standard output',
     )
-
+    parser.add_argument(
+        "--tol",
+        metavar="tolerance",
+        type=float,
+        default=0.1,
+        help="largest distance between matching sites (default 0.1)",
+    )
+    parser.add_argument(
+        "--fill",
+        type=int,
+        choices=[0, 1],
+        default=None,
+        help="spin for the sites of the target without counterpart in the source "
+        "(by default, such sites are an error)",
+    )
     add_verbosity_argument(parser)
     args = vars(parser.parse_args())
     setup_cli_logging(args["verbose"])
 
-    if args["modelin"] is None:
-        eprint(
-            "An input model file is required. You should provide it by means of the parameter --modelin"
-        )
-        return -1
-    if args["modelout"] is None:
-        eprint(
-            "An output model file is required. You should provide it by means of the parameter --modelout"
-        )
-        return -1
-    if args["configin"] is None:
-        eprint(
-            "A file with a list of configurations is required. You should provide it by means of the parameter --configin"
-        )
-        return -1
-    if args["out"] is None:
-        print(
-            "An output file is required. You should provide it by means of the parameter --out"
-        )
-        return -1
-
     modelin = magnetic_model_from_file(args["modelin"])
     modelout = magnetic_model_from_file(args["modelout"])
-    ens, confsin, comments = read_spin_configurations_file(args["configin"], modelin)
-    comments = [comments[l] for l in comments]
-    res = map_config_model1_model2(modelin, confsin, modelout, tol=0.1)
+    energies, confs, comments = read_spin_configurations_file(args["configin"], modelin)
+    try:
+        mapped = map_configurations(
+            modelin, confs, modelout, tol=args["tol"], fill=args["fill"]
+        )
+    except ValueError as error:
+        eprint(f"map_configs: {error}")
+        return 1
 
+    size_in = len(modelin.site_properties["coord_atomos"])
+    size_out = len(modelout.site_properties["coord_atomos"])
+    scale = size_out / size_in
+    lines = ["# site map (target <- source): " + str(site_map(modelin, modelout, args["tol"]))]
+    for energy, conf, comment in zip(energies, mapped, comments):
+        lines.append(f"{np.float64(energy) * scale}\t{conf}\t# {comment.strip()}")
+    text = "\n".join(lines) + "\n"
     if args["out"] == "-":
-        print("# Configurations")
-        for i, c in enumerate(res):
-            print(c, "#", comments[i])
+        sys.stdout.write(text)
     else:
         with open(args["out"], "w") as fout:
-            for i, c in enumerate(res):
-                print(c)
-                fout.write(str(c) + "# " + comments[i] + "\n")
+            fout.write(text)
     return 0
 
 

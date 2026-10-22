@@ -54,7 +54,7 @@ the list of equations for the coupling constants
     model = magnetic_model_from_file(args["model"])
     ens, confs, comments = read_spin_configurations_file(args["config"], model)
     model.print_equations(
-        model.coefficient_matrix(confs, False), comments=comments, format=fmt
+        model.coefficient_matrix(confs, False), comments=comments, eq_format=fmt
     )
     return 0
 

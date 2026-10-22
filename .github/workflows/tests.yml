@@ -88,6 +88,12 @@ jobs:
           done
           command -v visualbond
           evaluate_cc "$EXAMPLES/example1.cif" "$EXAMPLES/example1.spin" | grep J0
+          print_equations "$EXAMPLES/example1.cif" "$EXAMPLES/example1.spin" | grep J0
+          map_configs "$EXAMPLES/example1.cif" "$EXAMPLES/example1.cif" "$EXAMPLES/example1.spin" - | grep "\[0, 0, 0\]"
+          bond_generator "$EXAMPLES/example1.cif" /tmp/bonds.cif --rmin 2 --rmax 4 | grep "distance"
+          # It writes a resume file next to the model: use a copy.
+          cp "$EXAMPLES/example1.cif" /tmp/model.cif
+          optimize-configurations /tmp/model.cif - --it 5 | grep "Largest error"
           # The GUI must be importable without a display (no window on import).
           env -u DISPLAY python -c "import spectrojotometer.gui, spectrojotometer.cli.visualbond"
           python - <<'PY'

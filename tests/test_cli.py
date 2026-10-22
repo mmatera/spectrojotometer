@@ -142,3 +142,28 @@ def test_map_configs_rejects_incompatible_models(tmp_path):
     )
     assert res.returncode == 1
     assert "no counterpart" in res.stderr
+
+
+def test_documented_workflow(tmp_path):
+    """The workflow of the README: bond_generator, then optimize-configurations
+    alone, with --start and with --known."""
+    (tmp_path / "example1.cif").write_text((EXAMPLES / "example1.cif").read_text())
+    steps = [
+        ("bond_generator", "--rmin", 0, "--rmax", 3.1, "--discretization", ".02",
+         "example1.cif", "example1-nnn.cif"),
+        ("optimize_configurations", "example1-nnn.cif", "optconfs1.out"),
+        ("optimize_configurations", "--start", "example1-nnn-resume.tmp",
+         "example1-nnn.cif", "optconfs1.out"),
+        ("optimize_configurations", "--known", "optconfs1.out",
+         "example1-nnn.cif", "optconfs2.out"),
+    ]
+    for module, *args in steps:
+        res = run_command(module, *args, cwd=tmp_path)
+        assert res.returncode == 0, (module, args, res.stderr)
+    from spectrojotometer.model_io import magnetic_model_from_file
+
+    model = magnetic_model_from_file(str(tmp_path / "example1-nnn.cif"))
+    assert list(model.bonds) == ["J0", "J1"]
+    first_line = (tmp_path / "optconfs1.out").read_text().splitlines()[0]
+    assert first_line.endswith(": 1.0")
+    assert "Together with the known configurations" in (tmp_path / "optconfs2.out").read_text()

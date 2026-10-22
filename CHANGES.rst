@@ -31,6 +31,24 @@ Changes
 * ``ApplicationGUI`` no longer enters the Tk event loop from its
   constructor: call ``ApplicationGUI().run()``. The window can now be
   built and driven in tests (``tests/test_gui.py``).
+* Documentation:
+
+  * Installation instructions (Python >= 3.11, editable install for
+    development, running the GUI tests on a headless machine).
+  * ``map_configs`` and ``print_equations`` are documented like the
+    other commands; every ``--help`` shown is the actual one.
+  * The documented workflow works: with ``--rmax 4.9``, the example of
+    ``bond_generator`` defined more couplings than a 3-site cell can
+    determine, and the ``--known`` example had a spurious argument. It
+    is now run by the tests.
+  * ``README.rst``: the logo was in Markdown syntax, and the title and
+    the link to the Windows version differed from ``README.md``.
+  * ``tests/README.md`` describes every test file (it only covered the
+    readers of model files, and described the pymatgen-based reader as
+    an optional prototype).
+  * visualbond: the optimal subset showed its cost as
+    ``sqrt(l)/||A^-1||``; it now shows ``|ΔJ|/|ΔE| <``, like the rest.
+
 * Mapping configurations between models, in the library:
   ``site_map(source, target, tol)`` and ``map_configurations(source,
   confs, target, tol, fill=None)``. Sites match up to a translation of

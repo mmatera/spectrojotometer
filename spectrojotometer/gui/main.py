@@ -961,8 +961,18 @@ class ApplicationGUI:
         energs = [self.configurations[0][full_labels.index(label)] for label in labels]
         # self.configs=([float("nan") for i in newconfs], newconfs, labels)
         # eq_format = self.outputformat.get().lower()
+        eqformat = self.outputformat.get().lower()
         self.spinconfigs.insert(END, "\n#  Subset of optimal configurations. ")
-        self.spinconfigs.insert(END, "sqrt(l)/||A^-1|| " + str(cn) + ": \n")
+        self.spinconfigs.insert(
+            END,
+            " |"
+            + textmarkers["Delta_symbol"][eqformat]
+            + "J|/|"
+            + textmarkers["Delta_symbol"][eqformat]
+            + "E| < "
+            + str(cn)
+            + ": \n",
+        )
         for idx, nc in enumerate(newconfs):
             row = (
                 "# "

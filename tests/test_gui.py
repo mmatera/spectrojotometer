@@ -158,3 +158,32 @@ def test_import_configurations_from_another_model(app, monkeypatch):
         assert "From " in app.spinconfigs.get("1.0", tkinter.END)
     finally:
         window.close_window()
+
+
+def set_page2(app, **values):
+    for field, value in values.items():
+        entry = app.parameters["page2"][field]
+        entry.delete(0, tkinter.END)
+        entry.insert(0, str(value))
+
+
+@pytest.mark.parametrize("fmt", ["plain", "LaTeX", "Wolfram"])
+def test_optimize_configs_reports_the_error_bound(app, monkeypatch, fmt):
+    load_example(app, monkeypatch)
+    app.outputformat.set(fmt)
+    set_page2(app, **{"Number of configurations": 2, "Iterations": 5, "Bunch size": 2})
+    app.optimize_configs()
+    text = app.spinconfigs.get("1.0", tkinter.END)
+    assert "J|/|" in text and "E| <" in text
+    assert not app.errors
+
+
+def test_optimal_independent_set_reports_the_error_bound(app, monkeypatch):
+    load_example(app, monkeypatch)
+    app.spinconfigs.insert(tkinter.END, (EXAMPLES / "example1.spin").read_text())
+    set_page2(app, **{"Number of configurations": 2})
+    app.optimal_independent_set()
+    text = app.spinconfigs.get("1.0", tkinter.END)
+    assert "Subset of optimal configurations" in text
+    assert "J|/|" in text and "sqrt(l)" not in text
+    assert not app.errors

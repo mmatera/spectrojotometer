@@ -37,7 +37,6 @@ still is: this file re-exports the full previous public surface, so
 existing code (`from spectrojotometer.model_io import magnetic_model_from_cif`,
 etc.) keeps working unchanged.
 """
-import logging
 
 from .cif import (
     centering_letter_from_symbol,
@@ -65,7 +64,6 @@ from .common import (
 from .dispatch import magnetic_model_from_cif_pymatgen, magnetic_model_from_file
 from .struct import magnetic_model_from_wk2_struct
 
-logging.basicConfig(level=logging.INFO)
 
 __all__ = [
     "DEFAULT_MAGNETIC_ATOMS",

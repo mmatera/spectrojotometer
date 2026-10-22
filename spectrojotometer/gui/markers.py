@@ -50,17 +50,17 @@ textmarkers["sub_symbol"] = {
 textmarkers["plusminus_symbol"] = {
     "latex": "\\pm",
     "plain": "+/-",
-    "Wolfram": "\\[PlusMinus]",
+    "wolfram": "\\[PlusMinus]",
 }
 
 textmarkers["open_mod"] = {
     "latex": "\\left |",
     "plain": "|",
-    "Wolfram": "Abs[",
+    "wolfram": "Abs[",
 }
 
 textmarkers["close_mod"] = {
     "latex": "\\right |",
     "plain": "|",
-    "Wolfram": "] ",
+    "wolfram": "] ",
 }

@@ -1,58 +1,62 @@
 [build-system]
-requires = ["setuptools>=42", "wheel"]
+# setuptools >= 77 for the SPDX license expression (PEP 639).
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "spectrojotometer"
-version = "0.0"
+dynamic = ["version"]
 description = "Toolbox for determining effective magnetic models from ab-initio simulations"
-# long-description = "file: README.rst"
-# long-description-content-type = "text/x-rst"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "GPL-2.0-or-later"
+license-files = ["COPYNG.txt"]
+authors = [{ name = "Juan Mauricio Matera", email = "matera@fisica.unlp.edu.ar" }]
 classifiers = [
-    "Development Status :: 1 - Alpha",
-    "License :: OSI Approved :: GNU General Public License (GPL)",
-    "Programming Language :: Python :: 3.4",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Physics",
 ]
-authors = [{ name = "Juan Mauricio Matera", email = "matera@fisica.unlp.edu.ar" }]
-# url = "https://mauricio-matera.blogspot.com"
-license = { text = "GNU" }
 dependencies = [
-    "argparse",
     "numpy",
     "matplotlib",
     "pymatgen",
     "numba>=0.57",
+    "scipy",
 ]
 
 [project.optional-dependencies]
 test = ["pytest"]
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
+[project.urls]
+Repository = "https://github.com/QILPCM-IFLP-CONICET/spectrojotometer"
+Issues = "https://github.com/QILPCM-IFLP-CONICET/spectrojotometer/issues"
+Changelog = "https://github.com/QILPCM-IFLP-CONICET/spectrojotometer/blob/master/CHANGES.rst"
 
 [project.scripts]
-print_equations = "bin.print_equations:main"
-map_configs = "bin.map_configs:main"
-optimize-configurations = "bin.optimize_configurations:main"
-bond_generator = "bin.bond_generator:main"
-evaluate_cc = "bin.evaluate_cc:main"
-visualbond = "bin.visualbond:main"
+bond_generator = "spectrojotometer.cli.bond_generator:main"
+evaluate_cc = "spectrojotometer.cli.evaluate_cc:main"
+map_configs = "spectrojotometer.cli.map_configs:main"
+optimize-configurations = "spectrojotometer.cli.optimize_configurations:main"
+print_equations = "spectrojotometer.cli.print_equations:main"
 
+# A GUI script: on Windows it starts without a console window.
+[project.gui-scripts]
+visualbond = "spectrojotometer.cli.visualbond:main"
 
-
-
+[tool.setuptools.dynamic]
+version = { attr = "spectrojotometer.__version__" }
 
 [tool.setuptools.packages.find]
-where = ["."]
-
-[tool.setuptools.exclude-package-data]
-"your_package" = ["bin/*"]
+include = ["spectrojotometer*"]
 
 [tool.setuptools.package-data]
-"*" = ["doc/*.html", "logo.gif"]
+# Files used by visualbond at run time.
+spectrojotometer = ["logo.gif", "doc/tutorial.html", "doc/img/*"]
 
-[tool.setuptools]
-include-package-data = true
-
-
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,141 @@
+
+from __future__ import print_function
+
+import argparse
+import sys
+
+import numpy as np
+
+from spectrojotometer.model_io import (magnetic_model_from_file,
+                                       read_spin_configurations_file)
+from spectrojotometer.tools import add_verbosity_argument, eprint, setup_cli_logging
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="From a set of energies and magnetic configurations, estimates the coupling constants of a model."
+    )
+
+    parser.add_argument(
+        "modelfile",
+        metavar="modelfile",
+        type=str,
+        help="load atomic positions from a model file.",
+    )
+
+    parser.add_argument(
+        "input",
+        metavar="[input file]",
+        type=str,
+        help="file containing evaluated energies and magnetic configurations.",
+    )
+
+    parser.add_argument(
+        "-t",
+        "--tolerance",
+        metavar="[value]",
+        type=float,
+        default=0.001,
+        help="Provides the estimated error for the energies.",
+    )
+
+    parser.add_argument(
+        "-m",
+        "--method",
+        choices=["exact", "montecarlo", "ellipse"],
+        default="exact",
+        help="How to bound the compatibility region: exact box by linear "
+        "programming (default), Monte Carlo sampling (inner estimate) or the "
+        "bounding box of an ellipsoid containing it (outer estimate).",
+    )
+
+    parser.add_argument(
+        "--mcsteps",
+        metavar="[value]",
+        type=int,
+        default=1000,
+        help="Number of Monte Carlo samples (only with --method montecarlo).",
+    )
+
+    parser.add_argument(
+        "-e", "--equations", action="store_true", help="Prints the resulting equations."
+    )
+
+    parser.add_argument(
+        "-x",
+        "--showchi",
+        action="store_true",
+        help="Prints the list of errors in the predicted configuration energy.",
+    )
+
+    add_verbosity_argument(parser)
+    args = vars(parser.parse_args())
+    setup_cli_logging(args["verbose"])
+
+    if args["modelfile"] is None:
+        eprint(
+            "A model file is required. You have to provide it by means of the parameter --modelfile"
+        )
+        return -1
+    model = magnetic_model_from_file(args["modelfile"])
+    if len(model.bonds) == 0:
+        eprint("The model does not have defined bonds\n")
+        eprint("Use bond_generator to define a non-trivial model\n")
+        return -1
+    bond_names = list(model.bonds)
+
+    energs, confs, comments = read_spin_configurations_file(args["input"], model)
+    js, jerr, chis, rate = model.compute_couplings(
+        confs,
+        energs,
+        err_energs=args["tolerance"],
+        printeqs=args["equations"],
+        method=args["method"],
+        mcsteps=args["mcsteps"],
+    )
+
+    mean_energy = js[-1]
+    js, jerr = np.asarray(js[:-1]), np.asarray(jerr[:-1], dtype=float)
+    undetermined = np.isnan(jerr)
+    determined = np.abs(js[~undetermined])
+    jmax = np.max(determined) if len(determined) and np.max(determined) > 0 else 1.0
+
+    print("\n\n# Results (method: " + args["method"] + "):\n===========\n\n")
+    print("<E> = ", mean_energy, " (average energy of the configurations)\n")
+    if args["method"] == "montecarlo":
+        print("Monte Carlo acceptance rate:", rate, "\n")
+    if np.any(jerr < 0):
+        eprint(
+            "Warning: no set of couplings reproduces all the energies within "
+            "the tolerance: the model is not compatible with the data. Try "
+            "increasing the tolerance by means of the parameter --tolerance [tol]."
+        )
+    for name, val, err, undet in zip(bond_names, js, jerr, undetermined):
+        if undet:
+            print(name, " = ?  (not determined by these configurations)")
+        elif err < 0:
+            print(name, " = (", val / jmax, ") * ", jmax, "  (incompatible)")
+        else:
+            print(name, " = (", val / jmax, " +/-", err / jmax, ") * ", jmax)
+
+    print("\n")
+    if args["showchi"]:
+        print(
+            "\n# Error in Modeled Energy (relative to the tolerance): \n"
+            + "=======================================================\n\n"
+        )
+        for c in chis:
+            print(c)
+
+    imax = 0
+    chimax = 0
+    for i, chi in enumerate(chis):
+        if abs(chi) > chimax:
+            chimax = abs(chi)
+            imax = i
+    print("\n", "max relative error:", chimax, " in configuration ", imax, "\n")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

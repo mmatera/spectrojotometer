@@ -2,10 +2,11 @@
 from __future__ import print_function
 
 import argparse
+import sys
 
 from spectrojotometer.magnetic_model import MagneticModel
 from spectrojotometer.model_io import magnetic_model_from_file
-from spectrojotometer.tools import eprint
+from spectrojotometer.tools import add_verbosity_argument, eprint, setup_cli_logging
 
 
 def main():
@@ -52,7 +53,9 @@ If the input file has already information about bonds, the output file contains 
         "out", metavar="outfile", type=str, default=None, help="Name of the outputfile."
     )
 
+    add_verbosity_argument(parser)
     args = vars(parser.parse_args())
+    setup_cli_logging(args["verbose"])
 
     if args["modelfile"] is None:
         eprint(
@@ -83,4 +86,4 @@ If the input file has already information about bonds, the output file contains 
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

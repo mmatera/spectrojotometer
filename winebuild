@@ -13,9 +13,9 @@ echo $PYTHON
 rm -R dist
 rm -R build
 
-$WINE $PYTHON setup.py install 
-$WINE $PYINSTALLER   --add-data "spectrojotometer/logo.gif;spectrojotometer" -i "spectrojotometer.ico"  -w -D  bin/visualbond.py 
-#$WINE $PYINSTALLER  -D   bin/$SCRIPT.py 
+$WINE $PYTHON -m pip install .
+$WINE $PYINSTALLER   --add-data "spectrojotometer/logo.gif;spectrojotometer" --add-data "spectrojotometer/doc;spectrojotometer/doc" -i "spectrojotometer.ico"  -w -D -n visualbond  spectrojotometer/cli/visualbond.py
+#$WINE $PYINSTALLER  -D   spectrojotometer/cli/$SCRIPT.py
 
 echo "      "
 echo "      "

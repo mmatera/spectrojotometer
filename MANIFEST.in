@@ -1,3 +1,7 @@
-include README.rst 
-include examples/*
-include logo.gif 
+# Source distribution: documentation, examples and tests, besides the package.
+include README.md README.rst CHANGES.rst AUTHORS.txt COPYNG.txt
+include logo.svg logo.gif spectrojotometer.ico
+recursive-include examples *
+recursive-include tests *.py *.cif *.struct *.md
+recursive-include spectrojotometer/doc *
+global-exclude __pycache__ *.py[cod]

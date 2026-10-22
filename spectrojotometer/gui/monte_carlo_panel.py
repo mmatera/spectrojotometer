@@ -1,6 +1,7 @@
 """Panel Tkinter para el modulo Monte Carlo Ising."""
 
 import json
+import logging
 import queue
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -9,6 +10,8 @@ import numpy as np
 
 from .couplings_editor import CouplingsEditor
 from .mc_worker import MCWorker
+
+logger = logging.getLogger(__name__)
 
 
 class MonteCarloPanel(ttk.Frame):
@@ -221,11 +224,12 @@ class MonteCarloPanel(ttk.Frame):
             else:
                 from ..monte_carlo.adapter import magnetic_model_to_ising
                 adapter = self.adapter or magnetic_model_to_ising
+                logger.debug("adapter: %s", adapter)
                 supercell = (self.var_Lx.get(), self.var_Ly.get(),
                              self.var_Lz.get())
-                spins, bonds, J_vals, E0 = adapter(
-                    model, supercell, J_overrides=J_overrides,
-                )
+                logger.debug("building the Ising model")
+                spins, bonds, J_vals, E0 = adapter(model, supercell)
+                logger.debug("Ising model built")
         except Exception as e:
             messagebox.showerror("Monte Carlo",
                                  f"Error preparando el modelo:\n{e}")

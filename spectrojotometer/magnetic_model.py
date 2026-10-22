@@ -5,14 +5,16 @@ import logging
 
 import numpy as np
 import numpy.linalg as la
-import numpy.random as rnd
 
 from .tools import (
     box_ellipse,
+    compatibility_box,
     format_symmetry_operator,
     offset_orientation,
     pack_offset,
 )
+
+logger = logging.getLogger(__name__)
 
 # import matplotlib.pyplot as plt
 # from mpl_toolkits.mplot3d import Axes3
@@ -136,18 +138,18 @@ class MagneticModel:
         self.model_label = model_label
         self.onfly = onfly
         self.cell_size = 0
-        print("supercell size:", supercell_size)
+        logger.debug("supercell size: %s", supercell_size)
         # Normalise: accept int or [sx, sy, sz]; clamp each axis to 1–4
-        if isinstance(supercell_size, int) and np.isscalar(supercell_size):
+        if np.isscalar(supercell_size):
             supercell_size = min(4, max(1, int(supercell_size)))
         else:
             supercell_size = [min(4, max(1, int(s))) for s in supercell_size]
 
-        print("atomic_pos", atomic_pos)
+        logger.debug("atomic positions: %s", atomic_pos)
         if magnetic_species is None:
             magnetic_species = ["X"] * len(atomic_pos)
 
-        print("magnetic_species", magnetic_species)
+        logger.debug("magnetic species: %s", magnetic_species)
 
         if g_lande_factors is None:
             g_lande_factors = [2.0] * len(magnetic_species)
@@ -173,13 +175,13 @@ class MagneticModel:
             if maxdist == 0:
                 maxdist = 1
             ranges = [[0, maxdist]]
-        elif isinstance(ranges, float):
-            ranges = [[0, ranges]]
-        elif isinstance(ranges, list) and isinstance(ranges[0], float):
-            ranges = [ranges]
+        elif np.isscalar(ranges):
+            ranges = [[0, float(ranges)]]
+        elif len(ranges) > 0 and np.isscalar(ranges[0]):
+            ranges = [list(ranges)]
 
         if bond_lists is not None:
-            print("Got", len(bond_lists), "couplings")
+            logger.debug("got %d couplings", len(bond_lists))
             if bond_distances is None:
                 bond_distances = [0] * len(bond_lists)
             elif len(bond_distances) != len(bond_lists):
@@ -191,8 +193,6 @@ class MagneticModel:
                 bond_names = ["J" + str(i) for i in range(len(bond_lists))]
         else:
             bond_names = []
-            if bond_names is not None:
-                bond_names[:] = bond_names
             bond_lists = []
             bond_distances = []
 
@@ -231,8 +231,10 @@ class MagneticModel:
             self.bonds.pop(name)
         except KeyError:
             msg = "bond " + name + " not found"
-            logging.error(msg)
+            logger.warning(msg)
             return
+
+    remove_bond_by_name = remover_bond_by_name
 
     def generate_bonds(self, discretization, ranges, bond_names=None):
         """
@@ -269,18 +271,18 @@ class MagneticModel:
         ):
             for i, pos_i in enumerate(coord_atomos):
                 for j, pos_j in enumerate(sites_sc):
-                    print([i, j], supercell_idx)
+                    logger.debug("pair %s, supercell %s", [i, j], supercell_idx)
                     rel_pos = pos_j - pos_i
                     orientation = offset_orientation(rel_pos)
                     if orientation < 0:
                         continue
                     distance = np.linalg.norm(rel_pos)
-                    print("   distance", distance)
+                    logger.debug("   distance %s", distance)
                     if not is_in_range(distance):
                         continue
 
-                    print("bond between ", i, "and ", j, "(", supercell_idx, ")")
-                    bound_type = tuple(set([atom_type[i], atom_type[j]]))
+                    logger.debug("bond between %s and %s (%s)", i, j, supercell_idx)
+                    bound_type = tuple(sorted({atom_type[i], atom_type[j]}))
                     key = (normalize_key(distance), bound_type)
                     offset_key = pack_offset(supercell_idx)
                     new_bonds.setdefault(key, []).append((i, j % cell_size, offset_key))
@@ -289,12 +291,12 @@ class MagneticModel:
         while len(new_bonds) > len(bond_names):
             while "J" + str(bn_index + 1) in bond_names:
                 bn_index = bn_index + 1
-            print("adding ", "J" + str(bn_index + 1))
+            logger.debug("adding %s", "J" + str(bn_index + 1))
             bond_names.append("J" + str(bn_index + 1))
 
         # Update the bonds dict.
-        print("current bonds:", bonds)
-        print("new bond names:", bond_names)
+        logger.debug("current bonds: %s", bonds)
+        logger.debug("new bond names: %s", bond_names)
 
         for name, dist_type in zip(bond_names, sorted(new_bonds)):
             dist = dist_type[0]
@@ -369,7 +371,7 @@ class MagneticModel:
         connecting coupling constants with simulated energies
         for a given set of configurations configs.
         """
-        logging.info("compute the coefficient matrix")
+        logger.debug("compute the coefficient matrix")
 
         rawcm = [
             np.array(
@@ -380,7 +382,8 @@ class MagneticModel:
             )
             for bondfamily in (bd["bonds"] for bd in self.bonds.values())
         ]
-        print("raw cm\n", "  \n".join(str(row) for row in rawcm))
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("raw coefficient matrix:\n%s", "\n".join(str(row) for row in rawcm))
         if normalizar:
             coeff_matrix = [v - np.average(v) for v in rawcm]
         else:
@@ -403,24 +406,30 @@ class MagneticModel:
     def generate_random_configurations(self, num_confs=10):
         """Generate spin configurations"""
         size = self.lattice_properties["cell_size"]
-        for s_val in np.random.random_integers(0, 2 ** (size - 1), num_confs):
-            yield [s_val >> i & 1 for i in range(size - 1, -1, -1)]
+        rng = np.random.default_rng()
+        # The first spin is fixed to 0 (global spin inversion symmetry),
+        # the others are drawn uniformly. Drawing bits directly avoids
+        # integer overflow for large cells.
+        for _ in range(num_confs):
+            bits = rng.integers(0, 2, size=max(size - 1, 0))
+            yield [0] * min(size, 1) + [int(b) for b in bits]
 
-    def check_independence(self, conf, setconfs):
+    def check_independence(self, conf, setconfs, tol=0.1):
         """
-        Check the linear independence between the equations
-        associated to the configurations.
+        Check that the equation associated to conf is distinct from the
+        ones associated to the configurations in setconfs (i.e. its row of
+        the coefficient matrix is farther than tol from all of them).
+
+        Note: this is a distinctness test, not a rank test. Rank
+        deficiencies are handled later in optimize_independent_set.
         """
-        if conf == []:
+        if len(conf) == 0:
             return False
-        if setconfs == []:
+        if len(setconfs) == 0:
             return True
         a_coeffs = self.coefficient_matrix(setconfs, False)
         r0_coeffs = self.coefficient_matrix([conf], False)[0]
-        for r_coeffs in a_coeffs:
-            if np.linalg.norm(r_coeffs - r0_coeffs) < 0.1:
-                return False
-        return True
+        return bool(np.min(np.linalg.norm(a_coeffs - r0_coeffs, axis=1)) >= tol)
 
     def add_independent_confs(self, confs, newconfs):
         """
@@ -429,7 +438,7 @@ class MagneticModel:
         """
         for conf in newconfs:
             if self.check_independence(conf, confs):
-                confs.apppend(conf)
+                confs.append(conf)
         return confs
 
     def get_independent_confs(self, confs):
@@ -438,12 +447,12 @@ class MagneticModel:
         independent equations.
         """
         res = []
-        if confs == []:
+        if len(confs) == 0:
             return res
         for c in confs:
             if self.check_independence(c, res):
                 res.append(c)
-        print("  independent confs:", res)
+        logger.debug("independent confs: %s", res)
         return res
 
     def cost(self, confs):
@@ -456,152 +465,117 @@ class MagneticModel:
         sv = np.linalg.svd(a, full_matrices=False, compute_uv=False)[-1]
         return np.sqrt(lp) / sv
 
-    def optimize_independent_set(self, confs, length=None, forced=None):
+    def optimize_independent_set(self, confs, length=None, forced=None, tol=1.0e-6):
         """
         Given a set of configurations confs, returns
 
         (res, cost)
 
-        where res is the subset of configurations that optimizes the
-        cost function    sqrt(len(res))/|| coefficient_matrix(res)^+ ||
+        where res is the subset of configurations (not including the forced
+        ones) that optimizes the cost function
+        sqrt(len(res) + len(forced)) / sigma_min(coefficient_matrix).
 
         If the optional parameter length is provided, then it tries to optimize
-        the cost function for a fixed size length.
+        the cost function for a fixed size length (the set may be enlarged
+        if that is needed to recover the full rank of the information).
 
+        If the set only provides partial information, the cost is np.inf.
         """
-        partialinfo = False
-        cost = np.nan
-        if confs == []:
+        if len(confs) == 0:
             return [], np.inf
 
-        if forced is None:
-            forced = []
-            lenforced = 0
-        else:
-            lenforced = len(forced)
+        forced = list(forced) if forced is not None else []
+        lenforced = len(forced)
 
-        ids0 = [sum(k * 2**i for i, k in enumerate(c)) for c in forced + confs]
-        confs = self.get_independent_confs(confs)
-        curr = list(forced)
-        for c in confs:
-            if self.check_independence(c, forced):
-                curr.append(c)
-
-        for c in curr:
-            print(c)
-        idscurr = [sum(k * 2**i for i, k in enumerate(c)) for c in curr]
-        idscurr = [ids0.index(k) for k in idscurr]
+        candidates = [
+            c
+            for c in self.get_independent_confs(confs)
+            if self.check_independence(c, forced)
+        ]
+        if not candidates:
+            return [], np.inf
+        curr = forced + candidates
 
         a = self.coefficient_matrix(curr, False)
-        ared = []
-        for q in a[:lenforced]:
-            ared.append(q)
-
-        u, sv = np.linalg.svd(a, full_matrices=False)[:2]
-        k = len(sv)
-        while sv[k - 1] < 1.0e-6:
-            k = k - 1
-
+        u, sv, _ = np.linalg.svd(a, full_matrices=False)
+        k = int(np.sum(sv > tol))  # numerical rank
         if k == 0:
-            logging.info(
+            logger.info(
                 "optimize_independent_set: the set of configurations"
-                + " does not provide any information."
+                " does not provide any information."
             )
-            return ([], np.inf)
+            return [], np.inf
 
-        if k < len(sv):
-            logging.info(
-                "optimize_independent_set: the set of configurations just"
-                + " provides partial information. "
-                + "Optimizing the set for this information."
-            )
-            partialinfo = True
-            sv = sv[k - 1]
-            u = u[:, :k]
-        else:
-            sv = sv[-1]
-            cost = np.sqrt(len(curr)) / sv
-
-        weights = [(np.linalg.norm(r), i) for i, r in enumerate(u) if i >= lenforced]
-        weights = sorted(weights, key=lambda x: -x[0])
-        # Sorting the configurations by weights
-        curr = forced + [curr[w[1]] for w in weights]
-        # subblock of a without forced, sorted by weights
-        a = np.array([a[w[1]] for w in weights])
-
-        if length is not None:
-            lp = min(length, len(a))
-        else:
-            lp = k
-
-        # Look for the minimal subset that has the same information than
-        # the original of length >= lp.
-
-        for i in range(lp):
-            ared.append(a[i])
-
-        while lp < len(curr):
-            sv = np.linalg.svd(np.array(ared), full_matrices=False, compute_uv=False)[
-                k - 1
-            ]
-            if sv > 1.0e-6:
-                break
-
-            ared.append(a[lp])
-            lp = lp + 1
-        # If we are dealing with a set of configurations
-        # with just partial info,
-        # this is the best we can return.
+        # Compare with the number of unknowns (bonds + base energy).
+        partialinfo = k < a.shape[1]
         if partialinfo:
-            print(
-                "Information is not complete."
-                + "Picking the subset that provides the maximal information."
+            logger.info(
+                "optimize_independent_set: the set of configurations just"
+                " provides partial information. "
+                "Optimizing the set for this information."
             )
-            return (curr[lenforced : lp + lenforced], np.inf)
+        u = u[:, :k]
+
+        # Sort the non-forced configurations by leverage (row norm of U).
+        order = sorted(
+            range(lenforced, len(curr)), key=lambda i: -np.linalg.norm(u[i])
+        )
+        curr_sorted = forced + [curr[i] for i in order]
+        a_new = a[order]  # non-forced rows, sorted by weight
+
+        def smin(rows):
+            """k-th singular value of the rows (0 if there are fewer)."""
+            s = np.linalg.svd(np.asarray(rows), full_matrices=False, compute_uv=False)
+            return s[k - 1] if len(s) >= k else 0.0
+
+        def result(npick):
+            return curr_sorted[lenforced : lenforced + npick]
+
+        ared = list(a[:lenforced])
         if length is not None:
-            msg = (
-                "------------\n"
-                "optimize_independent_set for fix length."
-                " cost="
-                f"{np.sqrt(lp) / sv}"
-            )
-            logging.info(msg)
-            return (
-                curr[lenforced : lp + lenforced],
-                np.sqrt(lp + lenforced) / sv,
-            )
+            lp = min(max(length, 0), len(a_new))
+        else:
+            lp = min(max(k - lenforced, 0), len(a_new))
+        ared += list(a_new[:lp])
 
-        # If  l was not provided, and the set is informationally complete,
-        # try to enlarge it to reduce the cost function
-        newcost = np.sqrt(lp + lenforced) / sv
-        while lp < len(a) and newcost > cost:
-            nr = a[lp]
-            sv = np.linalg.svd(
-                np.array(ared + [nr]),
-                full_matrices=False,
-                compute_uv=False,
-            )[k - 1]
-            newcost = np.sqrt(lp + lenforced + 1) / sv
-            ared.append(nr)
-            lp = lp + 1
+        # Enlarge until the rank-k information is recovered.
+        s = smin(ared) if ared else 0.0
+        while s <= tol and lp < len(a_new):
+            ared.append(a_new[lp])
+            lp += 1
+            s = smin(ared)
 
-        cost = newcost
-        while lp < len(a):
-            nr = a[lp]
-            sv = np.linalg.svd(
-                np.array(ared + [nr]),
-                full_matrices=False,
-                compute_uv=False,
-            )[k - 1]
-            newcost = np.sqrt(lp + lenforced + 1) / sv
-            if newcost >= cost:
+        if s <= tol or partialinfo:
+            logger.info(
+                "Information is not complete. "
+                "Picking the subset that provides the maximal information."
+            )
+            return result(lp), np.inf
+
+        if length is not None:
+            cost = np.sqrt(lp + lenforced) / s
+            logger.info("optimize_independent_set for fixed length. cost=%s", cost)
+            return result(lp), cost
+
+        # No length provided and complete information: enlarge the set
+        # while that reduces the cost function.
+        cost_full = np.sqrt(len(curr)) / sv[k - 1]
+        cost = np.sqrt(lp + lenforced) / s
+        while lp < len(a_new) and cost > cost_full:
+            ared.append(a_new[lp])
+            lp += 1
+            cost = np.sqrt(lp + lenforced) / smin(ared)
+
+        while lp < len(a_new):
+            s2 = smin(ared + [a_new[lp]])
+            new_cost = np.sqrt(lp + lenforced + 1) / s2 if s2 > 0 else np.inf
+            if new_cost >= cost:
                 break
+            cost = new_cost
+            ared.append(a_new[lp])
+            lp += 1
 
-            cost = newcost
-            ared.append(nr)
-            lp = lp + 1
-
-        return (curr[lenforced : lp + lenforced], cost)
+        return result(lp), cost
 
     def find_optimal_configurations(
         self,
@@ -623,7 +597,7 @@ class MagneticModel:
         if known is None:
             known = []
 
-        logging.info("--------------find_optimal_set ----------------")
+        logger.info("--------------find_optimal_set ----------------")
 
         if start is None:
             repres = self.generate_random_configurations(max(update_size, lmax))
@@ -639,7 +613,7 @@ class MagneticModel:
                 break
 
         if len(last_better) < lmax:
-            logging.info(
+            logger.info(
                 "not enough configurations. Trying to optimize "
                 + "the subset and return it."
             )
@@ -668,9 +642,11 @@ class MagneticModel:
         energs,
         err_energs=0.01,
         printeqs=False,
-        montecarlo=True,
+        montecarlo=None,
         mcsteps=None,
         mcsizefactor=1.0,
+        rng=None,
+        method=None,
     ):
         """
         compute_couplings
@@ -684,26 +660,46 @@ class MagneticModel:
         err_energs: estimation of the maximum convergence error in energies
         printeqs: print the corresponding equations.
 
+        method: how to estimate the box containing the compatibility
+            region:
+            "exact": exact bounding box, by linear programming
+                (see tools.compatibility_box). Default.
+            "montecarlo": Monte Carlo sampling (see montecarlo_box). Its
+                box is always inside the exact one, and underestimates it
+                as the number of couplings grows.
+            "ellipse": bounding box of the ellipsoid that contains the
+                region. Always contains the exact box.
+        montecarlo: kept for backward compatibility. If given (and method
+            is None), True means "montecarlo" and False means "ellipse".
+        mcsteps, mcsizefactor, rng: passed to montecarlo_box.
+
         Return values:
         --------------
-        js, deltaJ, model_chi
+        js, deltaJ, model_chi, acceptance_rate
 
-        js: the estimated values of the js, according to the least square
-            rule
+        js: the estimated values of the couplings. The last entry is
+            the average energy over the configurations (the columns of
+            the coupling constants are centered, which decouples them
+            from the base energy).
 
-        deltaJ: a list with the sizes of a box centered at js,
-        that contains the compatibility region. This is chosen as the
-        bounding box of the ellipsoid
-        |A.(j-js)|^2 + (chi^2-len(energies)) = 0.
+        deltaJ: half widths of a box centered at js that contains the
+            compatibility region
+            {j : max_i |(A.j - energs)_i| <= err_energs}.
 
-        model_chi: the difference between the input energies, and
-        those evaluated with the model with couplings js.
+        model_chi: (A.js_ls - energs) / err_energs, with js_ls the least
+            squares solution.
 
+        acceptance_rate: Monte Carlo acceptance rate (1.0 for the other
+            methods, 0.0 if the model is incompatible).
+
+        Undetermined couplings are returned with js = 0 and deltaJ = nan.
+        If the model is incompatible with the energies, all the entries
+        of deltaJ are -1.
         """
         print("Efind jssss")
         if printeqs:
             coeffs = self.coefficient_matrix(confs, normalizar=False)
-            logging.info("\n# Configurations:\n=================\n\n")
+            print("\n# Configurations:\n=================\n")
             for c in confs:
                 print(c)
             self.print_equations(coeffs)
@@ -717,17 +713,29 @@ class MagneticModel:
         # equations.
         rcoeffs = coeffs[:, 0:-1]
         singularvalues = np.linalg.svd(rcoeffs, compute_uv=False)
-        print("singular values:", singularvalues)
+        logger.debug("singular values of the coupling columns: %s", singularvalues)
         cond_number = np.sqrt(len(rcoeffs)) / max(min(singularvalues), 1.0e-9)
         if printeqs:
-            msg = "\nInverse of the minimum singular value: " f"{cond_number}\n\n"
-            logging.info(msg)
+            print(f"\nInverse of the minimum singular value: {cond_number}\n")
 
-        # If Montecarlo, uses the montecarlo routine to estimate the box.
-        if montecarlo:
-            return self.montecarlo_box(
-                coeffs, energs, err_energs, mcsteps, mcsizefactor
+        if method is None:
+            method = (
+                "exact" if montecarlo is None
+                else ("montecarlo" if montecarlo else "ellipse")
             )
+        if method == "montecarlo":
+            return self.montecarlo_box(
+                coeffs,
+                energs,
+                err_energs,
+                1000 if mcsteps is None else mcsteps,
+                mcsizefactor,
+                rng=rng,
+            )
+        if method == "exact":
+            return self.exact_box(coeffs, energs, err_energs)
+        if method != "ellipse":
+            raise ValueError(f"unknown method {method!r}")
         # Otherwise, it gives an estimation in terms of the bigger ellipse.
         # js = (A^t A )^{-1} A^t En, i.e. least squares solution
         resolvent = np.linalg.pinv(coeffs.transpose().dot(coeffs), rcond=1.0e-6).dot(
@@ -749,120 +757,185 @@ class MagneticModel:
 
         return (js, deltaJ, model_chi, 1.0)
 
-    def bound_inequalities(self, confs, energs, err_energs=0.01):
+    def bound_inequalities(self, confs, energs, err_energs=0.01, rtol=1.0e-3):
         """
-        Compute the compatibility regions for the coupling constants
+        Compute the compatibility regions for the coupling constants.
+
+        Returns a list of tuples (v, offset, delta), one for each direction
+        in the space of couplings that is determined by the equations, such
+        that the compatibility region satisfies
+
+            |v . J - offset| <= delta.
+
+        v is normalized so that its largest component is 1 in absolute
+        value. Directions associated to singular values smaller than
+        rtol times the largest one are considered undetermined and
+        skipped. Returns [] if the model is incompatible.
+
+        The constraints follow from projecting the ellipsoid
+        |A.(J - J_ls)|^2 <= N err^2 - |r|^2, which contains the
+        compatibility region, onto the right singular vectors of A.
         """
-        print("confs: ", confs)
-        print("energs: ", energs)
-        print("err: ", err_energs)
         coeffs = self.coefficient_matrix(confs, normalizar=True)
-        u, singularvalues, vh = np.linalg.svd(coeffs)
-        s0 = singularvalues[0]
-        resolvent = []
-        vhr = []
-        for i, si in enumerate(singularvalues):
-            if si / s0 < 1e-3:
-                break
-            resolvent.append(u[:, i] / si)
-            vhr.append(vh[i])
-        vh = np.array(vhr)
-        vhr = None
-        j0s = np.array(vh).transpose().dot(np.array(resolvent).dot(energs))
-        err = (
-            len(energs) * err_energs**2
-            - np.linalg.norm(energs - coeffs.dot(j0s)) ** 2
-        )
+        energs = np.asarray(energs, dtype=float)
+        # The columns of the couplings are centered, so they are orthogonal
+        # to the (constant) column of the base energy: the base energy
+        # decouples exactly, and we can work only with the couplings.
+        rcoeffs = coeffs[:, :-1]
+        if rcoeffs.shape[1] == 0:
+            return []
+        u, singularvalues, vh = np.linalg.svd(rcoeffs, full_matrices=False)
+        if singularvalues[0] <= 0:
+            return []
+        k = int(np.sum(singularvalues > rtol * singularvalues[0]))
+        u, singularvalues, vh = u[:, :k], singularvalues[:k], vh[:k]
+        # Least squares solution for the couplings, and residual of the
+        # full system (the base energy is fitted by the mean energy).
+        j0s = vh.T.dot(u.T.dot(energs) / singularvalues)
+        residual = rcoeffs.dot(j0s) - (energs - np.mean(energs))
+        err = len(energs) * err_energs**2 - residual.dot(residual)
         if err < 0:
             return []
-
         err = np.sqrt(err)
+
         ineqs = []
-        for i, v in enumerate(vh):
-            # singular vector associated to the energy must be skipped
-            if abs(v[-1] - 1) < 1.0e-9:
-                continue
-            offset = v.dot(j0s)
-            delta = err / singularvalues[i]
-            v = v[:-1]
-            maxcoeff = max(abs(v))
-            ineq = (v / maxcoeff, offset / maxcoeff, delta / maxcoeff)
-            ineqs.append(ineq)
+        for v, s_val in zip(vh, singularvalues):
+            maxcoeff = v[np.argmax(np.abs(v))]  # keeps a canonical sign
+            ineqs.append(
+                (v / maxcoeff, v.dot(j0s) / maxcoeff, err / s_val / abs(maxcoeff))
+            )
         return ineqs
 
-    def montecarlo_box(self, coeffs, energs, tol, numtry=1000, sizefactor=1.0):
+    def exact_box(self, coeffs, energs, tol):
         """
-        Build an error box by Monte Carlo sampling parameters.
+        Exact bounding box of the compatibility region
+
+            P = {j : max_i |(coeffs . j - energs)_i| <= tol},
+
+        computed by linear programming (see tools.compatibility_box).
+
+        Returns (js, d_js, model_chi, 1.0) with the same conventions as
+        montecarlo_box: js is the center of the box, d_js its half widths
+        (nan for undetermined parameters, -1 for all of them if the model
+        is incompatible), and model_chi the normalized residual of the
+        least squares solution.
         """
-        numcalc = len(energs)
-        numparm = len(coeffs[0])
-        issingular = False
-        # Check that the number of equations is equal or large than the
-        # number of parameters to be determined. Otherwise, add trivial
-        # equations.
-        if numparm > numcalc:
-            coeffs = np.array(list(coeffs) + [np.zeros(numparm)] * (numparm - numcalc))
-            energs = np.array(list(energs) + [0.0] * (numparm - numcalc))
+        coeffs = np.asarray(coeffs, dtype=float)
+        energs = np.asarray(energs, dtype=float)
+        j_ls = np.linalg.lstsq(coeffs, energs, rcond=None)[0]
+        model_chi = (coeffs.dot(j_ls) - energs) / tol
+        box = compatibility_box(coeffs, energs, tol)
+        if box is None:
+            logger.warning("The model is incompatible with the energies.")
+            return j_ls, -np.ones(len(j_ls)), model_chi, 0.0
+        lower, upper = box
+        determined = np.isfinite(lower) & np.isfinite(upper)
+        js = np.zeros(len(lower))
+        d_js = np.full(len(lower), np.nan)
+        js[determined] = 0.5 * (upper[determined] + lower[determined])
+        d_js[determined] = 0.5 * (upper[determined] - lower[determined])
+        return js, d_js, model_chi, 1.0
 
-        # Look for the singular value decomposition
-        u, sv, v = la.svd(coeffs, full_matrices=True, compute_uv=True)
-        # Check if the system is determined and discard vanishing
-        # singular values/vectors.
-        k = len(sv)
-        svr = np.array(list(sv))
-        if svr[-1] < 1.0e-6:
-            issingular = True
-            while svr[-1] < 1.0e-6:
-                svr = svr[:-1]
-                k = k - 1
+    def montecarlo_box(
+        self, coeffs, energs, tol, numtry=1000, sizefactor=1.0, rng=None
+    ):
+        """
+        Estimate the bounding box of the compatibility region
 
-        ur = u[:, :k]
-        vr = v[:k]
-        # center of the elliptical region
-        j0s = vr.transpose().dot((1.0 / svr) * (ur.transpose().dot(energs)))
-        e0s = coeffs.dot(j0s)
-        esqerr = la.norm(e0s - energs)
-        scale = sizefactor * (numcalc * tol**2 - esqerr**2) / np.sqrt(4.0 * numparm)
-        if scale <= 0:
-            print("scale < 0. Model is incompatible")
-            return (
-                j0s,
-                np.array([-1 for j in j0s]),
-                (e0s - energs)[:numcalc] / tol,
-                0.0,
+            P = {j : max_i |(coeffs . j - energs)_i| <= tol}
+
+        by rejection sampling.
+
+        Since |v|_2^2 <= N |v|_inf^2, P is contained in the ellipsoid
+
+            |coeffs . (j - j_ls)|^2 <= N tol^2 - |r|^2 = R^2,
+
+        where j_ls is the least-squares solution and r its residual
+        (r is orthogonal to the image of coeffs). Points are drawn
+        uniformly inside that ellipsoid and kept if they belong to P, so
+        the accepted points are uniformly distributed in P. Everything
+        scales linearly with (energs, tol): the result does not depend on
+        the energy units, and the acceptance rate is the volume ratio
+        vol(P) / vol(ellipsoid).
+
+        Parameters
+        ----------
+        coeffs : (N, p) array, coefficient matrix.
+        energs : (N,) array, energies.
+        tol : float, maximum admissible error in each energy.
+        numtry : int, number of sampled points.
+        sizefactor : float, scale of the sampling ellipsoid relative to the
+            one that is guaranteed to contain P. Values < 1 may miss parts
+            of P; values > 1 only lower the acceptance rate.
+        rng : None, int or numpy.random.Generator, source of randomness.
+
+        Returns
+        -------
+        (js, d_js, model_chi, acceptance_rate)
+
+        js : center of the box. Undetermined parameters are set to 0.
+        d_js : half widths of the box (np.nan for undetermined
+               parameters, -1 for all of them if the model is incompatible).
+        model_chi : (coeffs . js_ls - energs) / tol, with js_ls the least
+               squares solution.
+        acceptance_rate : fraction of accepted points.
+        """
+        rng = np.random.default_rng(rng)
+        coeffs = np.asarray(coeffs, dtype=float)
+        energs = np.asarray(energs, dtype=float)
+        numcalc, numparm = coeffs.shape
+
+        # Work in the row space of coeffs: directions in its kernel are not
+        # determined by the equations.
+        u, sv, vh = la.svd(coeffs, full_matrices=False)
+        k = int(np.sum(sv > 1.0e-6))
+        u, sv, vh = u[:, :k], sv[:k], vh[:k]
+        # A parameter is determined iff its axis lies in the row space.
+        determined = np.linalg.norm(vh, axis=0) > 1.0 - 1.0e-6
+
+        # Least squares solution (minimal norm) and its residual.
+        j_ls = vh.T.dot(u.T.dot(energs) / sv)
+        residual = coeffs.dot(j_ls) - energs
+        model_chi = residual / tol
+        radius2 = numcalc * tol**2 - residual.dot(residual)
+
+        def incompatible(msg):
+            logger.warning(msg)
+            return j_ls, -np.ones(numparm), model_chi, 0.0
+
+        if radius2 <= 0 or k == 0:
+            return incompatible("The model is incompatible with the energies.")
+
+        # Uniform samples in the unit k-ball: Gaussian direction, radius
+        # distributed as U^(1/k). Then map them onto the ellipsoid.
+        z = rng.normal(size=(numtry, k))
+        z /= np.linalg.norm(z, axis=1, keepdims=True)
+        z *= rng.random(numtry)[:, None] ** (1.0 / k)
+        radius = sizefactor * np.sqrt(radius2)
+        samples = j_ls + (radius * z / sv).dot(vh)
+        samples = np.vstack([samples, j_ls])
+
+        accepted = samples[
+            np.max(np.abs(samples.dot(coeffs.T) - energs), axis=1) <= tol
+        ]
+        rate = len(accepted) / (numtry + 1.0)
+        logger.info("Monte Carlo acceptance rate=%s", rate)
+
+        if len(accepted) == 0:
+            return incompatible(
+                "No compatible point was found: the model seems "
+                "incompatible. Try with a larger number of points."
             )
-        v = v.transpose()
-        k = len(sv)
-        ur = None
-        vr = None
-        svr = None
 
-        # Generate the random set on the elliptic upper bound
-        jtrys = np.array(
-            [rnd.normal(0, 1, numtry) / max(s / scale, 1.0e-9) for s in sv]
-        )
-        jtrys = v.dot(jtrys).transpose()
-        # If the Minumum Square point is compatible,
-        # we add it to the random set
-        if max(abs(energs - e0s)) < tol:
-            jtrys = np.array([j0s + j for j in jtrys] + [j0s])
+        if len(accepted) == 1:
+            logger.info("errors estimated by boxing the ellipse")
+            js = j_ls.copy()
+            d_js = np.array(box_ellipse(coeffs, np.sqrt(radius2)))
         else:
-            jtrys = np.array([j0s + j for j in jtrys])
-        # We keep just the compatible points
-        jtrys = jtrys[np.array([max(abs(coeffs.dot(j) - energs)) < tol for j in jtrys])]
-
-        # It it resuls incompatible, show a warning.
-        if len(jtrys) == 0:
-            print(
-                "model seems incompatible. Try with a larger "
-                + "number of points or a different sizefactor."
-            )
-            return (
-                j0s,
-                np.array([-1 for j in j0s]),
-                (e0s - energs)[:numcalc] / tol,
-                0.0,
-            )
+            lower = accepted.min(axis=0)
+            upper = accepted.max(axis=0)
+            js = 0.5 * (upper + lower)
+            d_js = 0.5 * (upper - lower)
 
         if len(jtrys) == 1:
             print("errors  estimated by boxing the  ellipse")
@@ -899,11 +972,13 @@ class MagneticModel:
 
     def save_cif(self, filename, bond_names=None):
         """Save the model in a CIF file"""
-        bravais_vectors = self.lattice_properties["bravais_vectors"]
+        bravais_vectors = [
+            np.asarray(v, dtype=float) for v in self.lattice_properties["bravais_vectors"]
+        ]
         if bond_names is None:
             bond_names = tuple(self.bonds)
         msg = "save cif" + filename
-        logging.info(msg)
+        logger.info(msg)
         model_name = "data_magnetic_model_1"
 
         symmetries = self.lattice_properties.get("symmetries") or []
@@ -947,15 +1022,17 @@ _chemical_name_common                  """
             elif len(bravais_vectors) == 2:
                 a_norm = np.linalg.norm(bravais_vectors[0])
                 b_norm = np.linalg.norm(bravais_vectors[1])
-                gamma = round(
-                    180
-                    / 3.1415926
-                    * bravais_vectors[0].dot(bravais_vectors[1])
-                    / (a_norm * b_norm)
+                gamma = float(
+                    np.degrees(
+                        np.arccos(
+                            bravais_vectors[0].dot(bravais_vectors[1])
+                            / (a_norm * b_norm)
+                        )
+                    )
                 )
                 fileout.write("_cell_length_a \t\t\t" + str(a_norm) + "\n")
                 fileout.write("_cell_length_b \t\t\t" + str(b_norm) + "\n")
-                fileout.write("_cell_length_gamma \t\t\t" + str(gamma) + "\n\n")
+                fileout.write("_cell_length_gamma \t\t\t" + str(round(gamma, 6)) + "\n\n")
                 fileout.write(
                     "loop_\n _space_group_symop_operation_xyz" + "\n" + symop_lines + "\n\n"
                 )
@@ -964,33 +1041,37 @@ _chemical_name_common                  """
                 a_norm = np.linalg.norm(bravais_vectors[0])
                 b_norm = np.linalg.norm(bravais_vectors[1])
                 c_norm = np.linalg.norm(bravais_vectors[2])
-                gamma = round(
-                    180
-                    / 3.1415926
-                    * np.arccos(
-                        bravais_vectors[0].dot(bravais_vectors[1]) / (a_norm * b_norm)
+                gamma = float(
+                    np.degrees(
+                        np.arccos(
+                            bravais_vectors[0].dot(bravais_vectors[1])
+                            / (a_norm * b_norm)
+                        )
                     )
                 )
-                alpha = round(
-                    180
-                    / 3.1415926
-                    * np.arccos(
-                        bravais_vectors[0].dot(bravais_vectors[2]) / (a_norm * c_norm)
+                # alpha: angle between b and c; beta: angle between a and c.
+                alpha = float(
+                    np.degrees(
+                        np.arccos(
+                            bravais_vectors[1].dot(bravais_vectors[2])
+                            / (b_norm * c_norm)
+                        )
                     )
                 )
-                beta = round(
-                    180
-                    / 3.1415926
-                    * np.arccos(
-                        bravais_vectors[1].dot(bravais_vectors[2]) / (c_norm * b_norm)
+                beta = float(
+                    np.degrees(
+                        np.arccos(
+                            bravais_vectors[0].dot(bravais_vectors[2])
+                            / (a_norm * c_norm)
+                        )
                     )
                 )
                 fileout.write("_cell_length_a \t\t\t" + str(a_norm) + "\n")
                 fileout.write("_cell_length_b \t\t\t" + str(b_norm) + "\n")
                 fileout.write("_cell_length_c \t\t\t" + str(c_norm) + "\n")
-                fileout.write("_cell_angle_alpha \t\t\t" + str(alpha) + "\n")
-                fileout.write("_cell_angle_beta \t\t\t" + str(beta) + "\n")
-                fileout.write("_cell_angle_gamma \t\t\t" + str(gamma) + "\n\n")
+                fileout.write("_cell_angle_alpha \t\t\t" + str(round(alpha, 6)) + "\n")
+                fileout.write("_cell_angle_beta \t\t\t" + str(round(beta, 6)) + "\n")
+                fileout.write("_cell_angle_gamma \t\t\t" + str(round(gamma, 6)) + "\n\n")
                 fileout.write(
                     "loop_\n _space_group_symop_operation_xyz" + "\t\t\t\n" + symop_lines + "\n\n"
                 )
@@ -1009,16 +1090,19 @@ _chemical_name_common                  """
                 + "_atom_site_type_symbol\n"
             )
 
-            coord_atoms =  self.site_properties["coord_atomos"]
-            if len(coord_atoms)!=0:
-                bravais_coords = coord_atoms.dot(
-                    np.linalg.inv(np.array(bravais_vectors))
+            coord_atoms = np.asarray(self.site_properties["coord_atomos"], dtype=float)
+            if len(coord_atoms) != 0 and len(bravais_vectors) > 0:
+                # pinv handles 1D/2D lattices (non-square basis) as well.
+                bravais_coords = coord_atoms.dot(np.linalg.pinv(np.array(bravais_vectors)))
+                # CIF always expects three fractional coordinates.
+                bravais_coords = np.pad(
+                    bravais_coords, ((0, 0), (0, 3 - bravais_coords.shape[1]))
                 )
             else:
-                bravais_coords = np.array([])
+                bravais_coords = np.zeros((len(coord_atoms), 3))
 
             magnetic_species = self.site_properties["magnetic_species"]
-            print("magnetic species", magnetic_species)
+            logger.debug("magnetic species %s", magnetic_species)
             g_lande_factors = self.site_properties["g_lande_factors"]
             spin_repr = self.site_properties["spin_repr"]
             for i, pos in enumerate(bravais_coords):
@@ -1046,7 +1130,7 @@ _chemical_name_common                  """
                 for k, bond_name in enumerate(self.bonds):
                     bond_list = self.bonds[bond_name]["bonds"]
                     distance = self.bonds[bond_name]["distance"]
-                    print(k, " bondlist: ", bond_list)
+                    logger.debug("%s bond list: %s", k, bond_list)
                     for src, dest, offset in bond_list:
                         line = (
                             f"{magnetic_species[src]}{src+1}\t"

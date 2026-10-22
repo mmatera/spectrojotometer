@@ -3,6 +3,7 @@
 Find Dialog
 """
 
+import logging
 from tkinter import (
     END,
     LEFT,
@@ -18,6 +19,8 @@ from tkinter import (
     Y,
     messagebox,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class FindDialog(Toplevel):
@@ -85,7 +88,7 @@ class FindDialog(Toplevel):
         self.edt.tag_configure("search", background="green")
 
         targettxt = self.findstring.get()
-        print("looking for " + targettxt)
+        logger.debug("looking for %s", targettxt)
         if targettxt == "":
             return
         count_var = StringVar()

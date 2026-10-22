@@ -7,6 +7,7 @@ import logging
 import os
 import sys
 import tempfile
+import traceback
 
 #  from visualbond.dialogs.finddialog import FindDialog
 import webbrowser
@@ -35,6 +36,7 @@ from tkinter import (
     Menu,
     OptionMenu,
     PanedWindow,
+    PhotoImage,
     Radiobutton,
     StringVar,
     Tk,
@@ -58,8 +60,11 @@ from spectrojotometer.model_io import confindex, magnetic_model_from_file
 
 from .dialogs import FindDialog
 from .importconfig import ImportConfigWindow
+from .log_panel import LogPanel
 from .markers import textmarkers
 from .validators import show_number, validate_float, validate_pinteger
+
+logger = logging.getLogger(__name__)
 
 #logofilename = resource_filename(spectrojotometer_name, "logo.gif")
 #print(logofilename)
@@ -77,14 +82,19 @@ QUOTE = """#  BONDS GENERATOR 0.0:
 class ApplicationGUI:
     """User Interface - Main window"""
 
-    def __init__(self, root=Tk()):
+    def __init__(self, root=None):
+        if root is None:
+            root = Tk()
         self.pages = {}
-        self.application_title = "Visualbond 0.2"
+        self.application_title = "Visualbond " + spectrojotometerversion
         self.model = None
         self.configurations = ([], [], [])
         self.chisvals = None
         self.root = root
-        logging.info(ttk.Style().theme_use("classic"))
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+        self.root.geometry(f"{screen_width}x{screen_height}")
+        logger.debug("Tk theme: %s", ttk.Style().theme_use("classic"))
         # Creating a Font object of "TkDefaultFont"
         self.defaultFont = font.nametofont("TkDefaultFont")
         self.textFont = font.nametofont("TkTextFont")
@@ -108,7 +118,8 @@ class ApplicationGUI:
             #                           weight=font.BOLD
         )
 
-        # self.logo = PhotoImage(file=logofilename)
+
+#        self.logo = PhotoImage(file=logofilename)
         self.vcmdi = (
             self.root.register(validate_pinteger),
             "%d",
@@ -131,7 +142,7 @@ class ApplicationGUI:
             "%V",
             "%W",
         )
-        self.root.title("Bonds generator 0.2")
+        self.root.title(self.application_title)
         self.datafolder = os.getcwd()
         self.primitive_cell_var = BooleanVar(value=False)
         self.tmpmodel = tempfile.NamedTemporaryFile(mode="w", suffix=".cif")
@@ -185,13 +196,11 @@ class ApplicationGUI:
         )
         self.statusbar.pack(side=BOTTOM, fill=X)
 
-        old_stdout = sys.stdout
-        sys.stdout = self
-        sys.stderr = self
-        logging.info("Hola!")
+        # Messages from the library and the GUI go to the status panel.
+        self.log_panel = LogPanel(self.root, self.status)
+        self.root.report_callback_exception = self.report_callback_exception
         self.root.mainloop()
-        sys.stdout = old_stdout
-        logging.info("bye bye!")
+        self.log_panel.close()
 
 
         
@@ -261,6 +270,12 @@ class ApplicationGUI:
             label="Clean log",
             command=lambda: self.status.delete("1.0", END),
             accelerator="<Control+b>",
+        )
+        self.verbose_log = BooleanVar(value=False)
+        editmenu.add_checkbutton(
+            label="Detailed log messages",
+            variable=self.verbose_log,
+            command=self.toggle_verbose_log,
         )
 
         helpmenu = Menu(self.menu)
@@ -368,7 +383,7 @@ class ApplicationGUI:
             row,
             self.outputformat,
             "plain",
-            "latex",
+            "LaTeX",
             "Wolfram",
             command=self.print_full_equations,
         )
@@ -438,31 +453,27 @@ class ApplicationGUI:
 
         row = LabelFrame(controls1, text="Error bound method", width=8, padx=5, pady=5)
         framemethod = Frame(row)
-        bemode = BooleanVar()
-        self.parameters["page3"]["usemc"] = bemode
+        bemode = StringVar(value="exact")
+        self.parameters["page3"]["method"] = bemode
 
-        def enable_mcparams_inputs():
-            self.nummcsteps.config(state="normal")
-            self.mcsizefactor.config(state="normal")
+        def update_mcparams_inputs():
+            state = "normal" if bemode.get() == "montecarlo" else "disabled"
+            self.nummcsteps.config(state=state)
+            self.mcsizefactor.config(state=state)
 
-        def disable_mcparams_inputs():
-            self.nummcsteps.config(state="disabled")
-            self.mcsizefactor.config(state="disabled")
-
-        Radiobutton(
-            framemethod,
-            text="Quadratic bound",
-            variable=bemode,
-            value=False,
-            command=disable_mcparams_inputs,
-        ).pack(side=TOP)
-        Radiobutton(
-            framemethod,
-            text="Monte Carlo",
-            variable=bemode,
-            value=True,
-            command=enable_mcparams_inputs,
-        ).pack(side=TOP)
+        for text, value in (
+            ("Exact box (linear programming)", "exact"),
+            ("Monte Carlo (inner estimate)", "montecarlo"),
+            ("Quadratic bound (outer estimate)", "ellipse"),
+        ):
+            Radiobutton(
+                framemethod,
+                text=text,
+                variable=bemode,
+                value=value,
+                command=update_mcparams_inputs,
+                anchor="w",
+            ).pack(side=TOP, fill=X)
         self.mcparams = Frame(framemethod)
         rowmc = Frame(self.mcparams)
         Label(rowmc, text="Num Samples:").pack(side=LEFT)
@@ -479,7 +490,7 @@ class ApplicationGUI:
         self.mcsizefactor.pack(side=LEFT)
         rowmc.pack(side=TOP)
         self.mcparams.pack(side=TOP)
-        bemode.set(True)
+        update_mcparams_inputs()
         self.parameters["page3"]["mcsteps"] = self.nummcsteps
         self.parameters["page3"]["mcsizefactor"] = self.mcsizefactor
         framemethod.pack(side=TOP, fill=X)
@@ -492,8 +503,8 @@ class ApplicationGUI:
             row,
             self.outputformat,
             "plain",
-            "latex",
-            "wolfram",
+            "LaTeX",
+            "Wolfram",
             command=self.print_full_equations,
         )
         optformat.pack(side=LEFT, fill=X)
@@ -593,7 +604,7 @@ class ApplicationGUI:
             padx=5,
             pady=5,
         )
-        OptionMenu(ctrl, self.outputformat, "Plain", "Latex", "Wolfram").pack(
+        OptionMenu(ctrl, self.outputformat, "Plain", "LaTeX", "Wolfram").pack(
             side=TOP, fill=X
         )
         btn = Button(ctrl, text="Evaluate couplings")
@@ -626,7 +637,7 @@ class ApplicationGUI:
         rightpanel.pack(side=RIGHT, fill=BOTH)
 
     def about(self):
-        aboutmsg = "Visualbond  " + "Version 0.2 - 2024\n"
+        aboutmsg = "Visualbond  " + "Version " + spectrojotometerversion + "\n"
         aboutmsg += "Python " + sys.version + "\n\n"
         aboutmsg += "spectrojotometer v. " + str(spectrojotometerversion) + "\n"
         aboutmsg += "tkinter v. " + str(TkVersion) + "\n"
@@ -635,8 +646,20 @@ class ApplicationGUI:
         aboutmsg += "See condmat-ph/... "
         messagebox.showinfo("About", aboutmsg)
 
-    def print_status(self, msg):
-        logging.info(msg)
+    def print_status(self, msg, level=logging.INFO):
+        """Show a message in the status panel."""
+        logger.log(level, msg)
+
+    def report_callback_exception(self, exc, val, tb):
+        """Errors in Tk callbacks: show them in the panel and the terminal."""
+        logger.error("%s: %s", exc.__name__, val, exc_info=(exc, val, tb))
+        traceback.print_exception(exc, val, tb, file=sys.stderr)
+
+    def toggle_verbose_log(self):
+        """Switch the status panel between normal and detailed messages."""
+        self.log_panel.set_level(
+            logging.DEBUG if self.verbose_log.get() else logging.INFO
+        )
 
     def open_model(self, *_):
         filename = fdlg.askopenfilename(
@@ -703,7 +726,7 @@ class ApplicationGUI:
             filetypes=(("spin list", "*.spin"), ("all files", "*.*")),
         )
         if len(filename) == 0:
-            logging.info("opening cancelled.")
+            logger.info("opening cancelled.")
             return
 
         self.datafolder = str(Path(filename).parent)
@@ -718,7 +741,7 @@ class ApplicationGUI:
         self.reload_configs(src_widget=self.spinconfigs)
         self.statusbar.config(text="config loaded")
         self.nb.select(1)
-        logging.info("... done")
+        logger.info("Configurations loaded from %s", filename)
 
     def save_model(self):
         datafolder = self.datafolder
@@ -729,7 +752,7 @@ class ApplicationGUI:
         )
         if filename == "":
             return
-        logging.info(filename.__repr__())
+        logger.info("Saving model to %s", filename)
         if filename == "":
             return
 
@@ -760,11 +783,11 @@ class ApplicationGUI:
         self.statusbar.config(text="configurations saved.")
 
     def print_full_equations(self, ev=None):
-        eqformat = self.outputformat.get()
+        eqformat = self.outputformat.get().lower()
         if ev is None or isinstance(ev, str):
-            logging.info("print_full_equation called without event")
+            logger.debug("print_full_equation called without event")
         else:
-            logging.info(ev.widget)
+            logger.debug("print_full_equation: %s", ev.widget)
             self.reload_configs(ev)
 
         confs = self.configurations[1]
@@ -870,14 +893,14 @@ class ApplicationGUI:
         #        f.write(row)
 
         self.print_full_equations()
-        logging.info("updating window")
+        logger.debug("updating window")
         if spinconfigs == self.spinconfigs:
             self.spinconfigsenerg.delete(1.0, END)
             self.spinconfigsenerg.insert(END, conftxt)
         else:
             self.spinconfigs.delete(1.0, END)
             self.spinconfigs.insert(END, conftxt)
-        logging.info("listo...")
+        logger.debug("configurations reloaded")
 
     def reload_model(self, ev):
         self.print_status("reload model")
@@ -944,7 +967,7 @@ class ApplicationGUI:
         labels = [str(confindex(c)) for c in newconfs]
         energs = [self.configurations[0][full_labels.index(label)] for label in labels]
         # self.configs=([float("nan") for i in newconfs], newconfs, labels)
-        # eq_format = self.outputformat.get()
+        # eq_format = self.outputformat.get().lower()
         self.spinconfigs.insert(END, "\n#  Subset of optimal configurations. ")
         self.spinconfigs.insert(END, "sqrt(l)/||A^-1|| " + str(cn) + ": \n")
         for idx, nc in enumerate(newconfs):
@@ -984,7 +1007,7 @@ class ApplicationGUI:
         )
         labels = [str(confindex(c)) for c in newconfs]
         # self.configs=([float("nan") for i in newconfs], newconfs, labels)
-        eqformat = self.outputformat.get()
+        eqformat = self.outputformat.get().lower()
         self.spinconfigs.insert(END, "\n#  New configurations. ")
         self.spinconfigs.insert(
             END,
@@ -1034,21 +1057,22 @@ class ApplicationGUI:
 
     def evaluate_couplings(self):
         """Evaluate the couplings"""
-        bond_names = list(self.model.bonds)
         if self.model is None:
             messagebox.showerror("Error", "Model was not loaded.\n")
             return
+        bond_names = list(self.model.bonds)
 
         self.reload_configs(src_widget=self.spinconfigsenerg)
 
         tolerance = float(self.parameters["page3"]["Energy tolerance"].get())
-        usemc = self.parameters["page3"]["usemc"].get()
+        method = self.parameters["page3"]["method"].get()
+        usemc = method == "montecarlo"
         mcsteps = int(self.parameters["page3"]["mcsteps"].get())
         mcsizefactor = float(self.parameters["page3"]["mcsizefactor"].get())
         confs = []
         energs = []
-        fmt = self.outputformat.get()
-        logging.info("\n**Evaluating couplings")
+        fmt = self.outputformat.get().lower()
+        logger.info("Evaluating couplings")
         for it, c in enumerate(self.configurations[1]):
             en = self.configurations[0][it]
             if en == en:
@@ -1064,26 +1088,33 @@ class ApplicationGUI:
                 "Number of known energies is "
                 + "not enough to determine all the couplings.",
             )
-            resparmtxt = ""
+            return
 
-        if usemc:
-            js, jerr, chis, ar = self.model.compute_couplings(
-                confs,
-                energs,
-                err_energs=tolerance,
-                montecarlo=True,
-                mcsteps=mcsteps,
-                mcsizefactor=mcsizefactor,
-            )
-        else:
-            js, jerr, chis, ar = self.model.compute_couplings(
-                confs, energs, err_energs=tolerance, montecarlo=False
-            )
+        js, jerr, chis, ar = self.model.compute_couplings(
+            confs,
+            energs,
+            err_energs=tolerance,
+            method=method,
+            mcsteps=mcsteps,
+            mcsizefactor=mcsizefactor,
+        )
 
         self.chisvals = chis
         offset_energy = js[-1]
-        js.resize(js.size - 1)
-        jmax = max(abs(js))
+        js = np.asarray(js[:-1])
+        jerr = np.asarray(jerr[:-1], dtype=float)
+        undetermined = np.isnan(jerr)
+        if np.any(undetermined):
+            self.print_status(
+                "The couplings "
+                + ", ".join(n for n, u in zip(bond_names, undetermined) if u)
+                + " are not determined by the known energies.",
+                level=logging.WARNING,
+            )
+        determined_js = np.abs(js[~undetermined])
+        jmax = np.max(determined_js) if len(determined_js) else 1.0
+        if jmax == 0:
+            jmax = 1.0
 
         resparmtxt = (
             "E"
@@ -1093,12 +1124,12 @@ class ApplicationGUI:
             + str(offset_energy)
             + "\n\n"
         )
-        if min(jerr) < 0:
+        if np.any(jerr < 0):
             self.print_status(
-                "Warning: error bounds suggest that the "
+                "Error bounds suggest that the "
                 + "model is not compatible with the data. "
-                + "Try increasing the tolerance by means "
-                + "of the parameter --tolerance [tol]."
+                + "Try increasing the energy tolerance.",
+                level=logging.WARNING,
             )
             incopatibletxt = (
                 textmarkers["open_comment"][fmt]
@@ -1141,6 +1172,19 @@ class ApplicationGUI:
                     )
         else:
             for i, val in enumerate(js):
+                if undetermined[i]:
+                    resparmtxt = (
+                        resparmtxt
+                        + bond_names[i]
+                        + " "
+                        + textmarkers["equal_symbol"][fmt]
+                        + " ? "
+                        + textmarkers["open_comment"][fmt]
+                        + " undetermined "
+                        + textmarkers["close_comment"][fmt]
+                        + "\n"
+                    )
+                    continue
                 resparmtxt = (
                     resparmtxt
                     + bond_names[i]
@@ -1245,12 +1289,6 @@ class ApplicationGUI:
         self.plotbutton.config(state=NORMAL)
         self.nb.tab(self.pages["page4"], state="normal")
 
-    def flush(self):
-        pass
-
-    def write(self, txt):
-        self.status.insert(END, txt)
-
     def curr_edit(self):
         page = self.nb.tab(self.nb.select())["text"]
 
@@ -1295,7 +1333,7 @@ class ApplicationGUI:
         countVar = StringVar()
         pos = edt.search("J1", "1.0", stopindex=END, count=countVar)
         if pos == "":
-            logging.info("Not found")
+            logger.info("Not found")
             return
         edt.tag_configure("search", background="green")
         edt.tag_add("search", pos, "%s + %sc" % (pos, countVar.get()))
@@ -1338,5 +1376,4 @@ class ApplicationGUI:
 
 
 if __name__ == "__main__":
-    ApplicationGUI()
     ApplicationGUI()

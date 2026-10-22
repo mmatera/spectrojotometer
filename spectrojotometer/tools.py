@@ -1,7 +1,9 @@
 """
 Tools used along the code.
 """
+import logging
 import re
+import sys
 
 import numpy as np
 
@@ -52,6 +54,37 @@ def split_cif_loop_line(line: str) -> list:
 
 
 
+
+def eprint(*args, **kwargs):
+    """print to stderr (used by the command line tools)."""
+    print(*args, file=sys.stderr, **kwargs)
+
+
+def add_verbosity_argument(parser):
+    """Add -v / --verbose (repeatable) to a command line parser."""
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Show progress messages (-v) or detailed diagnostics (-vv).",
+    )
+
+
+def setup_cli_logging(verbosity=0):
+    """
+    Configure logging for a command line tool.
+
+    Messages go to stderr, so they do not mix with the results printed
+    to stdout. Warnings are always shown; -v adds the progress messages
+    of spectrojotometer, and -vv its detailed diagnostics. Other
+    libraries stay at the warning level.
+    """
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
+    level = {0: logging.WARNING, 1: logging.INFO}.get(verbosity, logging.DEBUG)
+    logging.getLogger("spectrojotometer").setLevel(level)
+
+
 def box_ellipse(coeff_matrix, radius):
     """
     Determines the minimum edge half-length of the rectangular box
@@ -73,9 +106,50 @@ def box_ellipse(coeff_matrix, radius):
             gamma = a_perpinv.dot(right_sv)
             gamma = gamma.dot(right_sv)
             widths.append(radius / np.sqrt(a_matrix[i, i] - gamma))
-        except np.linalg.linalg.LinAlgError:
+        except np.linalg.LinAlgError:
             widths.append(1.0e300)
     return widths
+
+
+def compatibility_box(coeff_matrix, energies, tol):
+    """
+    Exact axis-aligned bounding box of the compatibility region
+
+        P = {x : max_i |(coeff_matrix . x - energies)_i| <= tol},
+
+    obtained by solving 2 * n_parameters linear programs.
+
+    Returns (lower, upper): arrays of length n_parameters. Coordinates
+    that are not determined by the equations (P unbounded along them)
+    get -inf / +inf. Returns None if P is empty (incompatible model).
+    """
+    # scipy is already a (transitive) dependency through pymatgen.
+    from scipy.optimize import linprog
+
+    a_matrix = np.asarray(coeff_matrix, dtype=float)
+    energies = np.asarray(energies, dtype=float)
+    numparm = a_matrix.shape[1]
+    # |A x - E|_inf <= tol  <=>  A x <= E + tol  and  -A x <= tol - E
+    a_ub = np.vstack([a_matrix, -a_matrix])
+    b_ub = np.concatenate([energies + tol, tol - energies])
+    lower = np.empty(numparm)
+    upper = np.empty(numparm)
+    for i in range(numparm):
+        for sign, out in ((1.0, lower), (-1.0, upper)):
+            cost = np.zeros(numparm)
+            cost[i] = sign
+            sol = linprog(
+                cost, A_ub=a_ub, b_ub=b_ub, bounds=(None, None), method="highs"
+            )
+            if sol.status == 2:  # infeasible
+                return None
+            if sol.status == 3:  # unbounded
+                out[i] = -sign * np.inf
+            elif sol.status == 0:
+                out[i] = sol.x[i]
+            else:
+                raise RuntimeError(f"compatibility_box: linprog failed ({sol.message})")
+    return lower, upper
 
 
 def normalize_configurations(configurations):

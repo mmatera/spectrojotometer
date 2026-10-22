@@ -16,7 +16,7 @@ Instalation:
 
 To install the package, just run
 
-python3 setup.py install
+pip install .
 
 
 Loading models: conventional vs. primitive cell
@@ -62,66 +62,210 @@ to recover the compact form afterwards other than starting again from
 the original CIF with the symmetry operators still declared.
 
 
+Estimating the couplings and their uncertainties
+================================================
+
+The effective model
+-------------------
+
+Each magnetic configuration is a list `σ = [σ_1, ..., σ_n]` with
+`σ_i ∈ {0, 1}` (spin up / down), and `s_i = 1 - 2 σ_i = ±1`. Its
+energy is modeled as
+
+    E(σ) = E_0 - Σ_k J_k Σ_{(i,j) ∈ bond k} s_i s_j
+
+so a positive `J_k` favours parallel alignment. The spin length is
+absorbed into the couplings: the `spin_repr` and `g_lande_factors` stored
+in the model are written back to CIF files, but they do not enter the fit.
+
+For a set of `M` configurations with computed energies `E`, this is a
+linear system `A · (J, E_0) = E`. `MagneticModel.coefficient_matrix(confs)`
+returns `A`, and `MagneticModel.compute_couplings` solves it.
+
+The compatibility region
+------------------------
+
+The DFT energies are only known within a tolerance `δE`. The couplings
+compatible with the data are those that reproduce **every** energy
+within that tolerance:
+
+    P = { J : max_i |(A·J - E)_i| ≤ δE }
+
+`P` is a convex polytope. The reported value of each coupling is the
+center of a box around `P`, and its error bar is the half width of that
+box. `compute_couplings` offers three ways to obtain the box, selected
+with the `method` argument:
+
+* `"exact"` (default): the exact bounding box of `P`, by linear
+  programming (the minimum and maximum of each `J_k` over `P`). It costs
+  `2K` small linear programs for `K` parameters: tens of milliseconds for
+  typical models.
+* `"montecarlo"`: points are drawn uniformly inside the ellipsoid
+  `|A·(J - J_LS)|² ≤ M δE² - |r|²`, which contains `P` (`J_LS` is the
+  least-squares solution and `r` its residual), and only those inside
+  `P` are kept. The box of the kept points is always **inside** the exact
+  one, and the underestimation grows with the number of couplings, as
+  the acceptance rate drops quickly. It is mainly useful to get a cloud
+  of compatible couplings.
+* `"ellipse"`: the bounding box of that ellipsoid, computed analytically.
+  It always **contains** the exact box.
+
+All three are invariant under a change of energy units: rescaling the
+energies and the tolerance by the same factor rescales the results by
+that factor.
+
+```python
+from spectrojotometer.model_io import (magnetic_model_from_file,
+                                       read_spin_configurations_file)
+
+model = magnetic_model_from_file("examples/example1.cif")
+energies, confs, labels = read_spin_configurations_file(
+    "examples/example1.spin", model)
+
+js, djs, chis, rate = model.compute_couplings(confs, energies, err_energs=1e-3)
+for name, j, dj in zip(model.bonds, js, djs):
+    print(name, "=", j, "+/-", dj)
+```
+
+`compute_couplings` returns four values:
+
+* `js`: the center of the box for each coupling, in the order of
+  `model.bonds`. The last entry is not `E_0` but the **average energy**
+  of the configurations: the coupling columns of `A` are centered, which
+  decouples the couplings from the base energy.
+* `djs`: the half widths of the box. A coupling that the configurations
+  do not determine (`P` is unbounded along it) gets `nan`, with its
+  value set to 0. If `P` is empty, i.e. no set of couplings reproduces
+  all the energies within `δE` and the model is incompatible with the
+  data, all the entries are `-1`.
+* `chis`: the residuals of the least-squares solution relative to the
+  tolerance, `(A·J_LS - E) / δE`. Values larger than 1 in absolute
+  value point to configurations that the model cannot reproduce.
+* `rate`: the Monte Carlo acceptance rate (`1.0` for the other methods,
+  `0.0` if the model is incompatible).
+
+Monte Carlo runs accept `mcsteps` (number of samples), `mcsizefactor`
+(scale of the sampling ellipsoid; keep it at 1) and `rng` (a seed or a
+`numpy.random.Generator`, for reproducible results). The exact box is
+also available directly as
+`spectrojotometer.tools.compatibility_box(A, E, δE)`.
+
+The older `montecarlo=True/False` argument is still accepted, and means
+`method="montecarlo"` / `method="ellipse"`.
+
+### Constraints on combinations of couplings
+
+The box only bounds each coupling separately. The region usually is
+elongated along some combinations of them, which are better determined
+than the individual couplings.
+`model.bound_inequalities(confs, energies, err_energs)` returns, for each
+direction determined by the data, a tuple `(v, center, half_width)`
+meaning
+
+    |v · J - center| ≤ half_width
+
+with `v` normalized so that its largest component is ±1. These
+constraints come from the same ellipsoid that contains `P`, so they are
+satisfied by every compatible set of couplings.
+
+
+Logging
+========
+
+spectrojotometer reports progress and diagnostics through the standard
+`logging` module, under the `spectrojotometer` logger (with one child
+logger per module, e.g. `spectrojotometer.magnetic_model`). It never
+prints diagnostics nor configures logging by itself: the application
+decides what to show and where. In a script, for instance:
+
+```python
+import logging
+
+logging.basicConfig(level=logging.WARNING)
+logging.getLogger("spectrojotometer").setLevel(logging.INFO)  # or DEBUG
+```
+
+Warnings report problems (e.g. a model incompatible with the energies,
+or bonds skipped while reading a CIF file), info messages report
+progress, and debug messages dump internal details (coefficient
+matrices, positions, bond lists).
+
+The command line tools print their results to stdout and show warnings
+on stderr; `-v` adds the progress messages and `-vv` the detailed
+diagnostics. In visualbond, the messages appear in the panel at the
+bottom of the window, and *Edit → Detailed log messages* shows the
+diagnostics too.
+
+
 Tools in the package and workflow:
 ==================================
 
 
 
-The package consists of these three command line programs:
+Installing the package provides these commands:
+
+* bond_generator, optimize-configurations and evaluate_cc,
+  described below, which form the basic workflow;
+* map_configs, which maps spin configurations between two models;
+* print_equations, which prints the equations of a set of
+  configurations in plain text, LaTeX or Wolfram format;
+* visualbond, the graphical interface.
+
+Each command accepts --help, and -v / -vv to show progress and
+diagnostic messages. They can also be run as
+python -m spectrojotometer.cli.<command> (with underscores).
 
 
 *) bond_generator: 
+
+   usage: bond_generator [-h] [-d [value]] [--rmin [value]] [--rmax [value]] [-v]
+                         modelfile outfile
 
    From an standard cif file, produces a new cif file containing information
    about the bonds that defines a Heisenberg magnetic effective model. If the
    input file has already information about bonds, the output file contains both
    the bonds in the input as well as the new generated bonds.
 
-
-   usage: bond_generator [-h] [--discretization [value]] [--rmin [value]]
-                         [--rmax [value]]
-                         ciffile outfile
-
-
    positional arguments:
-     ciffile               load atomic positions from a cif file
-     outfile               Name of the outputfile. If it is not provided, the
-                        output is printed to the standard output.
+     modelfile             load atomic positions from a model file. It can be
+                           specified by a cif or a Wien2k struct file
+     outfile               Name of the outputfile.
 
-   optional arguments:
+   options:
      -h, --help            show this help message and exit
-     --discretization [value]
-                             the tolerance in considering two distances as the
-                             same.
+     -d [value], --discretization [value]
+                           the tolerance in considering two distances as the
+                           same.
      --rmin [value]        the minimal distance between atoms of the bond
      --rmax [value]        the maximal distance between atoms of the bond
+     -v, --verbose         Show progress messages (-v) or detailed diagnostics
+                           (-vv).
 
 
 As an example, by run 
 
-   bond_generator.py  --rmin 0 --rmax 4.9 --discretization .02  example1.cif example1-nnn.cif
+   bond_generator --rmin 0 --rmax 4.9 --discretization .02  example1.cif example1-nnn.cif
 
    for the  example1.cif  file in the examples folder, example1-nnn.cif file is created. The model can be modified by hand
    by means of a plain text editor.
 
 
-*) optconfs
+*) optimize-configurations
+
+    usage: optimize-configurations [-h] [--known [known configuration file]]
+                                   [--start [start file]] [-n numconfs]
+                                   [-u updatesize] [--it iterations] [-v]
+                                   modelfile outfile
+
     Generate spin configurations to determine the coupling constants of a model
     with minimal condition number
-    
-    
-    usage: optconfs.py [-h] [--known [known configuration file]]
-                       [--start [start file]] [-n numconfs] [-u updatesize]
-                       [--it iterations]
-                       ciffile outfile
-    
-    
+
     positional arguments:
-      ciffile               load atomic positions from a cif file
-      outfile               Name of the outputfile. If it is not provided, the
-                            output is printed to the standard output.
-    
-    optional arguments:
+      modelfile             load atomic positions from a cif file
+      outfile               Name of the outputfile. If "-" is provided, the output
+                            is printed to the standard output.
+
+    options:
       -h, --help            show this help message and exit
       --known [known configuration file]
                             file with the set of configurations that we want to
@@ -132,98 +276,101 @@ As an example, by run
       -u updatesize         number of random configurations to be generate on each
                             step
       --it iterations       number of iterations
-    
-    
+      -v, --verbose         Show progress messages (-v) or detailed diagnostics
+                            (-vv).
+
 As an example, by run
 
-   optconfs  example1-nnn.cif optconfs1.out
+   optimize-configurations example1-nnn.cif optconfs1.out
    
    on the examples/example1-nnn.cif generated by bond_generator, the file optconfs1.out is created, containing a list
    of magnetic configurations from which energies the coefficient couplings can be estimated. The program also writes
    a recovery file example1-nnn-resume.tmp, which can be used to improve the magnetic configuration choice:
 
-   optconfs  --start example1-nnn-resume.tmp example1-nnn.cif optconfs1.out
+   optimize-configurations --start example1-nnn-resume.tmp example1-nnn.cif optconfs1.out
 
    If we want to know what would be most profiteable magnetic configurations to be simulated once we have already simulated 
    a given set of configurations, we run
 
-   optconfs  --known optconfs1.out example1-nnn-resume.tmp example1-nnn.cif optconfs2.out
+   optimize-configurations --known optconfs1.out example1-nnn-resume.tmp example1-nnn.cif optconfs2.out
 
    In this case, the program will try to provide the optimal configuration to be added to those in optconfs1.out.
    We can ask for an specific amount of new configurations throw the parameter -n.
 
 
-*) evaluate_cc 
+*) evaluate_cc
+
+    From a set of energies and magnetic configurations, estimates the
+    coupling constants of a model, with error bars given by a box around
+    the compatibility region (see "Estimating the couplings and their
+    uncertainties" above).
+
+    usage: evaluate_cc [-h] [-t [value]] [-m {exact,montecarlo,ellipse}]
+                       [--mcsteps [value]] [-e] [-x] [-v]
+                       modelfile [input file]
 
     From a set of energies and magnetic configurations, estimates the coupling
     constants of a model.
-    
-    
-    
-    usage: evaluate_cc.py [-h] [--tolerance [value]] [--showequations]
-                          ciffile [input file]
-    
-    
-    positional arguments:
-      ciffile              load atomic positions from a cif file.
-      [input file]         file containing evaluated energies and magnetic
-                           configurations.
-    
-    optional arguments:
-      -h, --help           show this help message and exit
-      --tolerance [value]  Provides the estimated error for the energies.
-      --showequations      Prints the resulting equations.
 
-    Notice that in the input file, each line consists on the energy
-    of a magnetic configuration, followed by the correspondent magnetic
-    configuration as a list [0,1,0,...]. Anything after a # is considerer
-    as a comment.
-    For example, a possible input file would be
-    
+    positional arguments:
+      modelfile             load atomic positions from a model file.
+      [input file]          file containing evaluated energies and magnetic
+                            configurations.
+
+    options:
+      -h, --help            show this help message and exit
+      -t [value], --tolerance [value]
+                            Provides the estimated error for the energies.
+      -m {exact,montecarlo,ellipse}, --method {exact,montecarlo,ellipse}
+                            How to bound the compatibility region: exact box by
+                            linear programming (default), Monte Carlo sampling
+                            (inner estimate) or the bounding box of an ellipsoid
+                            containing it (outer estimate).
+      --mcsteps [value]     Number of Monte Carlo samples (only with --method
+                            montecarlo).
+      -e, --equations       Prints the resulting equations.
+      -x, --showchi         Prints the list of errors in the predicted
+                            configuration energy.
+      -v, --verbose         Show progress messages (-v) or detailed diagnostics
+                            (-vv).
+
+    In the input file, each line consists of the energy of a magnetic
+    configuration, followed by the configuration as a list [0,1,0,...].
+    Anything after a # is considered a comment. Configurations whose
+    energy is nan are ignored. For example:
+
     # Energy  Configuration  Label
     143121.12   [0,0,0,0,0,0,0]  # Ferro up
     143121.02   [1,1,0,0,1,1,1]  # Disorder1
     143121.24   [1,0,1,1,1,1,0]  # Disorder2
     143121.12   [1,1,1,1,1,1,1]  # Ferro down
 
- 
+    Running, with the files in the examples folder,
 
-As an example, by run
+    evaluate_cc examples/example1.cif examples/example1.spin
 
-   evaluate_cc  example1-nnn.cif optconfs2-en.in 
+    prints (after some diagnostic messages)
 
-   we obtain
+    # Results (method: exact):
+    ===========
+    <E> =  49022.002225000004  (average energy of the configurations)
+    J0  = ( -1.0  +/- 2.2222222168326238 ) *  0.00022499999977299012
+    max relative error: 0.03333334461785853  in configuration  1
 
+    Each coupling is shown as (value +/- error) * scale, where the scale
+    is the largest coupling in absolute value. <E> is the average energy
+    of the configurations (see compute_couplings). Here the three
+    configurations do not determine J0 beyond the tolerance (the error
+    bar is larger than the value): more configurations, or a smaller
+    tolerance, are needed.
 
- Results:
-==========
-
-
-E_0 =  1022.8  +/-  0.001 
-
-J3  =  0.000307570720896 * 1022.8  +/- 0.00592942475367
-J2  =  -0.00107262742797 * 1022.8  +/- 0.00592942475367
-J4  =  0.00102985269196 * 1022.8  +/- 0.00592942475367
-J1  =  0.000721874592622 * 1022.8  +/- 0.00592942475367
-
-
- Error in Modeled Energy: 
-==========================
-
-
-34.1666666667
-170.833333333
-68.3333333335
-68.3333333329
-34.1666666666
-34.1666666666
-
-
-   an estimation of the coupling constants printed, according to the configurations and energies provided in the file optconfs2.in.
-   The program also prints the list of differences between the input energies and the energies evaluated by the magnetic model
-   for each configuration, relative to the tolerance. This is useful once we have a large enough number of evaluated configurations 
-   to check the validity of the effective magnetic model. If some differences result larger than 1, it implies that the proposed 
-   magnetic model is unable to reproduce the input spectrum.
+    With -x, the program also prints, for each configuration, the
+    difference between the input energy and the one predicted by the
+    model, relative to the tolerance. Once enough configurations have
+    been evaluated, this checks the validity of the effective model:
+    differences larger than 1 mean that the model cannot reproduce the
+    input spectrum. If no set of couplings reproduces all the energies
+    within the tolerance, the couplings are marked as (incompatible).
 
 
 

@@ -36,6 +36,8 @@ import numpy as np
 
 from spectrojotometer.model_io import magnetic_model_from_file
 
+logger = logging.getLogger(__name__)
+
 
 class ImportConfigWindow(Toplevel):
     """
@@ -125,7 +127,7 @@ class ImportConfigWindow(Toplevel):
                     ("all files", "*.*"),
                 ),
             )
-            print(filename)
+            logger.debug("model file: %s", filename)
             if filename == "":
                 return
             self.app.datafolder = str(Path(filename).parent)
@@ -141,7 +143,7 @@ class ImportConfigWindow(Toplevel):
                     "[other model]"
                 ),
             )
-            print("Updating menu")
+            logger.debug("updating menu")
             for key in self.models:
                 menu.add_command(
                     label=key,
@@ -163,10 +165,10 @@ class ImportConfigWindow(Toplevel):
             )
 
         for point in model2.cood_atomos:
-            print("\t", point)
+            logger.debug("\t%s", point)
 
         for k, point in enumerate(model1.supercell):
-            print("\t", k % len(model1.coord_atomos), "->", point)
+            logger.debug("\t%s -> %s", k % len(model1.coord_atomos), point)
         dictatoms = [-1 for p in model2.coord_atomos]
         for i, point1 in enumerate(model2.coord_atomos):
             for j, point2 in enumerate(model1.supercell):
@@ -183,20 +185,20 @@ class ImportConfigWindow(Toplevel):
 
     def send_to_application(self):
         """Sends the new configs to the application."""
-        logging.message("send_to_application")
+        logger.debug("send_to_application")
         self.app.spinconfigs.insert(
             END, "\n\n#  From " + self.selected_model.get() + "\n"
         )
         self.app.spinconfigs.insert(END, self.outputconfs.get(1.0, END))
         self.app.spinconfigs.insert(END, "\n" + 20 * "# " + "\n\n")
         self.app.reload_configs(src_widget=self.app.spinconfigs)
-        logging.message("done")
+        logger.debug("configurations sent to the application")
 
     def configs_from_file(self):
         """
         Read configs from a model
         """
-        logging.message("configs from file")
+        logger.debug("configs from file")
         if self.selected_model.get() == "[other model]":
             self.onmodelselect()
         filename = fdlg.askopenfilename(
@@ -210,7 +212,7 @@ class ImportConfigWindow(Toplevel):
         self.inputconfs.delete(1.0, END)
         with open(filename, "r") as filecfg:
             self.inputconfs.insert(END, "\n" + filecfg.read())
-        logging.message("   ///done")
+        logger.info("Configurations read from %s", filename)
 
     def map_confs(self):
         """Map configurations from a model to another model"""

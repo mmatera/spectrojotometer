@@ -1,13 +1,13 @@
-#!/usr/bin/env python3
 from __future__ import print_function
 
 import argparse
+import sys
 
 import numpy as np
 from spectrojotometer.magnetic_model import MagneticModel
 from spectrojotometer.model_io import (confindex, magnetic_model_from_file,
                                        read_spin_configurations_file)
-from spectrojotometer.tools import eprint
+from spectrojotometer.tools import add_verbosity_argument, eprint, setup_cli_logging
 
 
 def map_config_model1_model2(model1, config, model2, tol=0.1):
@@ -71,7 +71,9 @@ If the input file has already information about bonds, the output file contains 
         help="Name of the outputfile. If it is not provided, the output is printed to the standard output.",
     )
 
+    add_verbosity_argument(parser)
     args = vars(parser.parse_args())
+    setup_cli_logging(args["verbose"])
 
     if args["modelin"] is None:
         eprint(
@@ -113,4 +115,4 @@ If the input file has already information about bonds, the output file contains 
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

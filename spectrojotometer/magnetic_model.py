@@ -44,7 +44,7 @@ SYMBOLS = {
 }
 
 
-def supercell_iterator(supercell_size, coord_atomos, bravais_vectors):
+def supercell_iterator(supercell_size, atomic_positions, bravais_vectors):
     """Iterator over subcells in the supercell.
 
     supercell_size can be:
@@ -57,7 +57,7 @@ def supercell_iterator(supercell_size, coord_atomos, bravais_vectors):
 
     # If no bravais_vectors, the supercell is just the cell.
     if len(bravais_vectors) == 0:
-        yield ([], coord_atomos)
+        yield ([], atomic_positions)
         return
 
     # Normalise to a per-axis list, one entry per Bravais vector.
@@ -74,7 +74,7 @@ def supercell_iterator(supercell_size, coord_atomos, bravais_vectors):
     max_indx = n
     while True:
         offset = sum(coeff * v_b for coeff, v_b in zip(current, bravais_vectors))
-        yield (current[:], [site + offset for site in coord_atomos])
+        yield (current[:], [site + offset for site in atomic_positions])
         # Advance to next replica (mixed-radix counter)
         indx = 0
         while True:
@@ -88,14 +88,14 @@ def supercell_iterator(supercell_size, coord_atomos, bravais_vectors):
             indx += 1
 
 
-def build_supercell(supercell_size, coord_atomos, bravais_vectors):
+def build_supercell(supercell_size, atomic_positions, bravais_vectors):
     """Build a list of offsets for the supercell"""
 
     return np.array(
         [
             cell[1]
             for cell in supercell_iterator(
-                supercell_size, coord_atomos, bravais_vectors
+                supercell_size, atomic_positions, bravais_vectors
             )
         ]
     )
@@ -225,7 +225,7 @@ class MagneticModel:
         }
         self.bonds = _bonds_dict(bond_lists, bond_names, bond_distances)
 
-    def remover_bond_by_name(self, name):
+    def remove_bond_by_name(self, name):
         """
         Remove the bond with name <name>
         """
@@ -236,7 +236,14 @@ class MagneticModel:
             logger.warning(msg)
             return
 
-    remove_bond_by_name = remover_bond_by_name
+    def remover_bond_by_name(self, name):
+        """Deprecated: use remove_bond_by_name."""
+        warnings.warn(
+            "remover_bond_by_name is deprecated; use remove_bond_by_name",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.remove_bond_by_name(name)
 
     def generate_bonds(self, discretization, ranges, bond_names=None):
         """
@@ -248,7 +255,7 @@ class MagneticModel:
         """
         atom_type = self.site_properties["magnetic_species"]
         cell_size = self.lattice_properties["cell_size"]
-        coord_atomos = self.site_properties["coord_atomos"]
+        atomic_positions = self.site_properties["coord_atomos"]
         supercell_size = self.lattice_properties["supercell_size"]
         bonds = self.bonds
 
@@ -268,10 +275,10 @@ class MagneticModel:
         new_bonds = {}
         for supercell_idx, sites_sc in supercell_iterator(
             supercell_size,
-            coord_atomos,
+            atomic_positions,
             self.lattice_properties["bravais_vectors"],
         ):
-            for i, pos_i in enumerate(coord_atomos):
+            for i, pos_i in enumerate(atomic_positions):
                 for j, pos_j in enumerate(sites_sc):
                     logger.debug("pair %s, supercell %s", [i, j], supercell_idx)
                     rel_pos = pos_j - pos_i
@@ -367,12 +374,25 @@ class MagneticModel:
         print("\n\n# Equations: \n============\n\n")
         print(self.formatted_equations(coeff_matrix, ensname, comments, eq_format))
 
-    def coefficient_matrix(self, configs, normalizar=False):
+    def coefficient_matrix(self, configs, centered=False, normalizar=None):
         """
         Return the matrix defining the equation system
         connecting coupling constants with simulated energies
         for a given set of configurations configs.
+
+        If centered is True, the column of each coupling is shifted to
+        zero average, which makes it orthogonal to the last (constant)
+        column, the one of the base energy. normalizar is the deprecated
+        name of centered.
         """
+        if normalizar is not None:
+            warnings.warn(
+                "the normalizar argument of coefficient_matrix is deprecated; "
+                "use centered",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            centered = normalizar
         logger.debug("compute the coefficient matrix")
 
         rawcm = [
@@ -386,7 +406,7 @@ class MagneticModel:
         ]
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug("raw coefficient matrix:\n%s", "\n".join(str(row) for row in rawcm))
-        if normalizar:
+        if centered:
             coeff_matrix = [v - np.average(v) for v in rawcm]
         else:
             coeff_matrix = rawcm
@@ -700,13 +720,13 @@ class MagneticModel:
         """
 
         if printeqs:
-            coeffs = self.coefficient_matrix(confs, normalizar=False)
+            coeffs = self.coefficient_matrix(confs, centered=False)
             print("\n# Configurations:\n=================\n")
             for c in confs:
                 print(c)
             self.print_equations(coeffs)
 
-        coeffs = self.coefficient_matrix(confs, normalizar=True)
+        coeffs = self.coefficient_matrix(confs, centered=True)
 
         # The choice in the way the equation is written allows to decouple
         # the determination of the coupling constants from the base
@@ -772,7 +792,7 @@ class MagneticModel:
         |A.(J - J_ls)|^2 <= N err^2 - |r|^2, which contains the
         compatibility region, onto the right singular vectors of A.
         """
-        coeffs = self.coefficient_matrix(confs, normalizar=True)
+        coeffs = self.coefficient_matrix(confs, centered=True)
         energs = np.asarray(energs, dtype=float)
         # The columns of the couplings are centered, so they are orthogonal
         # to the (constant) column of the base energy: the base energy

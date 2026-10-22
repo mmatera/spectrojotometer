@@ -84,3 +84,30 @@ def test_symmetries_and_space_group():
     assert m.lattice_properties["symmetries"] == [{"op": 1}]
     assert m.lattice_properties["space_group_symbol"] == "P 1"
     assert model().lattice_properties["symmetries"] == []
+
+
+def test_coefficient_matrix_centered():
+    m = model(bond_lists=[[(0, 1, (0,))], [(0, 2, (0,))]], bond_distances=[1.0, 2.0])
+    confs = [[0, 0, 0], [0, 1, 0], [0, 0, 1], [0, 1, 1]]
+    raw = m.coefficient_matrix(confs)
+    centered = m.coefficient_matrix(confs, centered=True)
+    np.testing.assert_allclose(centered[:, :-1], raw[:, :-1] - raw[:, :-1].mean(axis=0))
+    np.testing.assert_allclose(centered[:, -1], 1.0)
+    np.testing.assert_allclose(m.coefficient_matrix(confs, True), centered)
+
+
+def test_coefficient_matrix_normalizar_is_deprecated():
+    m = model(bond_lists=[[(0, 1, (0,))]], bond_distances=[1.0])
+    confs = [[0, 0, 0], [0, 1, 0]]
+    with pytest.warns(DeprecationWarning, match="centered"):
+        old = m.coefficient_matrix(confs, normalizar=True)
+    np.testing.assert_allclose(old, m.coefficient_matrix(confs, centered=True))
+
+
+def test_remove_bond_by_name():
+    m = model(bond_lists=[[(0, 1, (0,))], [(0, 2, (0,))]])
+    m.remove_bond_by_name("J0")
+    assert list(m.bonds) == ["J1"]
+    with pytest.warns(DeprecationWarning, match="remove_bond_by_name"):
+        m.remover_bond_by_name("J1")
+    assert m.bonds == {}

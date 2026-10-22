@@ -112,7 +112,7 @@ def test_find_optimal_configurations_partial_info_is_reported():
 def test_compute_couplings_mcsteps_none():
     m = ring_model()
     confs = all_confs()
-    coeffs = m.coefficient_matrix(confs, normalizar=True)
+    coeffs = m.coefficient_matrix(confs, centered=True)
     energs = coeffs.dot(np.array([1.0, -0.5, 3.0]))
     js, dj, chi, rate = m.compute_couplings(confs, energs, err_energs=0.01)
     assert np.allclose(js[:2], [1.0, -0.5], atol=0.05)

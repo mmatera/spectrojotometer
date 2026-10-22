@@ -1124,7 +1124,7 @@ class ApplicationGUI:
                 + "Try increasing the energy tolerance.",
                 level=logging.WARNING,
             )
-            incopatibletxt = (
+            incompatible_text = (
                 textmarkers["open_comment"][fmt]
                 + " incompatible "
                 + textmarkers["close_comment"][fmt]
@@ -1144,7 +1144,7 @@ class ApplicationGUI:
                         + textmarkers["times_symbol"][fmt]
                         + " "
                         + show_number(jmax)
-                        + incopatibletxt
+                        + incompatible_text
                     )
                 else:
                     resparmtxt = (

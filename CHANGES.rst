@@ -31,6 +31,11 @@ Changes
 * ``ApplicationGUI`` no longer enters the Tk event loop from its
   constructor: call ``ApplicationGUI().run()``. The window can now be
   built and driven in tests (``tests/test_gui.py``).
+* English names: ``coefficient_matrix(confs, centered=...)`` (was
+  ``normalizar``) and ``MagneticModel.remove_bond_by_name`` (was
+  ``remover_bond_by_name``). The old names still work, with a
+  ``DeprecationWarning``. The key ``"coord_atomos"`` of
+  ``site_properties`` is unchanged.
 * ``MagneticModel``: the constructor no longer modifies the
   ``g_lande_factors`` and ``spin_repr`` lists it receives. Its
   ``ranges`` and ``discretization`` arguments never had an effect and

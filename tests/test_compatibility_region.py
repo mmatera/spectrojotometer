@@ -33,10 +33,10 @@ def synthetic_problem(seed=0, n_sites=8, n_bonds=3, n_confs=12, tol=1.0e-3):
     rng = np.random.default_rng(seed)
     model = chain_model(n_sites, n_bonds)
     confs = [[0] + list(rng.integers(0, 2, n_sites - 1)) for _ in range(n_confs)]
-    coeffs = model.coefficient_matrix(confs, normalizar=True)
+    coeffs = model.coefficient_matrix(confs, centered=True)
     while np.linalg.matrix_rank(coeffs) < n_bonds + 1:
         confs.append([0] + list(rng.integers(0, 2, n_sites - 1)))
-        coeffs = model.coefficient_matrix(confs, normalizar=True)
+        coeffs = model.coefficient_matrix(confs, centered=True)
     j_true = np.r_[rng.normal(0.0, 0.01, n_bonds), -100.0]
     energs = coeffs.dot(j_true) + rng.uniform(-tol / 2, tol / 2, len(confs))
     return model, confs, coeffs, energs, j_true, tol

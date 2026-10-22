@@ -10,7 +10,7 @@ from spectrojotometer.tools import add_verbosity_argument, eprint, setup_cli_log
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate spin configurations to determine the coupling constants of a model with minimal condition number"
+        description="Generate spin configurations that determine the coupling constants of a model with the smallest errors"
     )
 
     parser.add_argument(
@@ -38,8 +38,11 @@ def main():
         "-n",
         metavar="numconfs",
         type=int,
-        default=1,
-        help="number of new configurations to be generated",
+        default=None,
+        help="number of new configurations to be generated. If not given, "
+        "the smallest set that determines every coupling, enlarged while each "
+        "extra configuration reduces the largest error of a coupling by at "
+        "least 5%%",
     )
     parser.add_argument(
         "-u",
@@ -68,7 +71,7 @@ def main():
         )
         return -1
     model = magnetic_model_from_file(args["modelfile"])
-    if model.bond_lists is None or len(model.bond_lists) == 0:
+    if len(model.bonds) == 0:
         print("The model does not have defined bounds\n")
         print("Use ... to define a non-trivial model\n")
         return -1
@@ -78,9 +81,9 @@ def main():
             args["known"], model
         )
     else:
-        knownconfs = None
+        knownconfs, knowncomments = [], []
 
-    if knownconfs is not None:
+    if knownconfs:
         for i in range(len(knownconfs)):
             if knowncomments[i] == "":
                 knowncomments[i] = str(confindex(knownconfs[i]))
@@ -92,12 +95,12 @@ def main():
     else:
         startconfs = None
 
-    cn, newconfs = model.find_optimal_configurations(
+    newconfs, cn = model.find_optimal_configurations(
         num_new_confs=args["n"],
         start=startconfs,
         known=knownconfs,
         its=args["it"],
-        update_size=max(args["n"], args["u"]),
+        update_size=max(args["n"] or 1, args["u"]),
     )
     newconflabels = [str(confindex(c)) for c in newconfs]
     # Store the resume file
@@ -107,7 +110,11 @@ def main():
 
     #
     if args["out"] == "-":
-        print("#  Condition number: " + str(cn) + "\n\n")
+        print(
+            "#  Largest error of a coupling per unit error in the energies: "
+            + str(cn)
+            + "\n\n"
+        )
         print("# The optimal configurations found are\n")
         for idx, nc in enumerate(newconfs):
             print("NAN\t", str(nc) + "\t\t #" + newconflabels[idx])
@@ -119,10 +126,14 @@ def main():
 
     else:
         with open(args["out"], "w") as of:
-            of.write("#  condition number: " + str(cn) + "\n\n")
+            of.write(
+                "#  Largest error of a coupling per unit error in the energies: "
+                + str(cn)
+                + "\n\n"
+            )
             for idx, nc in enumerate(newconfs):
                 of.write("NAN\t" + str(nc) + "\t\t #" + newconflabels[idx] + "\n")
-            if knownconfs is not None and len(knownconfs) > 0:
+            if len(knownconfs) > 0:
                 of.write("\n# Together with the known configurations\n\n")
                 for idx, kc in enumerate(knownconfs):
                     of.write(

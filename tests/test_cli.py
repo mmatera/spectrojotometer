@@ -46,3 +46,32 @@ def test_version_is_consistent():
 
     metadata_version = importlib.metadata.version("spectrojotometer")
     assert spectrojotometer.__version__ == metadata_version
+
+
+EXAMPLES = ROOT / "examples"
+
+
+@pytest.mark.parametrize("extra", [[], ["--known", str(EXAMPLES / "example1.spin")]])
+def test_optimize_configurations_runs(extra, tmp_path):
+    # The command writes a resume file next to the model: use a copy.
+    model_file = tmp_path / "example1.cif"
+    model_file.write_text((EXAMPLES / "example1.cif").read_text())
+    res = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "spectrojotometer.cli.optimize_configurations",
+            str(model_file),
+            "-",
+            "--it",
+            "5",
+            *extra,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        cwd=tmp_path,
+    )
+    assert res.returncode == 0, res.stderr
+    assert "Largest error of a coupling per unit error in the energies" in res.stdout
+    assert "inf" not in res.stdout.splitlines()[0]

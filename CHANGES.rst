@@ -31,6 +31,29 @@ Changes
 * ``ApplicationGUI`` no longer enters the Tk event loop from its
   constructor: call ``ApplicationGUI().run()``. The window can now be
   built and driven in tests (``tests/test_gui.py``).
+* Choosing configurations, one consistent measure: the largest error of
+  each coupling per unit error in the energies.
+
+  * New ``MagneticModel.error_bounds(confs, method)``: exact, by linear
+    programming, or the closed-form ellipse bound (always larger, about a
+    thousand times faster). ``cost(confs)`` is now its maximum, exact.
+    Before, three different quantities were used (sqrt(N)/sigma_min of
+    the matrix with and without the base energy column), none of them
+    the actual error.
+  * ``optimize_independent_set`` and ``find_optimal_configurations``:
+    backward elimination plus exchanges, scored by the ellipse bound.
+    In tests on rings with 4-5 couplings, the chosen sets have 14-66%
+    smaller error bars for a given number of configurations. Without a
+    given number, the size is the smallest one that determines every
+    coupling, enlarged while each configuration reduces the bound by at
+    least 5% (``min_improvement``): about 30% fewer configurations, with
+    about 30% smaller errors, than before.
+  * When there is nothing new to add, the cost of the known set is
+    reported (it was ``inf``).
+  * ``optimize-configurations`` works again (stale attributes, swapped
+    return values, missing ``--known``), and chooses the number of
+    configurations automatically unless ``-n`` is given.
+
 * English names: ``coefficient_matrix(confs, centered=...)`` (was
   ``normalizar``) and ``MagneticModel.remove_bond_by_name`` (was
   ``remover_bond_by_name``). The old names still work, with a

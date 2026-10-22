@@ -379,7 +379,7 @@ class ApplicationGUI:
             row,
             self.outputformat,
             "plain",
-            "latex",
+            "LaTeX",
             "Wolfram",
             command=self.print_full_equations,
         )
@@ -499,8 +499,8 @@ class ApplicationGUI:
             row,
             self.outputformat,
             "plain",
-            "latex",
-            "wolfram",
+            "LaTeX",
+            "Wolfram",
             command=self.print_full_equations,
         )
         optformat.pack(side=LEFT, fill=X)
@@ -592,7 +592,7 @@ class ApplicationGUI:
             padx=5,
             pady=5,
         )
-        OptionMenu(ctrl, self.outputformat, "Plain", "Latex", "Wolfram").pack(
+        OptionMenu(ctrl, self.outputformat, "Plain", "LaTeX", "Wolfram").pack(
             side=TOP, fill=X
         )
         btn = Button(ctrl, text="Evaluate couplings")

@@ -11,8 +11,12 @@ import threading
 import numpy as np
 import pytest
 
+from ._helpers import repo_env
+
 from spectrojotometer.magnetic_model import MagneticModel
 from spectrojotometer.tools import setup_cli_logging
+
+from ._helpers import ROOT
 
 
 def two_site_model():
@@ -36,7 +40,12 @@ model.compute_couplings(confs, energs, 1e-3, method="montecarlo", rng=0)
 assert logging.getLogger().handlers == [], logging.getLogger().handlers
 """
     res = subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, timeout=120
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env=repo_env(),
+        cwd=ROOT,
     )
     assert res.returncode == 0, res.stderr
     assert res.stdout == ""
@@ -88,11 +97,15 @@ def test_cli_output_is_clean():
         "examples/example1.cif",
         "examples/example1.spin",
     ]
-    quiet = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    quiet = subprocess.run(
+        cmd, capture_output=True, text=True, timeout=120, env=repo_env(), cwd=ROOT
+    )
     assert quiet.returncode == 0, quiet.stderr
     assert quiet.stderr == ""
     assert "J0" in quiet.stdout and "raw coefficient" not in quiet.stdout
-    verbose = subprocess.run(cmd + ["-vv"], capture_output=True, text=True, timeout=120)
+    verbose = subprocess.run(
+        cmd + ["-vv"], capture_output=True, text=True, timeout=120, env=repo_env(), cwd=ROOT
+    )
     assert "DEBUG:" in verbose.stderr
     assert verbose.stdout == quiet.stdout
 

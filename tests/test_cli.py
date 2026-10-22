@@ -12,6 +12,8 @@ import tomllib
 
 import pytest
 
+from ._helpers import repo_env
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 PROJECT = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
 CONSOLE = PROJECT["scripts"]
@@ -33,6 +35,7 @@ def test_console_command_help(command):
     module_name = CONSOLE[command].split(":")[0]
     res = subprocess.run(
         [sys.executable, "-m", module_name, "--help"],
+        env=repo_env(),
         capture_output=True,
         text=True,
         timeout=120,
@@ -71,6 +74,7 @@ def test_optimize_configurations_runs(extra, tmp_path):
         text=True,
         timeout=120,
         cwd=tmp_path,
+        env=repo_env(),
     )
     assert res.returncode == 0, res.stderr
     assert "Largest error of a coupling per unit error in the energies" in res.stdout

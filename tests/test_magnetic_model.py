@@ -1,5 +1,4 @@
 import itertools
-import os
 import subprocess
 import sys
 
@@ -8,7 +7,8 @@ import pytest
 
 from spectrojotometer.magnetic_model import MagneticModel
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from ._helpers import repo_env
+
 
 
 def ring_model(n_unknown_bonds=2):
@@ -157,7 +157,7 @@ def test_bond_keys_independent_of_hash_seed():
     )
     outs = set()
     for seed in ("0", "1", "2", "3", "4"):
-        env = dict(os.environ, PYTHONHASHSEED=seed, PYTHONPATH=ROOT)
+        env = repo_env(PYTHONHASHSEED=seed)
         r = subprocess.run(
             [sys.executable, "-c", code],
             env=env, capture_output=True, text=True, check=True,

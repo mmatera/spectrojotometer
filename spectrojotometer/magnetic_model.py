@@ -107,15 +107,8 @@ def build_supercell(supercell_size, atomic_positions, bravais_vectors):
 
 
 
-def site_map(source, target, tol=0.1):
-    """
-    For each site of the target model, the index of the site of the source
-    model at the same position, up to a translation of the source lattice;
-    -1 if there is none within tol.
-
-    source, target: MagneticModel instances, with positions in the same
-    frame (Cartesian coordinates).
-    """
+def _position_site_map(source, target, tol):
+    """site_map by comparing positions: both models in the same frame."""
     src_pos = np.asarray(source.site_properties["coord_atomos"], dtype=float)
     tgt_pos = np.asarray(target.site_properties["coord_atomos"], dtype=float)
     bravais = np.asarray(source.lattice_properties["bravais_vectors"], dtype=float)
@@ -136,7 +129,102 @@ def site_map(source, target, tol=0.1):
     return result
 
 
-def compatible_configurations(source, confs, target, tol=0.1):
+def _to_pymatgen_structure(model):
+    from pymatgen.core import Lattice, Structure
+
+    return Structure(
+        Lattice(np.asarray(model.lattice_properties["bravais_vectors"], dtype=float)),
+        list(model.site_properties["magnetic_species"]),
+        np.asarray(model.site_properties["coord_atomos"], dtype=float),
+        coords_are_cartesian=True,
+    )
+
+
+def _structure_site_maps(source, target):
+    """
+    (forward, reverse) from a single alignment found by pymatgen's
+    StructureMatcher, which allows a different origin, orientation or
+    choice of cell (and a supercell of either model):
+
+    forward: for each target site, a source site at the same position;
+    reverse: for each source site, a target site at the same position.
+    Both are all -1 if the structures do not match.
+    """
+    from pymatgen.analysis.structure_matcher import StructureMatcher
+
+    s_src, s_tgt = _to_pymatgen_structure(source), _to_pymatgen_structure(target)
+    n_src, n_tgt = len(s_src), len(s_tgt)
+    matcher = StructureMatcher(primitive_cell=False, scale=True, attempt_supercell=True)
+    # The matcher enlarges the second structure into a supercell of the
+    # first one; the images of each site are consecutive in that supercell.
+    try:
+        if n_tgt >= n_src:
+            found = matcher.get_transformation(s_tgt, s_src)
+        else:
+            found = matcher.get_transformation(s_src, s_tgt)
+    except ValueError:
+        found = None
+    if found is None:
+        return [-1] * n_tgt, [-1] * n_src
+    supercell, _, mapping = found
+    images = int(round(abs(np.linalg.det(supercell))))
+    if n_tgt >= n_src:
+        forward = [-1 if m is None else int(m) // images for m in mapping[:n_tgt]]
+        reverse = [-1] * n_src
+        for t, s in enumerate(forward):
+            if s >= 0 and reverse[s] < 0:
+                reverse[s] = t
+    else:
+        reverse = [-1 if m is None else int(m) // images for m in mapping[:n_src]]
+        forward = [-1] * n_tgt
+        for s, t in enumerate(reverse):
+            if t >= 0 and forward[t] < 0:
+                forward[t] = s
+    return forward, reverse
+
+
+def site_maps(source, target, tol=0.1, method="auto"):
+    """
+    (forward, reverse, method_used), from a single alignment:
+    forward[t] is the source site of each target site (as site_map),
+    reverse[s] a target site of each source site, and method_used the
+    method actually used ("position" or "structure"; see site_map).
+    """
+    if method not in ("auto", "position", "structure"):
+        raise ValueError(f"unknown method {method!r}")
+    if method in ("auto", "position"):
+        forward = _position_site_map(source, target, tol)
+        if method == "position" or min(forward, default=0) >= 0:
+            return forward, _position_site_map(target, source, tol), "position"
+    matched, reverse = _structure_site_maps(source, target)
+    if method == "auto" and min(matched, default=0) < 0:
+        # No complete match either: the partial map by positions tells
+        # which sites are missing.
+        return forward, _position_site_map(target, source, tol), "position"
+    return matched, reverse, "structure"
+
+
+def site_map(source, target, tol=0.1, method="auto"):
+    """
+    For each site of the target model, the index of the site of the source
+    model at the same position, up to a translation of the source lattice;
+    -1 if there is none.
+
+    method:
+        "position": compare the positions (Cartesian coordinates), within
+            tol: both models must be described in the same frame (same
+            origin and orientation of the axes).
+        "structure": align the two structures with pymatgen's
+            StructureMatcher, which allows a different origin,
+            orientation or choice of cell. Among alignments related by a
+            symmetry of the structures, any one may be chosen.
+        "auto" (default): "position" if it finds every site, otherwise
+            "structure" if it does; else the partial map by positions.
+    """
+    return site_maps(source, target, tol, method)[0]
+
+
+def compatible_configurations(source, confs, target, tol=0.1, method="auto"):
     """
     For each configuration of the source model, whether the target model
     can represent it: whether the configuration is periodic with the
@@ -152,11 +240,12 @@ def compatible_configurations(source, confs, target, tol=0.1):
     configuration).
 
     Sites of the source without counterpart in the target are not checked.
+    method: as in site_map.
     """
-    # For each source site, the target site at the same position (modulo
-    # the target lattice); and, for each target site, its source site.
-    reverse = site_map(target, source, tol)
-    forward = site_map(source, target, tol)
+    # For each target site, its source site; and, for each source site, a
+    # target site at the same position (modulo the target lattice). Both
+    # from the same alignment.
+    forward, reverse, _ = site_maps(source, target, tol, method)
     result = []
     for conf in confs:
         ok = True
@@ -170,14 +259,16 @@ def compatible_configurations(source, confs, target, tol=0.1):
     return result
 
 
-def map_configurations(source, confs, target, tol=0.1, fill=None, mapping=None):
+def map_configurations(
+    source, confs, target, tol=0.1, fill=None, mapping=None, method="auto"
+):
     """
     Translate spin configurations of the source model into configurations
     of the target model, using site_map: each site of the target takes the
     spin of the source site at the same position.
 
     mapping: the site map to use, one index of a source site per site of
-    the target (by default, site_map(source, target, tol)).
+    the target (by default, site_map(source, target, tol, method)).
 
     Raises ValueError if some site of the target has no counterpart in the
     source, unless fill (0 or 1) is given: then those sites take that
@@ -186,7 +277,7 @@ def map_configurations(source, confs, target, tol=0.1, fill=None, mapping=None):
     compatible_configurations).
     """
     if mapping is None:
-        mapping = site_map(source, target, tol)
+        mapping = site_map(source, target, tol, method)
     else:
         mapping = [int(j) for j in mapping]
     num_sites = len(source.site_properties["coord_atomos"])
@@ -215,7 +306,9 @@ def map_configurations(source, confs, target, tol=0.1, fill=None, mapping=None):
             )
     incompatible = [
         k
-        for k, ok in enumerate(compatible_configurations(source, confs, target, tol))
+        for k, ok in enumerate(
+            compatible_configurations(source, confs, target, tol, method)
+        )
         if not ok
     ]
     if incompatible:

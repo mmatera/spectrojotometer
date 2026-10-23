@@ -285,7 +285,8 @@ As an example, by run
 
 *) map_configs
 
-    usage: map_configs [-h] [--tol tolerance] [--fill {0,1}] [-v]
+    usage: map_configs [-h] [--tol tolerance] [--method {auto,position,structure}]
+                       [--fill {0,1}] [-v]
                        modelfile1 modelfile2 conffile outfile
 
     Translate the spin configurations of a source model into configurations of a
@@ -297,17 +298,24 @@ As an example, by run
     are written as comments.
 
     positional arguments:
-      modelfile1       model file of the source model
-      modelfile2       model file of the target model
-      conffile         configurations of the source model
-      outfile          output file; "-" prints to the standard output
+      modelfile1            model file of the source model
+      modelfile2            model file of the target model
+      conffile              configurations of the source model
+      outfile               output file; "-" prints to the standard output
 
     options:
-      -h, --help       show this help message and exit
-      --tol tolerance  largest distance between matching sites (default 0.1)
-      --fill {0,1}     spin for the sites of the target without counterpart in the
-                       source (by default, such sites are an error)
-      -v, --verbose    Show progress messages (-v) or detailed diagnostics (-vv).
+      -h, --help            show this help message and exit
+      --tol tolerance       largest distance between matching sites (default 0.1)
+      --method {auto,position,structure}
+                            how to match the sites: comparing positions (both
+                            models in the same frame), aligning the structures
+                            with pymatgen's StructureMatcher (different origin,
+                            orientation or cell), or auto: positions if every site
+                            is found, otherwise the alignment (default)
+      --fill {0,1}          spin for the sites of the target without counterpart
+                            in the source (by default, such sites are an error)
+      -v, --verbose         Show progress messages (-v) or detailed diagnostics
+                            (-vv).
 
     For example, mapping the configurations of example1 onto the same
     model (each site onto itself):
@@ -324,6 +332,9 @@ As an example, by run
     source model is an error, unless --fill gives the spin to use. When the
     cell of the target is smaller (e.g. the source is a supercell of it),
     only the configurations periodic with the target lattice are mapped.
+    If the two models are not described in the same frame (different
+    origin, orientation or choice of cell), the sites are matched by
+    aligning the structures with pymatgen's StructureMatcher.
 
 
 *) print_equations

@@ -56,6 +56,15 @@ be represented: they are written as comments.
         help="largest distance between matching sites (default 0.1)",
     )
     parser.add_argument(
+        "--method",
+        choices=["auto", "position", "structure"],
+        default="auto",
+        help="how to match the sites: comparing positions (both models in the "
+        "same frame), aligning the structures with pymatgen's StructureMatcher "
+        "(different origin, orientation or cell), or auto: positions if every "
+        "site is found, otherwise the alignment (default)",
+    )
+    parser.add_argument(
         "--fill",
         type=int,
         choices=[0, 1],
@@ -72,7 +81,9 @@ be represented: they are written as comments.
     energies, confs, comments = read_spin_configurations_file(args["configin"], modelin)
     # Configurations the target cannot represent (not periodic with its
     # lattice) are not mapped: they are written as comments.
-    compatible = compatible_configurations(modelin, confs, modelout, args["tol"])
+    compatible = compatible_configurations(
+        modelin, confs, modelout, args["tol"], method=args["method"]
+    )
     try:
         mapped = map_configurations(
             modelin,
@@ -80,6 +91,7 @@ be represented: they are written as comments.
             modelout,
             tol=args["tol"],
             fill=args["fill"],
+            method=args["method"],
         )
     except ValueError as error:
         eprint(f"map_configs: {error}")
@@ -96,7 +108,10 @@ be represented: they are written as comments.
     size_in = len(modelin.site_properties["coord_atomos"])
     size_out = len(modelout.site_properties["coord_atomos"])
     scale = size_out / size_in
-    lines = ["# site map (target <- source): " + str(site_map(modelin, modelout, args["tol"]))]
+    lines = [
+        "# site map (target <- source): "
+        + str(site_map(modelin, modelout, args["tol"], method=args["method"]))
+    ]
     for energy, conf, comment, ok in zip(energies, confs, comments, compatible):
         if ok:
             lines.append(

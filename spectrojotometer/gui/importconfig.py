@@ -36,7 +36,7 @@ from tkinter.scrolledtext import ScrolledText
 from spectrojotometer.magnetic_model import (
     compatible_configurations,
     map_configurations,
-    site_map,
+    site_maps,
 )
 from spectrojotometer.model_io import magnetic_model_from_file, parse_spin_configurations
 
@@ -173,18 +173,40 @@ class ImportConfigWindow(Toplevel):
                 self.selected_model.get(),
             )
         # For each site of the current model, the site of the other model at
-        # the same position (-1 if none: map_confs then uses spin 0).
-        dictatoms = site_map(model1, model2, tol)
+        # the same position: comparing positions or, if that does not find
+        # every site, aligning the structures (see site_map).
+        dictatoms, _, method = site_maps(model1, model2, tol)
         if -1 in dictatoms:
             logger.warning(
-                "Sites %s of the current model have no counterpart in %s; "
-                "they will get spin 0.",
+                "Sites %s of the current model have no counterpart in %s: "
+                "edit the site map, or increase the length tolerance.",
                 [i for i, j in enumerate(dictatoms) if j < 0],
                 self.selected_model.get(),
             )
+        elif method == "structure":
+            logger.info(
+                "The positions of %s do not match the current model directly "
+                "(different origin, orientation or cell); the site map comes "
+                "from aligning both structures with pymatgen's "
+                "StructureMatcher.",
+                self.selected_model.get(),
+            )
+        else:
+            logger.info("Site map of %s: %s", self.selected_model.get(), dictatoms)
         self.dictatoms = list(dictatoms)
         self.sitemap.delete(0, END)
         self.sitemap.insert(0, dictatoms.__str__()[1:-1])
+
+    def _ensure_model(self):
+        """
+        Make sure the model of the configurations has been chosen: if not,
+        ask for it now (before, loading configurations or importing
+        without choosing it first failed). Returns whether there is one.
+        """
+        if self.selected_model.get() not in self.models:
+            # Triggers onmodelselect, which asks for the file.
+            self.selected_model.set("[other model]")
+        return self.selected_model.get() in self.models
 
     def close_window(self):
         """close the window"""
@@ -206,8 +228,8 @@ class ImportConfigWindow(Toplevel):
         Read configs from a model
         """
         logger.debug("configs from file")
-        if self.selected_model.get() == "[other model]":
-            self.onmodelselect()
+        if not self._ensure_model():
+            return
         filename = fdlg.askopenfilename(
             initialdir=self.app.datafolder + "/",
             title="Select file",
@@ -232,10 +254,9 @@ class ImportConfigWindow(Toplevel):
         represent (not periodic with its lattice) are not imported: they
         are kept as comments, with the reason.
         """
-        name = self.selected_model.get()
-        if name not in self.models:
-            messagebox.showerror("Import", "Choose the model of the configurations first.")
+        if not self._ensure_model():
             return
+        name = self.selected_model.get()
         source, target = self.models[name], self.app.model
         try:
             mapping = [int(x) for x in self.sitemap.get().replace(",", " ").split()]

@@ -39,8 +39,8 @@ def test_translation_beyond_the_supercell():
 def test_tolerance():
     source = chain([0, 1], 2)
     target = chain([0.05, 1.0], 2)
-    assert site_map(source, target, tol=0.1) == [0, 1]
-    assert site_map(source, target, tol=0.01) == [-1, 1]
+    assert site_map(source, target, tol=0.1, method="position") == [0, 1]
+    assert site_map(source, target, tol=0.01, method="position") == [-1, 1]
 
 
 def test_sites_without_counterpart():
@@ -100,3 +100,63 @@ def test_explicit_site_map():
         map_configurations(source, [[0, 1]], chain([0, 1, 2, 3], 4), mapping=[1, 0])
     with pytest.raises(ValueError, match="beyond"):
         map_configurations(source, [[0, 1]], target, mapping=[0, 5])
+
+
+def moved_copy(model, perm=(1, 2, 0), shift=(0.13, 0.31, 0.07)):
+    """The same structure, with the axes permuted and the origin shifted:
+    the positions no longer match directly."""
+    lattice = np.array(model.lattice_properties["bravais_vectors"], dtype=float)
+    frac = np.linalg.solve(lattice.T, np.array(model.site_properties["coord_atomos"], dtype=float).T).T
+    new_lattice = lattice[list(perm)][:, list(perm)]
+    new_frac = (frac[:, list(perm)] + np.array(shift)) % 1
+    return MagneticModel(
+        list(new_frac @ new_lattice),
+        list(new_lattice),
+        magnetic_species=list(model.site_properties["magnetic_species"]),
+    )
+
+
+@pytest.fixture(scope="module")
+def spinel():
+    model = magnetic_model_from_file(str(EXAMPLES / "cromita_ortogonal.cif"))
+    model.generate_bonds(0.02, [[0, 3.5]])
+    return model
+
+
+def test_structure_matcher_finds_a_moved_copy(spinel):
+    from spectrojotometer.magnetic_model import site_maps
+
+    moved = moved_copy(spinel)
+    assert site_map(moved, spinel, method="position") == [-1] * 16
+    forward, reverse, used = site_maps(moved, spinel)  # "auto"
+    assert used == "structure"
+    assert sorted(forward) == list(range(16))
+    # A valid alignment: every configuration keeps its pairs of each
+    # coupling, so its energy in the target model.
+    rng = np.random.default_rng(0)
+    confs = [list(rng.integers(0, 2, 16)) for _ in range(300)]
+    via_moved = map_configurations(moved, confs, spinel)
+    direct = map_configurations(spinel, confs, spinel)
+    np.testing.assert_array_equal(
+        spinel.coefficient_matrix(via_moved), spinel.coefficient_matrix(direct)
+    )
+
+
+def test_structure_matcher_between_cell_and_supercell():
+    """With a different origin, from a cell onto its double and back; the
+    check of periodicity uses a single alignment."""
+    cell = chain([0, 1], 2)
+    double = chain([0.3, 1.3, 2.3, 3.3], 4)  # shifted: no direct match
+    assert site_map(cell, double, method="position") == [-1] * 4
+    forward = site_map(cell, double)
+    assert forward in ([0, 1, 0, 1], [1, 0, 1, 0])
+    assert map_configurations(cell, [[0, 1]], double) == [[[0, 1][j] for j in forward]]
+    from spectrojotometer.magnetic_model import compatible_configurations
+
+    assert compatible_configurations(double, [[0, 1, 0, 1], [0, 1, 1, 1]], cell) == [True, False]
+
+
+def test_auto_keeps_the_partial_map_by_positions():
+    source = chain([0, 1], 2)
+    target = chain([0, 0.5, 1], 2)  # different structures: no match at all
+    assert site_map(source, target) == [0, -1, 1]

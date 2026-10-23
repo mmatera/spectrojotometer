@@ -49,6 +49,15 @@ Changes
     that suggests editing the site map or the tolerance. The site map
     can still be edited (``map_configurations(mapping=...)``).
   * Pressing Import again duplicated the imported configurations.
+  * Loading the configurations before choosing their model in the menu
+    left the site map empty, and Import failed; the window now asks for
+    the model when needed.
+  * ``site_map`` (and ``map_configurations``, ``compatible_configurations``,
+    ``map_configs --method``) can align the structures with pymatgen's
+    ``StructureMatcher``, for models with a different origin, orientation
+    or choice of cell. By default (``method="auto"``) the positions are
+    compared, and the alignment is used only if that does not find every
+    site. ``site_maps`` gives both directions from a single alignment.
 
 * Monte Carlo simulation of the fitted model (``spectrojotometer.monte_carlo``,
   and the Monte Carlo tab of visualbond): Ising Metropolis, Wolff (with a

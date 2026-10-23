@@ -296,3 +296,64 @@ def test_import_reports_sites_without_counterpart(app, monkeypatch):
         assert errors and "no counterpart" in errors[-1][1]
     finally:
         window.close_window()
+
+
+def drive_import(app, monkeypatch, other_model, spin_text, tmp_path, choose_first):
+    """Open the import window, load the configurations (choosing the model
+    in the menu first, or not) and import them. Returns the window."""
+    from spectrojotometer.gui import importconfig
+
+    spin = tmp_path / "configs.spin"
+    spin.write_text(spin_text)
+    answers = {"Select file to open": str(other_model), "Select file": str(spin)}
+    monkeypatch.setattr(importconfig.fdlg, "askopenfilename", lambda **k: answers[k["title"]])
+    monkeypatch.setattr(app.root, "wait_window", lambda *a: None)
+    window = importconfig.ImportConfigWindow(app)
+    if choose_first:
+        window.optmodels["menu"].invoke(0)
+    window.configs_from_file()
+    window.map_confs()
+    return window
+
+
+def test_import_without_choosing_the_model_first(app, monkeypatch, tmp_path):
+    """Loading the configurations before choosing the model asks for it
+    (it used to fail on Import, with an empty site map)."""
+    load_example(app, monkeypatch)
+    window = drive_import(
+        app, monkeypatch, EXAMPLES / "example1.cif",
+        (EXAMPLES / "example1.spin").read_text(), tmp_path, choose_first=False,
+    )
+    try:
+        assert window.sitemap.get() == "0, 1, 2"
+        assert "49022.0027\t[0, 0, 0]" in window.outputconfs.get("1.0", tkinter.END)
+    finally:
+        window.close_window()
+
+
+def test_import_from_a_model_in_another_frame(app, monkeypatch, tmp_path):
+    """The other model has a different origin: the site map comes from the
+    alignment of the structures, and the configurations are imported."""
+    from spectrojotometer.magnetic_model import MagneticModel
+    from spectrojotometer.model_io import magnetic_model_from_file
+
+    base = magnetic_model_from_file(str(EXAMPLES / "example1.cif"))
+    lattice = np.array(base.lattice_properties["bravais_vectors"], dtype=float)
+    shift = np.array([0.11, 0.23, 0.07]) @ lattice
+    MagneticModel(
+        list(np.array(base.site_properties["coord_atomos"], dtype=float) + shift),
+        list(lattice),
+        magnetic_species=list(base.site_properties["magnetic_species"]),
+    ).save_cif(str(tmp_path / "shifted.cif"))
+    load_example(app, monkeypatch)
+    window = drive_import(
+        app, monkeypatch, tmp_path / "shifted.cif",
+        "1.0 [0, 1, 0] # a\n2.0 [1, 1, 0] # b\n", tmp_path, choose_first=True,
+    )
+    try:
+        mapping = [int(x) for x in window.sitemap.get().split(",")]
+        assert sorted(mapping) == [0, 1, 2]
+        out = window.outputconfs.get("1.0", tkinter.END)
+        assert "1.0\t" in out and "2.0\t" in out and "skipped" not in out
+    finally:
+        window.close_window()

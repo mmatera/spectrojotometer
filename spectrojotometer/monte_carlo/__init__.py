@@ -19,7 +19,7 @@ from .analysis import (
 from .frustration import detect_frustration
 from .ising_engine import IsingMonteCarlo
 from .parallel_tempering import ParallelTempering
-from .runner import run_ising_mc
+from .runner import SimulationCancelled, run_ising_mc
 from .wolff import WolffCluster
 
 __all__ = [
@@ -32,6 +32,7 @@ __all__ = [
     "estimate_tc",
     "fit_curie_weiss",
     "frustration_factor",
+    "SimulationCancelled",
     "run_ising_mc",
     "warmup",
 ]

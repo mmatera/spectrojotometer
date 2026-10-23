@@ -1,5 +1,6 @@
 """High-level driver of the Monte Carlo simulations of the Ising model."""
 
+import logging
 import warnings
 
 import numpy as np
@@ -9,6 +10,13 @@ from .frustration import detect_frustration
 from .ising_engine import IsingMonteCarlo
 from .parallel_tempering import ParallelTempering
 from .wolff import WolffCluster
+
+logger = logging.getLogger(__name__)
+
+
+
+class SimulationCancelled(Exception):
+    """Raised by a progress_callback to stop run_ising_mc."""
 
 
 def run_ising_mc(spins, bonds, J_vals, E0,
@@ -39,7 +47,11 @@ def run_ising_mc(spins, bonds, J_vals, E0,
         (sum |J| / N).
     seed: for reproducible results.
     swap_every: parallel tempering only, sweeps between swaps.
-    progress_callback: called as progress_callback(done, total, message).
+    progress_callback: called as progress_callback(done, total, message)
+        before the first and after each temperature. To stop the
+        simulation, raise SimulationCancelled from it: run_ising_mc
+        raises it in turn. Other exceptions of the callback are logged
+        and ignored.
 
     Returns a dict with lists, one value per temperature: "T", "E"
     (energy per site), "M", "M2", "M4" (magnetization per site and its
@@ -59,8 +71,11 @@ def run_ising_mc(spins, bonds, J_vals, E0,
         if progress_callback is not None:
             try:
                 progress_callback(done, total, msg)
+            except SimulationCancelled:
+                raise
             except Exception:
-                pass
+                # Any other error of the callback must not stop the run.
+                logger.exception("error in progress_callback (ignored)")
 
     frustrated, gauge, cycle = detect_frustration(bonds, J_vals, N)
 
@@ -80,12 +95,12 @@ def run_ising_mc(spins, bonds, J_vals, E0,
         )
 
     T_grid = np.geomspace(T_min, T_max, n_temps)
-    notify(0, n_temps, f"Algoritmo: {algorithm}")
+    notify(0, n_temps, f"Algorithm: {algorithm}")
 
     if algorithm == "pt":
         sim = ParallelTempering(spins, bonds, J_vals, E0, T_grid, seed=seed)
         results = sim.run(n_equil, n_sweeps, swap_every=swap_every)
-        notify(n_temps, n_temps, "PT completado")
+        notify(n_temps, n_temps, "Parallel tempering done")
     elif algorithm == "wolff":
         sim = WolffCluster(spins, bonds, J_vals, E0, seed=seed, gauge=gauge)
         results = _sweep_with_progress(sim, T_grid, n_equil, n_sweeps, notify)

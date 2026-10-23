@@ -303,3 +303,59 @@ def test_panel_controls_scroll_in_a_short_window(tk_root):
     assert not controls.needs_scrolling()
     assert not controls.scrollbar.winfo_ismapped()
     assert visible_in(panel.btn_run, controls.canvas)
+
+
+def test_a_progress_callback_can_cancel_the_simulation():
+    """Raising SimulationCancelled from the callback stops run_ising_mc
+    (every exception of the callback used to be ignored, so the
+    simulation could not be cancelled); other exceptions are ignored."""
+    from spectrojotometer.monte_carlo import SimulationCancelled, run_ising_mc
+
+    model = ring(4, (1,))
+    spins, bonds, j_vals, _ = magnetic_model_to_ising(model, (3, 1, 1), J_overrides={"J0": 1.0})
+    calls = []
+
+    def cancel_after_first(done, total, message):
+        calls.append(done)
+        if done >= 1:
+            raise SimulationCancelled()
+
+    with pytest.raises(SimulationCancelled):
+        run_ising_mc(spins, bonds, j_vals, 0.0, 0.5, 4.0, 20, n_equil=10,
+                     n_sweeps=50, algorithm="metropolis", seed=0,
+                     progress_callback=cancel_after_first)
+    assert max(calls) == 1  # stopped after the first temperature
+
+    def broken(done, total, message):
+        raise RuntimeError("a bug in the callback")
+
+    results = run_ising_mc(spins, bonds, j_vals, 0.0, 0.5, 4.0, 3, n_equil=10,
+                           n_sweeps=50, seed=0, progress_callback=broken)
+    assert len(results["T"]) == 3
+
+
+def test_gui_worker_cancel():
+    """Cancel in the Monte Carlo tab stops the simulation."""
+    import queue
+    import time
+
+    from spectrojotometer.gui.mc_worker import MCWorker
+
+    model = ring(4, (1,))
+    spins, bonds, j_vals, e0 = magnetic_model_to_ising(model, (8, 1, 1), J_overrides={"J0": 1.0})
+    out = queue.Queue()
+    params = dict(spins=spins, bonds=bonds, J_vals=j_vals, E0=e0, T_min=0.5, T_max=4.0,
+                  n_temps=200, n_equil=200, n_sweeps=20000, algorithm="metropolis",
+                  n_restarts=1, seed=0)
+    worker = MCWorker(params, out)
+    worker.start()
+    time.sleep(0.5)
+    worker.cancel()
+    start, last = time.time(), None
+    while time.time() - start < 30:
+        message = out.get(timeout=30)
+        if message[0] in ("done", "cancelled", "error"):
+            last = message
+            break
+    assert last is not None and last[0] == "cancelled", last
+    assert time.time() - start < 10

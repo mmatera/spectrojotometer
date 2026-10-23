@@ -32,6 +32,11 @@ Changes
 * ``ApplicationGUI`` no longer enters the Tk event loop from its
   constructor: call ``ApplicationGUI().run()``. The window can now be
   built and driven in tests (``tests/test_gui.py``).
+* Monte Carlo: Cancel did not stop a simulation (in visualbond's
+  Monte Carlo tab, or in any client): ``run_ising_mc`` ignored every
+  exception of the progress callback, including the one meant to stop
+  it. New ``monte_carlo.SimulationCancelled``: raised from the callback,
+  it stops the simulation. Two progress messages were still in Spanish.
 * Exporting the transformed model: ``magnetic_model.equivalent_model``
   rewrites a model in the cell and order of sites of another one (e.g. a
   distorted phase in the cell of the undistorted one), keeping its own

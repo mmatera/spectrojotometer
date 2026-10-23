@@ -28,15 +28,18 @@ class MCWorker(threading.Thread):
         return self._cancel.is_set()
 
     def run(self):
-        from ..monte_carlo import run_ising_mc
+        from ..monte_carlo import SimulationCancelled, run_ising_mc
 
         try:
             p = self.params
             self.q.put(("start", p["n_temps"]))
 
             def progress(done, total, msg):
+                # run_ising_mc lets SimulationCancelled through (any other
+                # exception of the callback was ignored, so the simulation
+                # used to go on after Cancel).
                 if self.is_cancelled():
-                    raise _Cancelled()
+                    raise SimulationCancelled()
                 self.q.put(("progress", done, total, msg))
 
             results = run_ising_mc(
@@ -50,11 +53,8 @@ class MCWorker(threading.Thread):
             )
             self.q.put(("done", results))
 
-        except _Cancelled:
+        except SimulationCancelled:
             self.q.put(("cancelled",))
         except Exception:
             self.q.put(("error", traceback.format_exc()))
-
-
-class _Cancelled(Exception):
     pass

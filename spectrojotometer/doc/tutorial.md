@@ -36,8 +36,9 @@ expanding atoms to fill the conventional cell.
 
 WIEN2k `.struct` files are read too. Their lengths are in bohr unless the
 file says `unit=ang`, and the model is in angstrom, like the ones read
-from CIF files; for centred lattices the reader adds the atoms related by
-the centring. See the main README.
+from CIF files; for centred lattices, `primitive_cell` chooses between
+the conventional and the primitive cell, as for CIF files. See the main
+README.
 
 
 

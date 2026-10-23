@@ -25,8 +25,9 @@ primitive basis, instead of expanding atoms to fill the conventional
 cell.</p>
 <p>WIEN2k <code>.struct</code> files are read too. Their lengths are in
 bohr unless the file says <code>unit=ang</code>, and the model is in
-angstrom, like the ones read from CIF files; for centred lattices the
-reader adds the atoms related by the centring. See the main README.</p>
+angstrom, like the ones read from CIF files; for centred lattices,
+<code>primitive_cell</code> chooses between the conventional and the
+primitive cell, as for CIF files. See the main README.</p>
 <h1 id="visual-bond">Visual Bond</h1>
 <p>Visual Bond is a graphic interfase for the tools in the
 spectrojotometer package.</p>

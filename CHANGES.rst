@@ -34,6 +34,12 @@ Changes
   built and driven in tests (``tests/test_gui.py``).
 * WIEN2k ``.struct`` files:
 
+  * ``primitive_cell=True`` applies to them too (it was ignored, with a
+    warning): for centred lattices, the model has the primitive cell,
+    with one site for each set of sites related by the centring.
+    Checked against the CIF reader (a spinel) and against ASE (every
+    centring).
+
   * Files numbering their atoms as ``ATOM   1:`` (positive index) could
     not be read. The reader now follows the fixed-column format of
     WIEN2k (also lattice parameters written without spaces between

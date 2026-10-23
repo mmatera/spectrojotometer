@@ -16,6 +16,7 @@ def magnetic_model_from_wk2_struct(
         filename: str,
         magnetic_atoms: tuple = DEFAULT_MAGNETIC_ATOMS,
         bond_names: list | None = None,
+        primitive_cell: bool = False,
 ) -> MagneticModel:
     """
     Build a `MagneticModel` from a WIEN2k `.struct` file: read the
@@ -28,8 +29,12 @@ def magnetic_model_from_wk2_struct(
     like the ones read from CIF files. Each block lists an inequivalent
     site and its `MULT` symmetry-equivalent replicas. For centred
     lattices (types B, F, CXY, CYZ, CXZ) WIEN2k lists only one of the
-    atoms related by the centring, and the reader adds the others;
-    rhombohedral (R) lattices are not supported. The element is read
+    atoms related by the centring. By default (primitive_cell=False) the
+    reader adds the others, and the model has the conventional cell, like
+    the CIF reader. With primitive_cell=True, the model has the primitive
+    cell of the centred lattice, with one site for each set of sites
+    related by the centring (for P and H lattices, the cell is the same).
+    Rhombohedral (R) lattices are not supported. The element is read
     from the name of the site (e.g. `Cr1`, `CR1`, `O1`).
 
     The reader does not read or build any bonds: the returned model
@@ -116,6 +121,18 @@ def magnetic_model_from_wk2_struct(
     )
     if len(magnetic_positions) != 0:
         magnetic_positions = np.array(magnetic_positions).dot(np.array(bravais_vectors))
+    if primitive_cell:
+        bravais_vectors = list(
+            np.array(_PRIMITIVE[lattice_type]) @ np.array(bravais_vectors)
+        )
+        if len(magnetic_positions) != 0:
+            # One site for each set related by the centring: unique
+            # modulo the primitive lattice.
+            primitive = np.array(bravais_vectors)
+            frac = np.linalg.solve(primitive.T, np.array(magnetic_positions).T).T
+            kept, kept_species = _unique_sites(list(frac), magnetic_species)
+            magnetic_positions = np.array(kept) @ primitive
+            magnetic_species = kept_species
     return MagneticModel(
         magnetic_positions,
         bravais_vectors,
@@ -143,6 +160,18 @@ _CENTERING = {
     "CXY": [np.zeros(3), np.array([0.5, 0.5, 0.0])],
     "CYZ": [np.zeros(3), np.array([0.0, 0.5, 0.5])],
     "CXZ": [np.zeros(3), np.array([0.5, 0.0, 0.5])],
+}
+
+# Primitive vectors of each centred lattice, as rows of coefficients of
+# the conventional vectors (a, b, c).
+_PRIMITIVE = {
+    "P": np.eye(3),
+    "H": np.eye(3),
+    "B": np.array([[-0.5, 0.5, 0.5], [0.5, -0.5, 0.5], [0.5, 0.5, -0.5]]),
+    "F": np.array([[0.0, 0.5, 0.5], [0.5, 0.0, 0.5], [0.5, 0.5, 0.0]]),
+    "CXY": np.array([[0.5, 0.5, 0.0], [-0.5, 0.5, 0.0], [0.0, 0.0, 1.0]]),
+    "CYZ": np.array([[1.0, 0.0, 0.0], [0.0, 0.5, 0.5], [0.0, -0.5, 0.5]]),
+    "CXZ": np.array([[0.5, 0.0, 0.5], [0.0, 1.0, 0.0], [-0.5, 0.0, 0.5]]),
 }
 
 _COORDINATES = re.compile(

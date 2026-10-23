@@ -157,3 +157,65 @@ def test_species_from_the_name(tmp_path, name, species):
 def test_rhombohedral_is_rejected(tmp_path):
     with pytest.raises(ValueError, match="rhombohedral"):
         magnetic_model_from_wk2_struct(write_struct(tmp_path / "r.struct", "R", [("Cr", [(0, 0, 0)])]))
+
+
+PRIMITIVE_VECTORS = {
+    "F": [[0, 0.5, 0.5], [0.5, 0, 0.5], [0.5, 0.5, 0]],
+    "B": [[-0.5, 0.5, 0.5], [0.5, -0.5, 0.5], [0.5, 0.5, -0.5]],
+    "CXY": [[0.5, 0.5, 0], [-0.5, 0.5, 0], [0, 0, 1]],
+    "CYZ": [[1, 0, 0], [0, 0.5, 0.5], [0, -0.5, 0.5]],
+    "CXZ": [[0.5, 0, 0.5], [0, 1, 0], [-0.5, 0, 0.5]],
+    "P": np.eye(3),
+}
+
+
+@pytest.mark.parametrize("lattice_type", list(PRIMITIVE_VECTORS))
+def test_primitive_cell(tmp_path, lattice_type):
+    path = write_struct(tmp_path / "p.struct", lattice_type, [("Cr1", [(0.1, 0.2, 0.3)])])
+    conventional = magnetic_model_from_wk2_struct(path)
+    primitive = magnetic_model_from_wk2_struct(path, primitive_cell=True)
+    expected = np.array(PRIMITIVE_VECTORS[lattice_type]) @ np.array(
+        conventional.lattice_properties["bravais_vectors"]
+    )
+    np.testing.assert_allclose(primitive.lattice_properties["bravais_vectors"], expected, atol=1e-12)
+    assert len(primitive.site_properties["coord_atomos"]) == 1
+    # The site is the one listed in the file.
+    np.testing.assert_allclose(
+        primitive.site_properties["coord_atomos"][0], conventional.site_properties["coord_atomos"][0]
+    )
+
+
+def test_primitive_cell_when_the_file_lists_every_centred_atom(tmp_path):
+    """One site per set related by the centring, also if all are listed."""
+    listed = [(0.1, 0.1, 0.1), (0.1, 0.6, 0.6), (0.6, 0.1, 0.6), (0.6, 0.6, 0.1)]
+    path = write_struct(tmp_path / "all.struct", "F", [("Cr1", listed)])
+    assert len(magnetic_model_from_wk2_struct(path).site_properties["coord_atomos"]) == 4
+    assert len(magnetic_model_from_wk2_struct(path, primitive_cell=True).site_properties["coord_atomos"]) == 1
+
+
+def test_spinel_from_struct_matches_the_cif(tmp_path, examples_dir):
+    """An F-centred spinel written as .struct (one Cr per set related by
+    the centring) gives the models of the CIF file, in both cells."""
+    from spectrojotometer.magnetic_model import site_maps
+    from spectrojotometer.model_io import magnetic_model_from_file
+
+    cif = str(examples_dir / "cromita_ortogonal.cif")
+    conv = magnetic_model_from_file(cif)
+    lattice = np.array(conv.lattice_properties["bravais_vectors"])
+    frac = np.linalg.solve(lattice.T, np.array(conv.site_properties["coord_atomos"]).T).T
+    shifts = [np.zeros(3), [0, 0.5, 0.5], [0.5, 0, 0.5], [0.5, 0.5, 0]]
+    reps = []
+    for f in frac:
+        if not any(np.allclose(((f - r - s + 0.5) % 1) - 0.5, 0, atol=1e-4) for r in reps for s in shifts):
+            reps.append(f)
+    a, b, c = np.linalg.norm(lattice, axis=1) / BOHR
+    path = write_struct(
+        tmp_path / "spinel.struct", "F", [(f"Cr{k + 1}", [tuple(r)]) for k, r in enumerate(reps)],
+        cell=f"{a:10.6f}{b:10.6f}{c:10.6f} 90.000000 90.000000 90.000000",
+    )
+    for primitive in (False, True):
+        reference = magnetic_model_from_file(cif, primitive_cell=primitive)
+        model = magnetic_model_from_file(path, primitive_cell=primitive)
+        forward, _, method = site_maps(model, reference, 0.01)
+        assert method == "position"
+        assert sorted(forward) == list(range(len(reference.site_properties["coord_atomos"])))

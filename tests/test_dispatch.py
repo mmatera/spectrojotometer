@@ -77,21 +77,19 @@ def test_unknown_extension_raises_value_error(tmp_path):
 
 
 
-def test_primitive_cell_true_is_ignored_with_warning_for_struct(
-    fixtures_dir, caplog
-):
+def test_primitive_cell_is_passed_to_the_struct_reader(fixtures_dir, caplog):
+    """primitive_cell applies to .struct files too (it used to be ignored,
+    with a warning). The fixture has a primitive (P) lattice: same cell."""
+    path = str(fixtures_dir / "synthetic_single_atom.struct")
     with caplog.at_level("WARNING"):
-        model = magnetic_model_from_file(
-            str(fixtures_dir / "synthetic_single_atom.struct"),
-            magnetic_atoms=("Cu",),
-            primitive_cell=True,
-        )
-    assert any(
-        "primitive_cell" in record.message for record in caplog.records
+        primitive = magnetic_model_from_file(path, magnetic_atoms=("Cu",), primitive_cell=True)
+    assert not any("primitive_cell" in record.message for record in caplog.records)
+    conventional = magnetic_model_from_file(path, magnetic_atoms=("Cu",))
+    np.testing.assert_allclose(
+        primitive.lattice_properties["bravais_vectors"],
+        conventional.lattice_properties["bravais_vectors"],
     )
-    # A pesar de pedir primitive_cell=True, el modelo se construye
-    # igual (el parámetro simplemente se ignora para .struct).
-    assert model.site_properties["magnetic_species"] == ["Cu"]
+    assert primitive.site_properties["magnetic_species"] == ["Cu"]
 
 
 class TestDefaultMagneticAtomsAreUnified:

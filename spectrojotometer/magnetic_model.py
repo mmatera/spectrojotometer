@@ -13,6 +13,7 @@ from .tools import (
     format_symmetry_operator,
     offset_orientation,
     pack_offset,
+    unpack_offset,
 )
 
 logger = logging.getLogger(__name__)
@@ -140,35 +141,41 @@ def _to_pymatgen_structure(model):
     )
 
 
-def _structure_site_maps(source, target):
+def _structure_alignment(source, target):
     """
-    (forward, reverse) from a single alignment found by pymatgen's
+    A single alignment of the two structures by pymatgen's
     StructureMatcher, which allows a different origin, orientation or
-    choice of cell (and a supercell of either model):
+    choice of cell (and a supercell of either model). Returns None if they
+    do not match, or a dict with:
 
     forward: for each target site, a source site at the same position;
-    reverse: for each source site, a target site at the same position.
-    Both are all -1 if the structures do not match.
+    reverse: for each source site, a target site at the same position;
+    supercell, translation, mapping, swapped: the transformation found.
+        If not swapped (the target has at least as many sites), the source
+        structure, made into a supercell (supercell) and translated
+        (translation, fractional), has its site mapping[t] at target site
+        t. If swapped, the roles are exchanged.
     """
     from pymatgen.analysis.structure_matcher import StructureMatcher
 
     s_src, s_tgt = _to_pymatgen_structure(source), _to_pymatgen_structure(target)
     n_src, n_tgt = len(s_src), len(s_tgt)
     matcher = StructureMatcher(primitive_cell=False, scale=True, attempt_supercell=True)
+    swapped = n_tgt < n_src
     # The matcher enlarges the second structure into a supercell of the
     # first one; the images of each site are consecutive in that supercell.
     try:
-        if n_tgt >= n_src:
-            found = matcher.get_transformation(s_tgt, s_src)
-        else:
+        if swapped:
             found = matcher.get_transformation(s_src, s_tgt)
+        else:
+            found = matcher.get_transformation(s_tgt, s_src)
     except ValueError:
         found = None
     if found is None:
-        return [-1] * n_tgt, [-1] * n_src
-    supercell, _, mapping = found
+        return None
+    supercell, translation, mapping = found
     images = int(round(abs(np.linalg.det(supercell))))
-    if n_tgt >= n_src:
+    if not swapped:
         forward = [-1 if m is None else int(m) // images for m in mapping[:n_tgt]]
         reverse = [-1] * n_src
         for t, s in enumerate(forward):
@@ -180,7 +187,25 @@ def _structure_site_maps(source, target):
         for s, t in enumerate(reverse):
             if t >= 0 and forward[t] < 0:
                 forward[t] = s
-    return forward, reverse
+    return {
+        "forward": forward,
+        "reverse": reverse,
+        "supercell": np.asarray(supercell),
+        "translation": np.asarray(translation, dtype=float),
+        "mapping": list(mapping),
+        "swapped": swapped,
+    }
+
+
+def _structure_site_maps(source, target):
+    """(forward, reverse) from _structure_alignment (all -1 if no match)."""
+    alignment = _structure_alignment(source, target)
+    if alignment is None:
+        return (
+            [-1] * len(target.site_properties["coord_atomos"]),
+            [-1] * len(source.site_properties["coord_atomos"]),
+        )
+    return alignment["forward"], alignment["reverse"]
 
 
 def site_maps(source, target, tol=0.1, method="auto"):
@@ -318,6 +343,138 @@ def map_configurations(
             "compatible_configurations)"
         )
     return [[conf[j] if j >= 0 else fill for j in mapping] for conf in confs]
+
+
+def _cif_value(text):
+    """A CIF value: quoted if it has spaces (otherwise it is misread)."""
+    text = str(text)
+    if text and not any(c.isspace() for c in text):
+        return text
+    return "'" + text.replace("'", "") + "'"
+
+
+def _bond_offset(tag):
+    """The lattice offset of a bond, from its tag (see pack_offset)."""
+    if tag is None or (isinstance(tag, str) and tag in (".", "")):
+        return np.zeros(3, dtype=int)
+    if isinstance(tag, str):
+        return np.asarray(unpack_offset(tag), dtype=int)
+    return np.asarray(tag, dtype=int)
+
+
+def equivalent_model(source, target, tol=0.1, method="auto"):
+    """
+    The source model rewritten in the cell and the order of sites of the
+    target model: a MagneticModel with one site per site of the target, in
+    the same order (so the configurations of the target apply to it
+    directly), with the positions, lattice, species and couplings of the
+    source (its distortions and couplings, which need not be those of the
+    target).
+
+    The sites are matched as in site_maps (same method). The cell of the
+    result is the source cell made into the supercell that corresponds to
+    the target cell (the identity if both cells are the same), so the
+    target cell must not be smaller than the source one. The positions
+    are wrapped into the cell, and each bond of the source is replicated
+    at every image of its first site, pointing to the site and cell of
+    the result where its partner lies.
+    """
+    forward, _, used = site_maps(source, target, tol, method)
+    missing = [t for t, s in enumerate(forward) if s < 0]
+    if missing:
+        raise ValueError(
+            f"sites {missing} of the target model have no counterpart in the "
+            "source model"
+        )
+    src_pos = np.asarray(source.site_properties["coord_atomos"], dtype=float)
+    src_lat = np.asarray(source.lattice_properties["bravais_vectors"], dtype=float)
+    n_src = len(src_pos)
+    n_tgt = len(forward)
+    if n_tgt < n_src:
+        raise ValueError(
+            f"the target cell ({n_tgt} sites) is smaller than the source one "
+            f"({n_src} sites): it cannot hold the source model"
+        )
+
+    if used == "position":
+        tgt_pos = np.asarray(target.site_properties["coord_atomos"], dtype=float)
+        tgt_lat = np.asarray(target.lattice_properties["bravais_vectors"], dtype=float)
+        ratio = tgt_lat @ np.linalg.inv(src_lat)
+        supercell = np.round(ratio)
+        if not np.allclose(ratio, supercell, atol=0.05) or round(
+            abs(np.linalg.det(supercell))
+        ) != n_tgt // n_src or n_tgt % n_src:
+            raise ValueError(
+                "the target cell is not a supercell of the source cell: "
+                f"target lattice = {np.round(ratio, 3).tolist()} x source lattice"
+            )
+        lattice = supercell @ src_lat
+        positions = []
+        for t, s in enumerate(forward):
+            # The image of the source site closest to the target site.
+            shift = np.round(np.linalg.solve(src_lat.T, tgt_pos[t] - src_pos[s]))
+            positions.append(src_pos[s] + shift @ src_lat)
+        positions = np.array(positions)
+    else:
+        alignment = _structure_alignment(source, target)
+        enlarged = _to_pymatgen_structure(source)
+        enlarged.make_supercell(alignment["supercell"])
+        enlarged.translate_sites(
+            list(range(len(enlarged))), alignment["translation"], frac_coords=True
+        )
+        lattice = enlarged.lattice.matrix
+        positions = np.array(
+            [enlarged[alignment["mapping"][t]].coords for t in range(n_tgt)]
+        )
+
+    # Wrap the positions into the cell (a CIF reader would wrap them).
+    frac = np.linalg.solve(lattice.T, positions.T).T
+    frac = frac - np.floor(frac + 1e-9)
+    positions = frac @ lattice
+
+    def locate(point):
+        """(site, cell offset) of the result at point."""
+        best = None
+        for u, site in enumerate(positions):
+            coeffs = np.linalg.solve(lattice.T, point - site)
+            cell = np.round(coeffs)
+            dist = np.linalg.norm((coeffs - cell) @ lattice)
+            if best is None or dist < best[2]:
+                best = (u, cell.astype(int), dist)
+        if best[2] > tol:
+            raise ValueError(f"no site of the result at {point} (bond partner)")
+        return best[0], best[1]
+
+    images = {}
+    for t, s in enumerate(forward):
+        images.setdefault(s, []).append(t)
+    names, distances, bond_lists = [], [], []
+    for name, info in source.bonds.items():
+        bonds = []
+        for i, j, tag in info["bonds"]:
+            displacement = src_pos[j] + _bond_offset(tag) @ src_lat - src_pos[i]
+            for t in images.get(i, []):
+                u, cell = locate(positions[t] + displacement)
+                bonds.append((t, u, "." if not cell.any() else pack_offset(cell)))
+        names.append(name)
+        distances.append(info["distance"])
+        bond_lists.append(bonds)
+
+    def per_site(key):
+        values = source.site_properties[key]
+        return [values[s] for s in forward]
+
+    return MagneticModel(
+        list(positions),
+        list(lattice),
+        bond_lists=bond_lists,
+        bond_names=names,
+        bond_distances=distances,
+        magnetic_species=per_site("magnetic_species"),
+        g_lande_factors=per_site("g_lande_factors"),
+        spin_repr=per_site("spin_repr"),
+        model_label=f"{source.model_label} in the cell of {target.model_label}",
+    )
 
 def _clamp_supercell_size(supercell_size):
     """An int, or one value per axis; each clamped to 1..4."""
@@ -1331,7 +1488,7 @@ class MagneticModel:
 {model_name}
 
 _chemical_name_common                  """
-                + self.model_label
+                + _cif_value(self.model_label)
                 + "\n"
             )
             fileout.write(head)

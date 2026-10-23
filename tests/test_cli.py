@@ -196,3 +196,18 @@ def test_map_configs_skips_non_periodic_configurations(tmp_path):
     assert "5.0\t[1, 0, 0]\t# periodic" in res.stdout
     assert "# not periodic with the target cell: 30.0" in res.stdout
     assert "not periodic" in res.stderr
+
+
+def test_map_configs_model_out(tmp_path):
+    """--model-out writes the source model in the cell of the target."""
+    from spectrojotometer.model_io import magnetic_model_from_file
+
+    out = tmp_path / "transformed.cif"
+    res = run_command(
+        "map_configs", EXAMPLES / "example1.cif", EXAMPLES / "example1.cif",
+        EXAMPLES / "example1.spin", "-", "--model-out", out, cwd=tmp_path,
+    )
+    assert res.returncode == 0, res.stderr
+    model = magnetic_model_from_file(str(out))
+    assert len(model.site_properties["coord_atomos"]) == 3
+    assert list(model.bonds) == ["J0"]

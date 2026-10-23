@@ -357,3 +357,32 @@ def test_import_from_a_model_in_another_frame(app, monkeypatch, tmp_path):
         assert "1.0\t" in out and "2.0\t" in out and "skipped" not in out
     finally:
         window.close_window()
+
+
+def test_export_transformed_model(app, monkeypatch, tmp_path):
+    """The button saves the other model in the cell and order of sites of
+    the current one, and the file can be read back."""
+    from spectrojotometer.gui import importconfig
+    from spectrojotometer.model_io import magnetic_model_from_file
+
+    load_example(app, monkeypatch)
+    out = tmp_path / "transformed.cif"
+    monkeypatch.setattr(
+        importconfig.fdlg, "askopenfilename", lambda **k: str(EXAMPLES / "example1.cif")
+    )
+    monkeypatch.setattr(importconfig.fdlg, "asksaveasfilename", lambda **k: str(out))
+    monkeypatch.setattr(app.root, "wait_window", lambda *a: None)
+    window = importconfig.ImportConfigWindow(app)
+    try:
+        window.export_model()  # asks for the model first
+        exported = magnetic_model_from_file(str(out))
+        assert len(exported.site_properties["coord_atomos"]) == len(
+            app.model.site_properties["coord_atomos"]
+        )
+        assert list(exported.bonds) == list(app.model.bonds)
+        for conf in ([0, 0, 0], [0, 1, 0], [0, 1, 1]):
+            np.testing.assert_array_equal(
+                exported.coefficient_matrix([conf]), app.model.coefficient_matrix([conf])
+            )
+    finally:
+        window.close_window()

@@ -35,6 +35,7 @@ from tkinter.scrolledtext import ScrolledText
 
 from spectrojotometer.magnetic_model import (
     compatible_configurations,
+    equivalent_model,
     map_configurations,
     site_maps,
 )
@@ -115,6 +116,11 @@ class ImportConfigWindow(Toplevel):
             command=self.send_to_application,
         ).pack(side=LEFT)
         Button(framebts, text="Close", command=self.close_window).pack(side=RIGHT)
+        Button(
+            framebts,
+            text="Export transformed model...",
+            command=self.export_model,
+        ).pack(side=RIGHT)
         framebts.pack(side=BOTTOM, fill=X)
         self.grab_set()
         app.root.wait_window(self)
@@ -196,6 +202,49 @@ class ImportConfigWindow(Toplevel):
         self.dictatoms = list(dictatoms)
         self.sitemap.delete(0, END)
         self.sitemap.insert(0, dictatoms.__str__()[1:-1])
+
+    def export_model(self):
+        """
+        Save, as a CIF file, the model of the configurations rewritten in
+        the cell and order of sites of the current model: its own
+        positions and couplings, with the sites of the current model (see
+        magnetic_model.equivalent_model).
+        """
+        if not self._ensure_model():
+            return
+        name = self.selected_model.get()
+        source, target = self.models[name], self.app.model
+        try:
+            tol = float(self.tol.get())
+            model = equivalent_model(source, target, tol)
+        except ValueError as error:
+            messagebox.showerror("Export transformed model", str(error))
+            return
+        automatic = site_maps(source, target, tol)[0]
+        shown = self.sitemap.get().replace(",", " ").split()
+        if shown and shown != [str(i) for i in automatic]:
+            logger.warning(
+                "The site map was edited by hand; the exported model follows "
+                "the automatic one: %s",
+                automatic,
+            )
+        filename = fdlg.asksaveasfilename(
+            initialdir=self.app.datafolder,
+            title="Save the transformed model",
+            defaultextension=".cif",
+            filetypes=(("cif files", "*.cif"), ("all files", "*.*")),
+        )
+        if not filename:
+            return
+        model.save_cif(filename)
+        logger.info(
+            "%s, in the cell and order of sites of the current model, saved "
+            "to %s (%d sites, couplings %s).",
+            name,
+            filename,
+            len(model.site_properties["coord_atomos"]),
+            list(model.bonds),
+        )
 
     def _ensure_model(self):
         """

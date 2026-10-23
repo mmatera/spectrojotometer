@@ -482,7 +482,7 @@ As an example, by run
 *) map_configs
 
     usage: map_configs [-h] [--tol tolerance] [--method {auto,position,structure}]
-                       [--fill {0,1}] [-v]
+                       [--model-out cif file] [--fill {0,1}] [-v]
                        modelfile1 modelfile2 conffile outfile
 
     Translate the spin configurations of a source model into configurations of a
@@ -508,6 +508,9 @@ As an example, by run
                             with pymatgen's StructureMatcher (different origin,
                             orientation or cell), or auto: positions if every site
                             is found, otherwise the alignment (default)
+      --model-out cif file  also save the source model rewritten in the cell and
+                            order of sites of the target (its own positions and
+                            couplings) to this CIF file
       --fill {0,1}          spin for the sites of the target without counterpart
                             in the source (by default, such sites are an error)
       -v, --verbose         Show progress messages (-v) or detailed diagnostics
@@ -531,6 +534,13 @@ As an example, by run
     If the two models are not described in the same frame (different
     origin, orientation or choice of cell), the sites are matched by
     aligning the structures with pymatgen's StructureMatcher.
+
+    With --model-out, map_configs also writes the source model rewritten in
+    the cell and order of sites of the target: its own positions (e.g. those
+    of a distorted phase) and couplings, with one site per site of the
+    target, so that the configurations of the target apply to it directly
+    (magnetic_model.equivalent_model; in visualbond, "Export transformed
+    model..." in the import window).
 
 
 *) print_equations

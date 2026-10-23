@@ -8,6 +8,7 @@ import numpy as np
 
 from spectrojotometer.magnetic_model import (
     compatible_configurations,
+    equivalent_model,
     map_configurations,
     site_map,
 )
@@ -65,6 +66,14 @@ be represented: they are written as comments.
         "site is found, otherwise the alignment (default)",
     )
     parser.add_argument(
+        "--model-out",
+        metavar="cif file",
+        type=str,
+        default=None,
+        help="also save the source model rewritten in the cell and order of "
+        "sites of the target (its own positions and couplings) to this CIF file",
+    )
+    parser.add_argument(
         "--fill",
         type=int,
         choices=[0, 1],
@@ -104,6 +113,15 @@ be represented: they are written as comments.
             "lattice of the target model, and were not mapped (they are "
             "written as comments)."
         )
+
+    if args["model_out"]:
+        try:
+            equivalent_model(
+                modelin, modelout, args["tol"], method=args["method"]
+            ).save_cif(args["model_out"])
+        except ValueError as error:
+            eprint(f"map_configs: cannot write {args['model_out']}: {error}")
+            return 1
 
     size_in = len(modelin.site_properties["coord_atomos"])
     size_out = len(modelout.site_properties["coord_atomos"])

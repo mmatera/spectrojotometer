@@ -32,6 +32,14 @@ Changes
 * ``ApplicationGUI`` no longer enters the Tk event loop from its
   constructor: call ``ApplicationGUI().run()``. The window can now be
   built and driven in tests (``tests/test_gui.py``).
+* Exporting the transformed model: ``magnetic_model.equivalent_model``
+  rewrites a model in the cell and order of sites of another one (e.g. a
+  distorted phase in the cell of the undistorted one), keeping its own
+  positions and couplings; each configuration of the target has, in it,
+  the coefficients of the corresponding configuration of the source. In
+  visualbond, "Export transformed model..." in the import window; in
+  ``map_configs``, ``--model-out``. ``save_cif`` quotes the name of the
+  model when it has spaces (the CIF was misread).
 * Importing configurations from another model (visualbond's import
   window and ``map_configs``):
 

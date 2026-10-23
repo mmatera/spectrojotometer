@@ -2,7 +2,7 @@
 struct
 Reader for WIEN2k .struct files.
 """
-from typing import Optional
+
 import numpy as np
 
 from ..magnetic_model import MagneticModel
@@ -13,7 +13,7 @@ DEGREE_TO_RAD = 3.1415926 / 180
 def magnetic_model_from_wk2_struct(
         filename: str,
         magnetic_atoms: tuple = DEFAULT_MAGNETIC_ATOMS,
-        bond_names: Optional[list] = None,
+        bond_names: list | None = None,
 ) -> MagneticModel:
     """
     Build a `MagneticModel` from a WIEN2k `.struct` file: read the

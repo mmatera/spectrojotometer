@@ -37,7 +37,7 @@ class FindDialog(Toplevel):
         #  self.root = Toplevel(app.root)
         self.transient(app.root)
         self.findstring = StringVar()
-        self.findstring.trace("w", self.find_onchange)
+        self.findstring.trace_add("write", self.find_onchange)
 
         fields_frame = Frame(self)
         self.frmfind = LabelFrame(fields_frame, text="Find", padx=5, pady=5)

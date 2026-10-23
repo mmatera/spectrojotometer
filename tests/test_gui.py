@@ -187,3 +187,32 @@ def test_optimal_independent_set_reports_the_error_bound(app, monkeypatch):
     assert "Subset of optimal configurations" in text
     assert "J|/|" in text and "sqrt(l)" not in text
     assert not app.errors
+
+
+def test_monte_carlo_tab_uses_the_estimated_couplings(app, monkeypatch):
+    """After estimating the couplings in the main window, the table of the
+    Monte Carlo tab shows them."""
+    load_example(app, monkeypatch)
+    set_energies(app, (EXAMPLES / "example1.spin").read_text())
+    app.evaluate_couplings()
+    panel = app.pages["page4"]
+    panel.refresh_couplings()
+    values = panel.editor.get_values()
+    for name, bond in app.model.bonds.items():
+        assert values[name] == pytest.approx(bond["value"], rel=1e-5)
+
+
+def test_entering_the_monte_carlo_tab_syncs_the_couplings(app, monkeypatch):
+    load_example(app, monkeypatch)
+    panel = app.pages["page4"]
+    for bond in app.model.bonds.values():
+        bond["value"] = 0.75
+    app.nb.tab(panel, state="normal")
+    app.nb.select(panel)
+    app._on_tab_changed()
+    assert set(panel.editor.get_values().values()) == {0.75}
+    panel._auto_sync.set(False)
+    for bond in app.model.bonds.values():
+        bond["value"] = -2.0
+    app._on_tab_changed()
+    assert set(panel.editor.get_values().values()) == {0.75}

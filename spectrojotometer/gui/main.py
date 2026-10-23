@@ -44,16 +44,18 @@ from tkinter import (
     W,
     X,
     Y,
+    font,
+    messagebox,
+    ttk,
 )
 from tkinter import filedialog as fdlg
-from tkinter import font, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-# from importlib.resources import path as resource_filename
 
+# from importlib.resources import path as resource_filename
 from spectrojotometer import __path__ as spectrojotometer_path
 from spectrojotometer import __version__ as spectrojotometerversion
 from spectrojotometer.model_io import confindex, magnetic_model_from_file
@@ -162,9 +164,9 @@ class ApplicationGUI:
         self.build_page1()
         self.build_page2()
         self.build_page3()
-        # self.build_page4()
+        self.build_page4()
         # self.nb.pack(fill=BOTH)
-
+        self.nb.bind("<<NotebookTabChanged>>", self._on_tab_changed)
         # Status region
         # Frame(height=5, bd=1, relief=SUNKEN).pack(fill=X, padx=5, pady=5)
         statusregion = Frame(paned_main_window, height=25, width=170)
@@ -206,6 +208,16 @@ class ApplicationGUI:
             self.root.mainloop()
         finally:
             self.log_panel.close()
+
+        
+    def _on_tab_changed(self, event=None):
+        """Entering the Monte Carlo tab with auto-sync on: show the
+        couplings of the model in its table."""
+        panel = self.pages.get("page4")
+        if panel is None or self.model is None:
+            return
+        if self.nb.select() == str(panel) and panel._auto_sync.get():
+            panel.refresh_couplings(self.model)
 
     def buildmenus(self):
         self.root.bind_all("<Control-q>", self.close_app)
@@ -588,13 +600,21 @@ class ApplicationGUI:
         self.nb.tab(self.pages["page3"], state="disabled")
 
     def build_page4(self):
-        self.pages["page4"] = Frame(self.nb)
-        self.nb.add(self.pages["page4"], text="4. Evaluate parameters")
-        self.parameters["page4"] = {}
+        from spectrojotometer.gui import MonteCarloPanel
+
+        self.pages["page4"] = MonteCarloPanel(self.nb, get_model=lambda: self.model)
+        state = "disabled" if self.model is None else "normal"
+        self.nb.add(self.pages["page4"], text="4. Montecarlo Simulation", state=state)
+        
+        
+    def build_page5(self):
+        self.pages["page5"] = Frame(self.nb)
+        self.nb.add(self.pages["page5"], text="5. Evaluate parameters")
+        self.parameters["page5"] = {}
         self.outputformat = StringVar()
         self.outputformat.set("Plain")
         ctrl = LabelFrame(
-            self.pages["page4"],
+            self.pages["page5"],
             text="Evaluate and Show parameters",
             padx=5,
             pady=5,
@@ -606,7 +626,7 @@ class ApplicationGUI:
         btn.pack(side=TOP)
         ctrl.pack(side=RIGHT, fill=X)
         leftpanel = LabelFrame(
-            self.pages["page4"],
+            self.pages["page5"],
             relief=SUNKEN,
             text="Configurations",
             padx=5,
@@ -615,7 +635,7 @@ class ApplicationGUI:
         ScrolledText(leftpanel).pack(side=LEFT, fill=Y)
         leftpanel.pack(side=LEFT, fill=Y)
         rightpanel = LabelFrame(
-            self.pages["page4"], relief=SUNKEN, text="Results", padx=5, pady=5
+            self.pages["page5"], relief=SUNKEN, text="Results", padx=5, pady=5
         )
         respanel = LabelFrame(
             rightpanel,
@@ -708,6 +728,8 @@ class ApplicationGUI:
         self.nb.select(0)
         self.nb.tab(self.pages["page2"], state="normal")
         self.nb.tab(self.pages["page3"], state="normal")
+        # self.nb.add(self.pages["page5"], text="Other", state="normal")
+        
 
     def import_configs(self, clean=True):
         if self.model is None:
@@ -1290,6 +1312,11 @@ class ApplicationGUI:
         self.chis.insert(END, chitext)
         self.chis.config(state=DISABLED)
         self.plotbutton.config(state=NORMAL)
+        self.pages["page4"].refresh_couplings(self.model)
+        self.nb.tab(self.pages["page4"], state="normal")
+                    
+
+        
 
     def curr_edit(self):
         page = self.nb.tab(self.nb.select())["text"]

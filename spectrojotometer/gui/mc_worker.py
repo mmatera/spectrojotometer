@@ -1,13 +1,13 @@
-"""Worker thread para correr Monte Carlo sin bloquear la GUI."""
+"""Worker thread that runs the Monte Carlo simulation without blocking the GUI."""
 
 import threading
 import traceback
 
 
 class MCWorker(threading.Thread):
-    """Corre run_ising_mc en background.
+    """Runs run_ising_mc in the background.
 
-    Comunicacion con la GUI via out_queue:
+    It communicates with the GUI through out_queue:
       ('start', n_steps)
       ('progress', done, total, message)
       ('done', results_dict)

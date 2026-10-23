@@ -5,9 +5,9 @@ it: parsing symmetry operators, atom and bond loops, expanding atoms
 and bonds by symmetry (including centering), and reducing to a
 primitive cell.
 """
-from typing import Optional, Tuple, Union
-from itertools import combinations
 import logging
+from itertools import combinations
+
 import numpy as np
 
 from ..magnetic_model import MagneticModel
@@ -72,8 +72,8 @@ def find_atom_offset_by_symmetry(p, symop, magnetic_positions) -> tuple:
     return j, offset
 
 def normalize_bond(
-    src: int, dest: int, offset: Union[str, list]
-) -> Tuple[int, int, str]:
+    src: int, dest: int, offset: str | list
+) -> tuple[int, int, str]:
     """
     Bring a bond to a canonical form so that two descriptions of the
     same bond -- one starting from each endpoint -- compare equal:
@@ -110,7 +110,7 @@ def normalize_bond(
         offset = -offset
     return src, dest, pack_offset(offset)
 
-def parse_symmetry(strsymm: str) -> Tuple[list, list]:
+def parse_symmetry(strsymm: str) -> tuple[list, list]:
     """
     Parse a CIF symmetry-operator string, such as `"x, y+1/2, -z"` or
     `"-x, -y, z"`, into a rotation matrix and a translation vector.
@@ -191,7 +191,7 @@ _CENTERING_TRANSLATIONS = {
     "R": [(0.0, 0.0, 0.0), (2 / 3, 1 / 3, 1 / 3), (1 / 3, 2 / 3, 2 / 3)],
 }
 
-def centering_letter_from_symbol(symbol: Optional[str]) -> str:
+def centering_letter_from_symbol(symbol: str | None) -> str:
     """
     Extract the lattice-centering letter (P, A, B, C, I, F or R) from a
     Hermann-Mauguin space-group symbol, e.g. read from
@@ -220,7 +220,7 @@ def centering_letter_from_symbol(symbol: Optional[str]) -> str:
     return letter if letter in _CENTERING_TRANSLATIONS else "P"
 
 def expand_symmetries_with_centering(
-    symmetries: list, space_group_symbol: Optional[str]
+    symmetries: list, space_group_symbol: str | None
 ) -> list:
     """
     Complete a (possibly partial) list of symmetry operators read from a
@@ -307,9 +307,7 @@ def cif_read_loop_symmetries(labels: list, entries: tuple) -> list:
     """
     symmetries = []
     for i, t in enumerate(labels):
-        if t == "_symmetry_equiv_pos_as_xyz":
-            symmdefcol = i
-        elif t == "_space_group_symop_operation_xyz":
+        if t == "_symmetry_equiv_pos_as_xyz" or t == "_space_group_symop_operation_xyz":
             symmdefcol = i
         else:
             # label is not a symmetry operation
@@ -540,7 +538,7 @@ def cif_read_loop_bonds(labels: list, entries: list, atomlabels: list) -> tuple:
 
 def primitive_vectors_from_symmetries(
     symmetries: list, conventional_vectors
-) -> Optional[tuple]:
+) -> tuple | None:
     """
     Given a list of symmetry operators that are all pure translations
     (i.e. describe a centered Bravais lattice: F, I, C, A or B), find a
@@ -1006,7 +1004,7 @@ def generate_bonds_by_symmetries(
 def magnetic_model_from_cif(
     filename: str,
     magnetic_atoms: tuple = DEFAULT_MAGNETIC_ATOMS,
-    bond_names: Optional[list] = None,
+    bond_names: list | None = None,
     primitive_cell: bool = False,
 ) -> MagneticModel:
     """

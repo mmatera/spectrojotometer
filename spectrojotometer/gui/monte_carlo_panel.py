@@ -1,32 +1,33 @@
-"""Panel Tkinter para el modulo Monte Carlo Ising."""
+"""Tk panel of visualbond for the Monte Carlo simulation of the Ising model."""
 
 import json
 import logging
 import queue
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 
 import numpy as np
 
+from .couplings_editor import CouplingsEditor
 from .mc_worker import MCWorker
+from .scrollable import ScrollableFrame
 
 logger = logging.getLogger(__name__)
 
 
 class MonteCarloPanel(ttk.Frame):
-    """Panel autocontenido para correr Monte Carlo Ising.
+    """Self-contained panel to run Monte Carlo simulations of the Ising model.
 
     Parameters
     ----------
-    master : tk widget padre
-    get_model : callable o None
-        Funcion sin argumentos que devuelve el MagneticModel actual (o
-        None si no hay). Se llama cada vez que se aprieta "Run". Si es
-        None, el panel asume que el usuario proveera datos via
-        load_data().
-    adapter : callable o None
-        Funcion (model, supercell) -> (spins, bonds, J_vals, E0). Por
-        default usa spectrojotometer.monte_carlo.adapter.
+    master : parent Tk widget
+    get_model : callable or None
+        Function without arguments returning the current MagneticModel
+        (or None). It is called each time "Run" is pressed. If None, the
+        data must be given with load_data().
+    adapter : callable or None
+        Function (model, supercell, J_overrides=None) -> (spins, bonds,
+        J_vals, E0). By default, monte_carlo.adapter.magnetic_model_to_ising.
     """
 
     def __init__(self, master, get_model=None, adapter=None):
@@ -38,11 +39,20 @@ class MonteCarloPanel(ttk.Frame):
         self.results = None
         self._plot_artists = {}
 
+        self._current_model = None
+        self._auto_sync = tk.BooleanVar(value=True)
         self._build_ui()
+        # Show the couplings if a model is already loaded
+        if get_model is not None:
+            try:
+                self.refresh_couplings(get_model())
+            except Exception:
+                pass
         self.after(100, self._poll_queue)
 
+        
     # ------------------------------------------------------------------
-    # Construccion de UI
+    # Building the UI
     # ------------------------------------------------------------------
 
     def _build_ui(self):
@@ -50,8 +60,11 @@ class MonteCarloPanel(ttk.Frame):
         self.columnconfigure(1, weight=1)
         self.rowconfigure(0, weight=1)
 
-        left = ttk.Frame(self)
-        left.grid(row=0, column=0, sticky="ns", padx=(0, 6))
+        # The controls scroll: otherwise, in a short window, the last ones
+        # (the couplings, Run, Save) are out of reach.
+        self.controls = ScrollableFrame(self)
+        self.controls.grid(row=0, column=0, sticky="ns", padx=(0, 6))
+        left = self.controls.inner
         right = ttk.Frame(self)
         right.grid(row=0, column=1, sticky="nsew")
 
@@ -74,8 +87,8 @@ class MonteCarloPanel(ttk.Frame):
             ttk.Spinbox(row, from_=1, to=12, width=3, textvariable=var)\
                 .pack(side="left", padx=(2, 8))
 
-        # --- Temperaturas ---
-        f = ttk.LabelFrame(parent, text="Temperaturas")
+        # --- Temperatures ---
+        f = ttk.LabelFrame(parent, text="Temperatures")
         f.pack(fill="x", pady=4)
         self.var_Tmin = tk.DoubleVar(value=0.5)
         self.var_Tmax = tk.DoubleVar(value=4.0)
@@ -87,8 +100,8 @@ class MonteCarloPanel(ttk.Frame):
             ttk.Label(r, text=label, width=6).pack(side="left")
             ttk.Entry(r, textvariable=var, width=10).pack(side="left")
 
-        # --- Presupuesto ---
-        f = ttk.LabelFrame(parent, text="Presupuesto MC")
+        # --- Number of sweeps ---
+        f = ttk.LabelFrame(parent, text="Sweeps")
         f.pack(fill="x", pady=4)
         self.var_equil = tk.IntVar(value=500)
         self.var_sweeps = tk.IntVar(value=2000)
@@ -101,14 +114,26 @@ class MonteCarloPanel(ttk.Frame):
             ttk.Label(r, text=label, width=8).pack(side="left")
             ttk.Entry(r, textvariable=var, width=10).pack(side="left")
 
-        # --- Algoritmo ---
-        f = ttk.LabelFrame(parent, text="Algoritmo")
+        # --- Algorithm ---
+        f = ttk.LabelFrame(parent, text="Algorithm")
         f.pack(fill="x", pady=4)
         self.var_algo = tk.StringVar(value="auto")
         for opt in ["auto", "wolff", "pt", "metropolis"]:
             ttk.Radiobutton(f, text=opt, value=opt,
                             variable=self.var_algo).pack(anchor="w", padx=4)
 
+
+        # --- Couplings ---
+        self.editor = CouplingsEditor(parent, on_change=self._on_coupling_change)
+        self.editor.pack(fill="both", expand=True, pady=4)
+
+        # --- Auto-sync + Refresh ---
+        f = ttk.Frame(parent)
+        f.pack(fill="x", pady=(0, 4))
+        ttk.Checkbutton(f, text="Auto-sync",
+                        variable=self._auto_sync).pack(side="left")
+        ttk.Button(f, text="Refresh",
+                   command=self._on_manual_refresh).pack(side="right")            
         # --- Seed ---
         f = ttk.Frame(parent)
         f.pack(fill="x", pady=4)
@@ -116,7 +141,7 @@ class MonteCarloPanel(ttk.Frame):
         self.var_seed = tk.StringVar(value="42")
         ttk.Entry(f, textvariable=self.var_seed, width=8).pack(side="left")
 
-        # --- Botones ---
+        # --- Buttons ---
         f = ttk.Frame(parent)
         f.pack(fill="x", pady=(10, 4))
         self.btn_run = ttk.Button(f, text="Run", command=self._on_run)
@@ -131,10 +156,12 @@ class MonteCarloPanel(ttk.Frame):
     def _build_plots(self, parent):
         try:
             from matplotlib.backends.backend_tkagg import (
-                FigureCanvasTkAgg, NavigationToolbar2Tk)
+                FigureCanvasTkAgg,
+                NavigationToolbar2Tk,
+            )
             from matplotlib.figure import Figure
         except ImportError:
-            ttk.Label(parent, text="matplotlib no disponible").pack()
+            ttk.Label(parent, text="matplotlib is not available").pack()
             self.canvas = None
             return
 
@@ -156,7 +183,7 @@ class MonteCarloPanel(ttk.Frame):
         bar.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(4, 0))
         bar.columnconfigure(0, weight=1)
 
-        self.var_status = tk.StringVar(value="Listo")
+        self.var_status = tk.StringVar(value="Ready")
         ttk.Label(bar, textvariable=self.var_status).grid(
             row=0, column=0, sticky="w")
 
@@ -164,24 +191,36 @@ class MonteCarloPanel(ttk.Frame):
         self.progress.grid(row=0, column=1, sticky="e")
 
     # ------------------------------------------------------------------
-    # Callbacks de botones
+    # Buttons
     # ------------------------------------------------------------------
-
     def _on_run(self):
         if self.worker is not None and self.worker.is_alive():
             return
 
-        # Obtener modelo
-        model = self.get_model() if self.get_model is not None else None
+        model = self.get_model() if self.get_model is not None else self._current_model
+
+        # Without a model, the data may have been given with load_data()
         if model is None and not hasattr(self, "_direct_data"):
             messagebox.showwarning(
                 "Monte Carlo",
-                "No hay modelo magnetico cargado. Cargar uno en la GUI "
-                "principal o usar load_data() para proveer bonds y J.",
+                "No magnetic model is loaded. Load one in the main window, "
+                "or give the bonds and couplings with load_data().",
             )
             return
 
-        # Preparar datos Ising
+        # The couplings: the values of the editor
+        J_overrides = None
+        if hasattr(self, "editor") and self.editor._rows:
+            J_overrides = self.editor.get_values()
+            if J_overrides is None:
+                messagebox.showerror(
+                    "Monte Carlo",
+                    "Some couplings have no valid value. Estimate them in "
+                    "the main window, or type their values.",
+                )
+                return
+
+        # The Ising model
         try:
             if hasattr(self, "_direct_data"):
                 spins, bonds, J_vals, E0 = self._direct_data
@@ -192,11 +231,18 @@ class MonteCarloPanel(ttk.Frame):
                 supercell = (self.var_Lx.get(), self.var_Ly.get(),
                              self.var_Lz.get())
                 logger.debug("building the Ising model")
-                spins, bonds, J_vals, E0 = adapter(model, supercell)
+                if J_overrides:
+                    # The values of the editor (they were read and then
+                    # ignored, so manual changes had no effect).
+                    spins, bonds, J_vals, E0 = adapter(
+                        model, supercell, J_overrides=J_overrides
+                    )
+                else:
+                    spins, bonds, J_vals, E0 = adapter(model, supercell)
                 logger.debug("Ising model built")
         except Exception as e:
             messagebox.showerror("Monte Carlo",
-                                 f"Error preparando el modelo:\n{e}")
+                                 f"Error building the model:\n{e}")
             return
 
         params = dict(
@@ -216,7 +262,7 @@ class MonteCarloPanel(ttk.Frame):
         self.btn_cancel.config(state="normal")
         self.btn_save.config(state="disabled")
         self.progress.config(value=0, maximum=params["n_temps"])
-        self.var_status.set("Corriendo...")
+        self.var_status.set("Running...")
 
         self.worker = MCWorker(params, self.queue)
         self.worker.start()
@@ -224,26 +270,26 @@ class MonteCarloPanel(ttk.Frame):
     def _on_cancel(self):
         if self.worker is not None:
             self.worker.cancel()
-            self.var_status.set("Cancelando...")
+            self.var_status.set("Cancelling...")
 
     def _on_save(self):
         if self.results is None:
             return
         path = filedialog.asksaveasfilename(
             defaultextension=".json",
-            filetypes=[("JSON", "*.json"), ("Todos", "*.*")],
+            filetypes=[("JSON", "*.json"), ("All files", "*.*")],
         )
         if not path:
             return
         try:
             with open(path, "w") as f:
                 json.dump(self._serialize(self.results), f, indent=2)
-            self.var_status.set(f"Guardado: {path}")
+            self.var_status.set(f"Saved: {path}")
         except Exception as e:
-            messagebox.showerror("Guardar", f"Error:\n{e}")
+            messagebox.showerror("Save", f"Error:\n{e}")
 
     # ------------------------------------------------------------------
-    # Polling del queue (main thread)
+    # Polling the queue (main thread)
     # ------------------------------------------------------------------
 
     def _poll_queue(self):
@@ -271,7 +317,7 @@ class MonteCarloPanel(ttk.Frame):
             messagebox.showerror("Monte Carlo", msg[1])
             self._reset_buttons()
         elif kind == "cancelled":
-            self.var_status.set("Cancelado")
+            self.var_status.set("Cancelled")
             self._reset_buttons()
 
     def _on_done(self):
@@ -281,7 +327,7 @@ class MonteCarloPanel(ttk.Frame):
         cw = r.get("curie_weiss")
         parts = [f"N = {r['N']}", f"algo = {r['algorithm']}"]
         if r.get("frustrated"):
-            parts.append("FRUSTRADO")
+            parts.append("FRUSTRATED")
         if Tc is not None:
             parts.append(f"Tc = {Tc:.3f}")
         if cw:
@@ -350,13 +396,12 @@ class MonteCarloPanel(ttk.Frame):
         self.canvas.draw_idle()
 
     # ------------------------------------------------------------------
-    # Utilidades
+    # Utilities
     # ------------------------------------------------------------------
 
     def load_data(self, spins, bonds, J_vals, E0=0.0):
-        """Carga datos Ising directamente, sin pasar por MagneticModel.
-
-        Util para tests y para el demo standalone.
+        """Load the data of an Ising model directly, without a
+        MagneticModel (for tests and standalone demos).
         """
         self._direct_data = (
             np.asarray(spins, dtype=np.int8),
@@ -376,7 +421,7 @@ class MonteCarloPanel(ttk.Frame):
 
     @staticmethod
     def _serialize(obj):
-        """Convierte arrays y tipos NumPy a JSON-serializables."""
+        """Convert NumPy arrays and types to JSON-serializable ones."""
         if isinstance(obj, np.ndarray):
             return obj.tolist()
         if isinstance(obj, (np.integer, np.floating)):
@@ -388,3 +433,36 @@ class MonteCarloPanel(ttk.Frame):
         if isinstance(obj, tuple):
             return [MonteCarloPanel._serialize(x) for x in obj]
         return obj
+
+    # ------------------------------------------------------------------
+    # Synchronizing the couplings
+    # ------------------------------------------------------------------
+
+    def refresh_couplings(self, model=None):
+        """Show the couplings of the model (their names and estimated
+        values) in the editor.
+
+        Called by visualbond after estimating the couplings and, with
+        auto-sync on, when entering this tab; also by the Refresh button.
+        """
+        if model is None:
+            if self.get_model is None:
+                return
+            model = self.get_model()
+        self._current_model = model
+        if model is None or not getattr(model, "bonds", None):
+            self.editor.set_couplings({})
+            return
+        self.editor.set_couplings(model.bonds, reset_baseline=True)
+
+    def _on_manual_refresh(self):
+        self.refresh_couplings()
+
+    def _on_coupling_change(self, name, value):
+        """Called by the editor when a value is confirmed."""
+        # Feedback in the status bar
+        modified = self.editor.is_modified()
+        if modified:
+            self.var_status.set(f"Couplings edited by hand (last: {name} = {value:+.4f})")
+        else:
+            self.var_status.set("Couplings as in the model")

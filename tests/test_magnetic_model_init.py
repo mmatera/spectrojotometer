@@ -59,7 +59,10 @@ def test_bonds_from_lists():
     lists = [[(0, 1, (0,))], [(0, 2, (0,))]]
     m = model(bond_lists=lists, bond_distances=[1.0, 2.0])
     assert list(m.bonds) == ["J0", "J1"]
-    assert m.bonds["J0"] == {"distance": 1.0, "bonds": lists[0]}
+    assert m.bonds["J0"]["distance"] == 1.0
+    assert m.bonds["J0"]["bonds"] == lists[0]
+    # Not estimated yet.
+    assert np.isnan(m.bonds["J0"]["value"])
     assert m.bonds["J1"]["distance"] == 2.0
 
 

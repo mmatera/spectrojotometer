@@ -6,7 +6,11 @@ import sys
 
 import numpy as np
 
-from spectrojotometer.magnetic_model import map_configurations, site_map
+from spectrojotometer.magnetic_model import (
+    compatible_configurations,
+    map_configurations,
+    site_map,
+)
 from spectrojotometer.model_io import (
     magnetic_model_from_file,
     read_spin_configurations_file,
@@ -21,7 +25,9 @@ Translate the spin configurations of a source model into configurations of
 a target model: each site of the target takes the spin of the site of the
 source at the same position (up to a translation of the source lattice).
 The energies are scaled by the ratio between the number of sites of the
-target and of the source cells.
+target and of the source cells. Configurations that are not periodic with
+the lattice of the target (when it is smaller than the source cell) cannot
+be represented: they are written as comments.
 """
     )
     parser.add_argument(
@@ -64,20 +70,42 @@ target and of the source cells.
     modelin = magnetic_model_from_file(args["modelin"])
     modelout = magnetic_model_from_file(args["modelout"])
     energies, confs, comments = read_spin_configurations_file(args["configin"], modelin)
+    # Configurations the target cannot represent (not periodic with its
+    # lattice) are not mapped: they are written as comments.
+    compatible = compatible_configurations(modelin, confs, modelout, args["tol"])
     try:
         mapped = map_configurations(
-            modelin, confs, modelout, tol=args["tol"], fill=args["fill"]
+            modelin,
+            [c for c, ok in zip(confs, compatible) if ok],
+            modelout,
+            tol=args["tol"],
+            fill=args["fill"],
         )
     except ValueError as error:
         eprint(f"map_configs: {error}")
         return 1
+    mapped = iter(mapped)
+    skipped = compatible.count(False)
+    if skipped:
+        eprint(
+            f"map_configs: {skipped} configurations are not periodic with the "
+            "lattice of the target model, and were not mapped (they are "
+            "written as comments)."
+        )
 
     size_in = len(modelin.site_properties["coord_atomos"])
     size_out = len(modelout.site_properties["coord_atomos"])
     scale = size_out / size_in
     lines = ["# site map (target <- source): " + str(site_map(modelin, modelout, args["tol"]))]
-    for energy, conf, comment in zip(energies, mapped, comments):
-        lines.append(f"{np.float64(energy) * scale}\t{conf}\t# {comment.strip()}")
+    for energy, conf, comment, ok in zip(energies, confs, comments, compatible):
+        if ok:
+            lines.append(
+                f"{np.float64(energy) * scale}\t{next(mapped)}\t# {comment.strip()}"
+            )
+        else:
+            lines.append(
+                f"# not periodic with the target cell: {energy}\t{conf}\t# {comment.strip()}"
+            )
     text = "\n".join(lines) + "\n"
     if args["out"] == "-":
         sys.stdout.write(text)

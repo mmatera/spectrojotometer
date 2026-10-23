@@ -136,35 +136,95 @@ def site_map(source, target, tol=0.1):
     return result
 
 
-def map_configurations(source, confs, target, tol=0.1, fill=None):
+def compatible_configurations(source, confs, target, tol=0.1):
+    """
+    For each configuration of the source model, whether the target model
+    can represent it: whether the configuration is periodic with the
+    lattice of the target.
+
+    When the cell of the target is a supercell of the source one, every
+    configuration is. When the target cell is smaller (e.g. the source is
+    a supercell of it), only the configurations that repeat with the
+    lattice of the target are: in the others, two source sites that are
+    the same site of the target have different spins, and no
+    configuration of the target describes them (its energy, scaled by the
+    ratio of cell sizes, would be the energy of a different
+    configuration).
+
+    Sites of the source without counterpart in the target are not checked.
+    """
+    # For each source site, the target site at the same position (modulo
+    # the target lattice); and, for each target site, its source site.
+    reverse = site_map(target, source, tol)
+    forward = site_map(source, target, tol)
+    result = []
+    for conf in confs:
+        ok = True
+        for src, tgt in enumerate(reverse):
+            if tgt < 0 or forward[tgt] < 0:
+                continue
+            if conf[src] != conf[forward[tgt]]:
+                ok = False
+                break
+        result.append(ok)
+    return result
+
+
+def map_configurations(source, confs, target, tol=0.1, fill=None, mapping=None):
     """
     Translate spin configurations of the source model into configurations
     of the target model, using site_map: each site of the target takes the
     spin of the source site at the same position.
 
+    mapping: the site map to use, one index of a source site per site of
+    the target (by default, site_map(source, target, tol)).
+
     Raises ValueError if some site of the target has no counterpart in the
     source, unless fill (0 or 1) is given: then those sites take that
     value. Also if a configuration does not have one value per site of the
-    source model.
+    source model, or if the target cannot represent it (see
+    compatible_configurations).
     """
-    mapping = site_map(source, target, tol)
+    if mapping is None:
+        mapping = site_map(source, target, tol)
+    else:
+        mapping = [int(j) for j in mapping]
+    num_sites = len(source.site_properties["coord_atomos"])
+    num_target = len(target.site_properties["coord_atomos"])
+    if len(mapping) != num_target:
+        raise ValueError(
+            f"the site map has {len(mapping)} entries; the target model has "
+            f"{num_target} sites"
+        )
+    if any(j >= num_sites for j in mapping):
+        raise ValueError(
+            f"the site map refers to sites beyond the {num_sites} of the "
+            "source model"
+        )
     missing = [i for i, j in enumerate(mapping) if j < 0]
     if missing and fill is None:
         raise ValueError(
             f"sites {missing} of the target model have no counterpart in the "
             f"source model (tolerance {tol})"
         )
-    num_sites = len(source.site_properties["coord_atomos"])
-    result = []
-    for conf in confs:
+    for k, conf in enumerate(confs):
         if len(conf) != num_sites:
             raise ValueError(
                 f"configuration {conf} has {len(conf)} values; the source "
                 f"model has {num_sites} sites"
             )
-        result.append([conf[j] if j >= 0 else fill for j in mapping])
-    return result
-
+    incompatible = [
+        k
+        for k, ok in enumerate(compatible_configurations(source, confs, target, tol))
+        if not ok
+    ]
+    if incompatible:
+        raise ValueError(
+            f"configurations {incompatible} are not periodic with the lattice "
+            "of the target model, which cannot represent them (see "
+            "compatible_configurations)"
+        )
+    return [[conf[j] if j >= 0 else fill for j in mapping] for conf in confs]
 
 def _clamp_supercell_size(supercell_size):
     """An int, or one value per axis; each clamped to 1..4."""

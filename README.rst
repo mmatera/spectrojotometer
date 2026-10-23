@@ -516,7 +516,9 @@ map_configs
     target model: each site of the target takes the spin of the site of the source
     at the same position (up to a translation of the source lattice). The energies
     are scaled by the ratio between the number of sites of the target and of the
-    source cells.
+    source cells. Configurations that are not periodic with the lattice of the
+    target (when it is smaller than the source cell) cannot be represented: they
+    are written as comments.
 
     positional arguments:
       modelfile1       model file of the source model
@@ -543,7 +545,9 @@ map_configs
 
     The output is a configuration file: it can be used as input of the
     other commands. A site of the target model without counterpart in the
-    source model is an error, unless --fill gives the spin to use.
+    source model is an error, unless --fill gives the spin to use. When the
+    cell of the target is smaller (e.g. the source is a supercell of it),
+    only the configurations periodic with the target lattice are mapped.
 
 
 print_equations

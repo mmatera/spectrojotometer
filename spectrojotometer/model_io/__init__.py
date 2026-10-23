@@ -59,6 +59,7 @@ from .common import (
     DEFAULT_MAGNETIC_ATOMS,
     confindex,
     read_bravais_vectors,
+    parse_spin_configurations,
     read_spin_configurations_file,
 )
 from .dispatch import magnetic_model_from_cif_pymatgen, magnetic_model_from_file
@@ -87,5 +88,6 @@ __all__ = [
     "primitive_vectors_from_symmetries",
     "primitive_vectors_from_symmetries_reason",
     "read_bravais_vectors",
+    "parse_spin_configurations",
     "read_spin_configurations_file",
 ]

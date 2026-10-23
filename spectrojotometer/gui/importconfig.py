@@ -33,8 +33,12 @@ from tkinter import filedialog as fdlg
 from tkinter.scrolledtext import ScrolledText
 
 
-from spectrojotometer.magnetic_model import site_map
-from spectrojotometer.model_io import magnetic_model_from_file
+from spectrojotometer.magnetic_model import (
+    compatible_configurations,
+    map_configurations,
+    site_map,
+)
+from spectrojotometer.model_io import magnetic_model_from_file, parse_spin_configurations
 
 logger = logging.getLogger(__name__)
 
@@ -160,9 +164,13 @@ class ImportConfigWindow(Toplevel):
         size2 = len(model2.site_properties["coord_atomos"])
         self.energy_scale = float(size2) / float(size1)
         if self.energy_scale < 1.0:
-            messagebox.showinfo(
-                "Different sizes",
-                "#  alert: unit cell in model2 " + "is smaller than in model1.",
+            # Only the configurations periodic with the current cell can be
+            # imported; map_confs checks each one.
+            logger.info(
+                "The cell of the current model is smaller than the one of %s: "
+                "only its configurations periodic with the current cell can "
+                "be imported.",
+                self.selected_model.get(),
             )
         # For each site of the current model, the site of the other model at
         # the same position (-1 if none: map_confs then uses spin 0).
@@ -214,39 +222,69 @@ class ImportConfigWindow(Toplevel):
         logger.info("Configurations read from %s", filename)
 
     def map_confs(self):
-        """Map configurations from a model to another model"""
-        self.dictatoms = [int(x) for x in self.sitemap.get().split(", ")]
+        """
+        Map the configurations of the other model (inputs) to the current
+        one (outputs), with the site map shown (it can be edited).
+
+        Each site of the current model takes the spin of its site in the
+        other model, and the energies are scaled by the ratio of the
+        numbers of sites. Configurations that the current cell cannot
+        represent (not periodic with its lattice) are not imported: they
+        are kept as comments, with the reason.
+        """
+        name = self.selected_model.get()
+        if name not in self.models:
+            messagebox.showerror("Import", "Choose the model of the configurations first.")
+            return
+        source, target = self.models[name], self.app.model
+        try:
+            mapping = [int(x) for x in self.sitemap.get().replace(",", " ").split()]
+            tol = float(self.tol.get())
+            # Checks the site map once (sites without counterpart, size).
+            map_configurations(source, [], target, tol, mapping=mapping)
+        except ValueError as error:
+            messagebox.showerror(
+                "Import",
+                f"{error}.\n\nEdit the site map, or increase the length tolerance.",
+            )
+            return
+        num_sites = len(source.site_properties["coord_atomos"])
+        lines, skipped = [], 0
+        for line in self.inputconfs.get(1.0, END).split("\n"):
+            stripped = line.strip()
+            if stripped == "" or stripped.startswith("#"):
+                lines.append(line)
+                continue
+            try:
+                energies, confs, comments = parse_spin_configurations(stripped)
+            except ValueError:
+                lines.append("# not a configuration: " + stripped)
+                skipped += 1
+                continue
+            conf, comment = confs[0], comments[0].strip()
+            if len(conf) != num_sites:
+                lines.append(
+                    f"# skipped, {len(conf)} values for {num_sites} sites: {stripped}"
+                )
+                skipped += 1
+                continue
+            if not compatible_configurations(source, [conf], target, tol)[0]:
+                lines.append(
+                    "# skipped, not periodic with the current cell: " + stripped
+                )
+                skipped += 1
+                continue
+            (mapped,) = map_configurations(source, [conf], target, tol, mapping=mapping)
+            energy = energies[0] * self.energy_scale
+            lines.append(f"{energy}\t{mapped}\t# {comment}".rstrip())
+        if skipped:
+            logger.warning(
+                "%d configurations of %s were not imported (see the comments "
+                "in the imported list).",
+                skipped,
+                name,
+            )
         self.outputconfs.config(state=NORMAL)
-        lines = self.inputconfs.get(1.0, END).split("\n")
-        for line in lines:
-            linestrip = line.strip()
-            if linestrip == "" or linestrip[0] == "#":
-                self.outputconfs.insert(END, line + "\n")
-                continue
-
-            fields = line.strip().split(maxsplit=1)
-            if len(fields) == 1:
-                self.outputconfs.insert(END, "# " + line + "\n")
-                continue
-            fields = [
-                str(float(fields[0]) * self.energy_scale),
-                fields[1].strip().split(sep="# ", maxsplit=1),
-            ]
-            if len(fields[1]) == 1:
-                fields = [fields[0], fields[1][0], ""]
-            else:
-                fields = [fields[0], fields[1][0], fields[1][1]]
-
-            configtxt = fields[1]
-            config = []
-            for c_s in configtxt:
-                if c_s == "0":
-                    config.append(0)
-                if c_s == "1":
-                    config.append(1)
-            if len(config) < len(self.dictatoms):
-                config = config + (len(self.dictatoms) - len(config)) * [0]
-            config = [config[i] if i >= 0 else 0 for i in self.dictatoms]
-            newline = str(fields[0]) + "\t" + str(config) + "  #  " + fields[2] + "\n"
-            self.outputconfs.insert(END, newline)
+        self.outputconfs.delete(1.0, END)
+        self.outputconfs.insert(END, "\n".join(lines).strip("\n") + "\n")
         self.outputconfs.config(state=DISABLED)

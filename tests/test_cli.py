@@ -167,3 +167,32 @@ def test_documented_workflow(tmp_path):
     first_line = (tmp_path / "optconfs1.out").read_text().splitlines()[0]
     assert first_line.endswith(": 1.0")
     assert "Together with the known configurations" in (tmp_path / "optconfs2.out").read_text()
+
+
+def test_map_configs_skips_non_periodic_configurations(tmp_path):
+    """From a supercell onto its cell, only the periodic configurations are
+    mapped; the others are written as comments, with a warning."""
+    import numpy as np
+
+    from spectrojotometer.magnetic_model import MagneticModel
+    from spectrojotometer.model_io import magnetic_model_from_file
+
+    base = magnetic_model_from_file(str(EXAMPLES / "example1.cif"))
+    pos = np.array(base.site_properties["coord_atomos"], dtype=float)
+    lattice = np.array(base.lattice_properties["bravais_vectors"], dtype=float)
+    MagneticModel(
+        list(pos) + list(pos + lattice[0]),
+        [2 * lattice[0], lattice[1], lattice[2]],
+        magnetic_species=base.site_properties["magnetic_species"] * 2,
+    ).save_cif(str(tmp_path / "double.cif"))
+    (tmp_path / "double.spin").write_text(
+        "10.0 [1, 0, 0, 1, 0, 0] # periodic\n30.0 [0, 1, 0, 1, 1, 0] # not\n"
+    )
+    res = run_command(
+        "map_configs", tmp_path / "double.cif", EXAMPLES / "example1.cif",
+        tmp_path / "double.spin", "-", cwd=tmp_path,
+    )
+    assert res.returncode == 0, res.stderr
+    assert "5.0\t[1, 0, 0]\t# periodic" in res.stdout
+    assert "# not periodic with the target cell: 30.0" in res.stdout
+    assert "not periodic" in res.stderr

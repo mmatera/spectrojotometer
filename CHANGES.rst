@@ -32,6 +32,24 @@ Changes
 * ``ApplicationGUI`` no longer enters the Tk event loop from its
   constructor: call ``ApplicationGUI().run()``. The window can now be
   built and driven in tests (``tests/test_gui.py``).
+* Importing configurations from another model (visualbond's import
+  window and ``map_configs``):
+
+  * From a larger cell (e.g. a supercell) onto a smaller one, a
+    configuration that is not periodic with the smaller cell was imported
+    as a different configuration, with its energy scaled: wrong data for
+    the fit, with no warning. New ``compatible_configurations``;
+    ``map_configurations`` rejects such configurations, and the import
+    window and ``map_configs`` keep them as comments, with the reason.
+  * The import window read the configuration from every ``0`` and ``1``
+    of the line, also those of a comment without a space after ``#``
+    (which was lost); it now uses the reader of the library
+    (``model_io.parse_spin_configurations``, new).
+  * A site without counterpart got spin 0 silently; it is now an error
+    that suggests editing the site map or the tolerance. The site map
+    can still be edited (``map_configurations(mapping=...)``).
+  * Pressing Import again duplicated the imported configurations.
+
 * Monte Carlo simulation of the fitted model (``spectrojotometer.monte_carlo``,
   and the Monte Carlo tab of visualbond): Ising Metropolis, Wolff (with a
   gauge transformation for unfrustrated antiferromagnets) and parallel

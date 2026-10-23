@@ -106,6 +106,47 @@ def confindex(c: list) -> int:
     return sum([i * 2**n for n, i in enumerate(c)])
 
 
+def parse_spin_configurations(text: str, num_sites: int = 0) -> tuple:
+    """
+    Parse spin configurations from text, in the format of
+    read_spin_configurations_file: one configuration per line,
+    `<energy> <config>[ #<comment>]`. Everything after the first `#` is
+    the comment (with or without a space after it); only the `0` and `1`
+    before it make the configuration. Blank lines and lines starting with
+    `#` are skipped. Configurations shorter than num_sites are
+    right-padded with `0`.
+
+    Returns (energy_list, configuration_list, comments), as
+    read_spin_configurations_file.
+    """
+    configuration_list = []
+    energy_list = []
+    comments = []
+    for line in text.splitlines():
+        ls = line.strip()
+        if ls == "" or ls[0] == "#":
+            continue
+        fields = ls.split(maxsplit=1)
+        energy = float(fields[0])
+        ls = fields[1] if len(fields) > 1 else ""
+        newconf = []
+        comment = ""
+        for pos, c in enumerate(ls):
+            if c == "#":
+                comment = ls[(pos + 1) :]
+                break
+            if c == "0":
+                newconf.append(0)
+            elif c == "1":
+                newconf.append(1)
+        while len(newconf) < num_sites:
+            newconf.append(0)
+        comments.append(comment)
+        configuration_list.append(newconf)
+        energy_list.append(energy)
+    return (energy_list, configuration_list, comments)
+
+
 def read_spin_configurations_file(filename: str, model: MagneticModel) -> tuple:
     """
     Read a set of spin configurations relative to a model
@@ -119,6 +160,7 @@ def read_spin_configurations_file(filename: str, model: MagneticModel) -> tuple:
     allows separating groups of sites with spaces for readability).
     Configurations shorter than `model.cell_size` are right-padded
     with `0`. Blank lines and lines starting with `#` are skipped.
+    See parse_spin_configurations.
 
     Parameters
     ----------
@@ -139,30 +181,5 @@ def read_spin_configurations_file(filename: str, model: MagneticModel) -> tuple:
         The text after `#` on each line (`""` if there was none), in
         file order and aligned with the other two lists.
     """
-    configuration_list = []
-    energy_list = []
-    comments = []
     with open(filename, "r") as stream:
-        for line in stream:
-            ls = line.strip()
-            if ls == "" or ls[0] == "#":
-                continue
-            fields = ls.split(maxsplit=1)
-            energy = float(fields[0])
-            ls = fields[1]
-            newconf = []
-            comment = ""
-            for pos, c in enumerate(ls):
-                if c == "#":
-                    comment = ls[(pos + 1) :]
-                    break
-                if c == "0":
-                    newconf.append(0)
-                elif c == "1":
-                    newconf.append(1)
-            while len(newconf) < model.cell_size:
-                newconf.append(0)
-            comments.append(comment)
-            configuration_list.append(newconf)
-            energy_list.append(energy)
-    return (energy_list, configuration_list, comments)
+        return parse_spin_configurations(stream.read(), model.cell_size)

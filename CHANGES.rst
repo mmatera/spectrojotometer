@@ -32,6 +32,23 @@ Changes
 * ``ApplicationGUI`` no longer enters the Tk event loop from its
   constructor: call ``ApplicationGUI().run()``. The window can now be
   built and driven in tests (``tests/test_gui.py``).
+* WIEN2k ``.struct`` files:
+
+  * Files numbering their atoms as ``ATOM   1:`` (positive index) could
+    not be read. The reader now follows the fixed-column format of
+    WIEN2k (also lattice parameters written without spaces between
+    them).
+  * Lengths are converted from bohr to angstrom (unless the file says
+    ``unit=ang``), like the models read from CIF files. Before, a
+    ``.struct`` model was in bohr: its distances, and the ranges given
+    to ``bond_generator``, were not comparable with a CIF model.
+  * Centred lattices (B, F, CXY, CYZ, CXZ): WIEN2k lists one of the
+    atoms related by the centring, and the others were missing. R
+    lattices are rejected with an explanation.
+  * The element of a site was its first two characters (``O1`` gave
+    ``O1``); it is now read from its name (``Cr1``, ``CR1``, ``O1``).
+  * The conversion from degrees used pi = 3.1415926.
+
 * Monte Carlo: Cancel did not stop a simulation (in visualbond's
   Monte Carlo tab, or in any client): ``run_ising_mc`` ignored every
   exception of the progress callback, including the one meant to stop

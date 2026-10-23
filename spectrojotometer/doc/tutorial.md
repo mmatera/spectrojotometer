@@ -34,6 +34,11 @@ in the CIF's asymmetric unit (e.g. 4 instead of 16 for ZnCr2O4) and
 switches the model's Bravais vectors to a primitive basis, instead of
 expanding atoms to fill the conventional cell.
 
+WIEN2k `.struct` files are read too. Their lengths are in bohr unless the
+file says `unit=ang`, and the model is in angstrom, like the ones read
+from CIF files; for centred lattices the reader adds the atoms related by
+the centring. See the main README.
+
 
 
 Visual Bond

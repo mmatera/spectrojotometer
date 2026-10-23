@@ -51,6 +51,16 @@ Loading models: conventional vs. primitive cell
   spinel lattice like ZnCr2O4), which is useful when enumerating spin
   configurations.
 
+WIEN2k `.struct` files are read too (`magnetic_model_from_file` picks
+the reader by the extension). Their lengths are in bohr unless the file
+says `unit=ang`; the model is in angstrom, like the ones read from CIF
+files. For centred lattices (B, F, CXY, CYZ, CXZ), WIEN2k lists one of
+the atoms related by the centring, and the reader adds the others, so the
+model has the conventional cell; rhombohedral (R) lattices are not
+supported (convert the file to CIF). The `primitive_cell` option and the
+bonds apply only to CIF files: a `.struct` model has no bonds (use
+`bond_generator`).
+
 Example:
 
     from spectrojotometer.model_io import magnetic_model_from_file

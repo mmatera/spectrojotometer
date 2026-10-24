@@ -58,10 +58,11 @@ WIEN2k ``.struct`` files are read too (``magnetic_model_from_file`` picks
 the reader by the extension). Their lengths are in bohr unless the file
 says ``unit=ang``; the model is in angstrom, like the ones read from CIF
 files. For centred lattices (B, F, CXY, CYZ, CXZ), WIEN2k lists one of
-the atoms related by the centring, and the reader adds the others, so the
-model has the conventional cell; rhombohedral (R) lattices are not
-supported (convert the file to CIF). The ``primitive_cell`` option and the
-bonds apply only to CIF files: a ``.struct`` model has no bonds (use
+the atoms related by the centring. As for CIF files, by default the
+reader adds the others, and the model has the conventional cell; with
+``primitive_cell=True`` it has the primitive cell, with one site for each
+set related by the centring. Rhombohedral (R) lattices are not supported
+(convert the file to CIF). A ``.struct`` model has no bonds (use
 ``bond_generator``).
 
 Example::

@@ -11,7 +11,6 @@ for direct use and comparison, but it is no longer what
 `magnetic_model_from_file` -- and therefore the GUI and the
 command-line scripts -- actually calls for a `.cif` file.
 """
-from typing import Optional
 import importlib.util
 import logging
 
@@ -69,9 +68,9 @@ def magnetic_model_from_file(
         are named automatically. Ignored for `.struct` files, which don't
         read bonds at all.
     primitive_cell : bool, optional
-        Only used for CIF files. See `magnetic_model_from_cif`. Ignored
-        (with a warning if set) for `.struct` files, which don't support
-        this reduction.
+        Use the primitive cell of a centred lattice instead of the
+        conventional one. See `magnetic_model_from_cif` and
+        `magnetic_model_from_wk2_struct`.
 
     Returns
     -------
@@ -89,10 +88,7 @@ def magnetic_model_from_file(
             filename, magnetic_atoms, bond_names, primitive_cell=primitive_cell
         )
     if filename[-7:] == ".struct" or filename[-7:] == ".STRUCT":
-        if primitive_cell:
-            logger.warning(
-                "primitive_cell=True is not supported for .struct files; "
-                "ignoring it."
-            )
-        return magnetic_model_from_wk2_struct(filename, magnetic_atoms, bond_names)
+        return magnetic_model_from_wk2_struct(
+            filename, magnetic_atoms, bond_names, primitive_cell=primitive_cell
+        )
     raise ValueError(f"Unknown file format for {filename}.")
